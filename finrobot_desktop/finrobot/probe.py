@@ -17,6 +17,7 @@ import asyncio
 import json
 import logging
 from dataclasses import asdict, dataclass
+from datetime import datetime
 
 import httpx
 
@@ -57,16 +58,31 @@ def _classify(exc: BaseException) -> tuple[str, str]:
 
 
 def _render(
-    ep: EndpointSpec, key: str | None, ticker: str
+    ep: EndpointSpec, key: str | None, ticker: str, *, year: int | None = None
 ) -> tuple[str, dict[str, str], dict[str, str]]:
-    """Substitute the ticker into the URL and the key into params/headers."""
-    url = ep.url.format(ticker=ticker)
-    params = {
-        k: v.replace("$KEY", key or "").replace("{ticker}", ticker) for k, v in ep.params.items()
-    }
+    """Substitute the catalog's placeholders into the URL, params and headers.
+
+    Substitution is textual rather than ``str.format``: a row may legitimately
+    carry a placeholder the probe cannot fill (moomoo's SDK rows are
+    ``moomoo://{sdk_method}``), and an unfilled ``{year}`` used to abort the
+    ENTIRE run with ``KeyError`` — federal_reserve's Treasury CSV row ships
+    ``{year}`` in both the path and a param. Anything unresolvable passes through
+    verbatim so the call gets classified instead of crashing the probe.
+    """
+    resolved_year = str(year if year is not None else datetime.now().year)
+
+    def _sub(text: str) -> str:
+        return (
+            text.replace("{ticker}", ticker)
+            .replace("{year}", resolved_year)
+            .replace("$KEY", key or "")
+        )
+
+    url = _sub(ep.url)
+    params = {k: _sub(v) for k, v in ep.params.items()}
     headers: dict[str, str] = {}
     if ep.auth_header and key:
-        headers[ep.auth_header] = ep.auth_value.replace("$KEY", key)
+        headers[ep.auth_header] = _sub(ep.auth_value)
     return url, params, headers
 
 
