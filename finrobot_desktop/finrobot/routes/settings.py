@@ -31,9 +31,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
-# DataProvider secrets (FMP / Finnhub / …) stored in the OS keychain (or
-# FileSecretStore fallback) under their own field name. LLM provider API keys
-# use the dynamic ``provider_key:<id>`` scheme instead — see _PROVIDER_KEY_PREFIX.
+# DataProvider secrets (FMP / Finnhub / …) are read from the repo-root .env
+# under their own field name. LLM provider API keys use the dynamic
+# ``provider_key:<id>`` scheme instead — see _PROVIDER_KEY_PREFIX.
 _DATA_SECRET_FIELDS: tuple[str, ...] = DATA_PROVIDER_SECRET_FIELDS
 
 # Keychain key prefix for an LLM provider's API key: ``provider_key:<provider_id>``.
@@ -829,7 +829,7 @@ def load_non_secret_settings_with_error(path: Path) -> tuple[dict[str, Any], str
     """
     if not path.exists():
         return {}, None
-    # Self-heal permission drift on the boot read, mirroring FileSecretStore:
+    # Self-heal permission drift on the boot read:
     # an existing install's settings.json predates the 0600 write path (or a
     # backup/restore loosened it), and waiting for the next save would leave it
     # group/other-readable indefinitely. Never fatal — perms are best-effort.
@@ -880,8 +880,8 @@ def _atomic_write_text(path: Path, payload: str) -> None:
     sidecar — could leave a truncated file on disk. The rename is atomic on the
     same filesystem, so readers only ever observe the old or the new content.
 
-    Mode is forced to 0600 — symmetric with the FileSecretStore's .secrets
-    handling. settings.json holds no API keys, but it does hold the user's SEC
+    Mode is forced to 0600 — settings.json is always owner-only.
+    settings.json holds no API keys, but it does hold the user's SEC
     identity (name + email in ``sec_user_agent``) and their provider registry
     (custom base_urls), which other local users have no business reading. The
     rewrite also self-heals a file that drifted looser (backup/restore, editor

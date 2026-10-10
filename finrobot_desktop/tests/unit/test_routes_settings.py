@@ -1,7 +1,7 @@
 """Tests for the /api/settings routes.
 
-Config is app-stored-only (settings.json + keychain) — there is no env / .env
-source. The route surface this covers:
+Non-secret config is app-stored (settings.json); secrets come from the
+repo-root .env. The route surface this covers:
 
 1. ``_merge_non_secret_settings`` writes ONLY the changed fields — fields the
    user never touched stay out of settings.json and keep resolving to defaults.
@@ -215,8 +215,8 @@ def test_merge_enforces_0600_mode(tmp_path: Path) -> None:
 
 
 def test_load_tightens_drifted_mode_on_boot_read(tmp_path: Path) -> None:
-    """The boot read self-heals a loose settings.json immediately (mirroring
-    FileSecretStore) instead of waiting for the next save."""
+    """The boot read self-heals a loose settings.json immediately instead of
+    waiting for the next save."""
     path = tmp_path / "settings.json"
     path.write_text(json.dumps({"model_name": "openai:gpt-4o"}))
     os.chmod(path, 0o644)
@@ -1158,57 +1158,42 @@ async def test_settings_update_non_logging_field_skips_reapply(
 
 
 # ---------------------------------------------------------------------------
-# Keychain refusal at runtime — reads degrade (GET stays 200), writes surface
-# a user-visible error (a failed key save must never look like success).
+# Env-store runtime behaviour (Data Layer v3) — reads resolve against the
+# repo-root .env (GET stays 200), writes are rejected with a user-visible
+# error (a failed key save must never look like success).
 # ---------------------------------------------------------------------------
 
 
-def _denied_keychain_store() -> Any:
-    """A real KeychainSecretStore whose backend refuses every call (user hit
-    "Deny" on the OS prompt), built without touching the actual OS keychain."""
-    import keyring.errors
-
-    from finrobot.secret_store import KeychainSecretStore
-
-    class _RefusingKeyring:
-        errors = keyring.errors
-
-        def get_password(self, service: str, key: str) -> str | None:
-            raise keyring.errors.KeyringLocked("user denied access")
-
-        def set_password(self, service: str, key: str, value: str) -> None:
-            raise keyring.errors.KeyringLocked("user denied access")
-
-        def delete_password(self, service: str, key: str) -> None:
-            raise keyring.errors.KeyringLocked("user denied access")
-
-    store = KeychainSecretStore.__new__(KeychainSecretStore)
-    store._keyring = _RefusingKeyring()  # type: ignore[assignment]
-    store._service_name = "FinRobotTest"
-    store._degraded_keys = set()
-    return store
-
-
 @pytest.mark.asyncio
-async def test_get_settings_stays_200_when_keychain_denied(tmp_path: Path) -> None:
-    """secret_store.has() refusal degrades to key_set=False instead of a 500."""
-    app = _make_app(tmp_path, secret_store=_denied_keychain_store())
+async def test_get_settings_stays_200_with_env_store(tmp_path: Path, monkeypatch: Any) -> None:
+    """secret_store.has() resolves against .env and never 500s the GET."""
+    from finrobot.secret_store import EnvSecretStore
+
+    # Force an empty environment so the result is hermetic regardless of any
+    # real repo-root .env on the machine.
+    monkeypatch.setattr("finrobot.secret_store.env_value", lambda name: None)
+    app = _make_app(tmp_path, secret_store=EnvSecretStore())
     async with _client(app) as c:
         resp = await c.get("/api/settings")
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["fmp_api_key_set"] is False
     # The active model's key is injected in runtime settings, so key_set stays
-    # True via the settings fallback even though the keychain read degraded.
+    # True via the settings fallback even though the .env read found nothing.
     providers = {p["id"]: p for p in body["providers"]}
     assert providers["openai"]["key_set"] is True
 
 
 @pytest.mark.asyncio
-async def test_put_keychain_set_failure_is_user_visible(tmp_path: Path, monkeypatch: Any) -> None:
-    """A denied keychain write fails the PUT with the real reason — the key was
-    NOT saved and the response must say so (no fake success, no opaque 500)."""
-    app = _make_app(tmp_path, secret_store=_denied_keychain_store())
+async def test_put_key_rejected_by_env_store_is_user_visible(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    """EnvSecretStore.set() rejects every write — the PUT fails with the real
+    reason (.env is the credential source), the key was NOT saved, and the
+    response must say so (no fake success, no opaque 500)."""
+    from finrobot.secret_store import EnvSecretStore
+
+    app = _make_app(tmp_path, secret_store=EnvSecretStore())
     monkeypatch.setattr("finrobot.routes.settings._replace_runtime_settings", AsyncMock())
 
     async with _client(app) as c:
@@ -1216,23 +1201,21 @@ async def test_put_keychain_set_failure_is_user_visible(tmp_path: Path, monkeypa
 
     assert resp.status_code == 500
     detail = resp.json()["detail"]
-    assert "fmp_api_key" in detail and "keychain" in detail
+    assert ".env" in detail  # points the user at the credential source
     assert "fmp-key-123" not in detail  # the secret value never leaks
 
 
 @pytest.mark.asyncio
-async def test_clear_secret_keychain_failure_is_user_visible(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
-    """A keychain that refuses the delete must fail the clear loudly — the
-    secret is still stored, so pretending success would lie to the user."""
+async def test_clear_secret_failure_is_user_visible(tmp_path: Path, monkeypatch: Any) -> None:
+    """A store that refuses the delete must fail the clear loudly — the secret
+    is still stored, so pretending success would lie to the user."""
     from finrobot.secret_store import SecretStoreError
 
     secret_store = AsyncMock()
     secret_store.has = AsyncMock(return_value=False)
     secret_store.get = AsyncMock(return_value=None)
     secret_store.delete = AsyncMock(
-        side_effect=SecretStoreError("Failed to delete secret 'fmp_api_key' from the OS keychain")
+        side_effect=SecretStoreError("Failed to delete secret 'fmp_api_key'")
     )
     app = _make_app(tmp_path, secret_store=secret_store)
     monkeypatch.setattr("finrobot.routes.settings._replace_runtime_settings", AsyncMock())

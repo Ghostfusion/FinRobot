@@ -8,7 +8,7 @@ import pytest
 from finrobot.config import get_settings
 from finrobot.engine.deps import FinRobotDeps
 from finrobot.run_store import RunStore
-from finrobot.secret_store import FileSecretStore
+from finrobot.secret_store import EnvSecretStore
 from finrobot.server import app
 
 
@@ -83,11 +83,15 @@ class TestComputeRoutes:
 
 class TestSettingsRoutes:
     @pytest.mark.asyncio
-    async def test_settings_get_masks_api_keys(self, tmp_path):
+    async def test_settings_get_masks_api_keys(self, tmp_path, monkeypatch):
         settings = get_settings(model_name="test")
-        secret_store = FileSecretStore(tmp_path / ".secrets")
-        await secret_store.set("fmp_api_key", "secret-fmp-key")
-        app.state.secret_store = secret_store
+        # Data Layer v3: secrets resolve from the repo-root .env. Stub the env
+        # read so the test is hermetic and the value is never echoed back.
+        monkeypatch.setattr(
+            "finrobot.secret_store.env_value",
+            lambda name: "secret-fmp-key" if name == "FMP_API_KEY" else None,
+        )
+        app.state.secret_store = EnvSecretStore()
         app.state.settings_path = tmp_path / "settings.json"
         app.state.deps = FinRobotDeps(
             data_layer=FakeDataLayer(),  # type: ignore[arg-type]
