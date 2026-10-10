@@ -1,0 +1,394 @@
+[
+  {
+    "provider": "eodhd",
+    "category": "core_stock_apis",
+    "url": "https://eodhd.com/api/eod/AAPL",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "eodhd",
+    "category": "news_data",
+    "url": "https://eodhd.com/api/news",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "eodhd",
+    "category": "news_sentiment",
+    "url": "https://eodhd.com/api/sentiments",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "eodhd",
+    "category": "corporate_actions",
+    "url": "https://eodhd.com/api/div/AAPL",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "eodhd",
+    "category": "exchange_symbols",
+    "url": "https://eodhd.com/api/exchange-symbol-list/US",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "moomoo",
+    "category": "core_stock_apis",
+    "url": "moomoo://get_market_snapshot",
+    "ok": false,
+    "code": "gateway",
+    "detail": "local gateway (SDK)"
+  },
+  {
+    "provider": "moomoo",
+    "category": "technical_indicators",
+    "url": "moomoo://get_cur_kline",
+    "ok": false,
+    "code": "gateway",
+    "detail": "local gateway (SDK)"
+  },
+  {
+    "provider": "moomoo",
+    "category": "options_data",
+    "url": "moomoo://get_option_chain",
+    "ok": false,
+    "code": "gateway",
+    "detail": "local gateway (SDK)"
+  },
+  {
+    "provider": "moomoo",
+    "category": "short_interest",
+    "url": "moomoo://get_short_interest",
+    "ok": false,
+    "code": "gateway",
+    "detail": "local gateway (SDK)"
+  },
+  {
+    "provider": "moomoo",
+    "category": "institution_data",
+    "url": "moomoo://get_shareholders_institutional",
+    "ok": false,
+    "code": "gateway",
+    "detail": "local gateway (SDK)"
+  },
+  {
+    "provider": "moomoo",
+    "category": "macro_data",
+    "url": "moomoo://get_macro_indicator_list",
+    "ok": false,
+    "code": "gateway",
+    "detail": "local gateway (SDK)"
+  },
+  {
+    "provider": "moomoo",
+    "category": "prediction_markets",
+    "url": "moomoo://get_event_contract_category",
+    "ok": false,
+    "code": "gateway",
+    "detail": "local gateway (SDK)"
+  },
+  {
+    "provider": "moomoo",
+    "category": "corporate_actions",
+    "url": "moomoo://get_corporate_actions_dividends",
+    "ok": false,
+    "code": "gateway",
+    "detail": "local gateway (SDK)"
+  },
+  {
+    "provider": "moomoo",
+    "category": "capital_flow",
+    "url": "moomoo://get_capital_flow",
+    "ok": false,
+    "code": "gateway",
+    "detail": "local gateway (SDK)"
+  },
+  {
+    "provider": "moomoo",
+    "category": "earnings_catalyst",
+    "url": "moomoo://get_financials_earnings_price_history",
+    "ok": false,
+    "code": "gateway",
+    "detail": "local gateway (SDK)"
+  },
+  {
+    "provider": "moomoo",
+    "category": "earnings_surprise",
+    "url": "moomoo://get_financials_earnings_price_move",
+    "ok": false,
+    "code": "gateway",
+    "detail": "local gateway (SDK)"
+  },
+  {
+    "provider": "moomoo",
+    "category": "economic_calendar",
+    "url": "moomoo://get_economic_calendar",
+    "ok": false,
+    "code": "gateway",
+    "detail": "local gateway (SDK)"
+  },
+  {
+    "provider": "moomoo",
+    "category": "expected_move",
+    "url": "moomoo://get_option_underlying_overview",
+    "ok": false,
+    "code": "gateway",
+    "detail": "local gateway (SDK)"
+  },
+  {
+    "provider": "moomoo",
+    "category": "fed_watch",
+    "url": "moomoo://get_fed_watch_target_rate",
+    "ok": false,
+    "code": "gateway",
+    "detail": "local gateway (SDK)"
+  },
+  {
+    "provider": "moomoo",
+    "category": "market_breadth",
+    "url": "moomoo://get_rise_fall_distribution",
+    "ok": false,
+    "code": "gateway",
+    "detail": "local gateway (SDK)"
+  },
+  {
+    "provider": "moomoo",
+    "category": "revenue_breakdown",
+    "url": "moomoo://get_financials_revenue_breakdown",
+    "ok": false,
+    "code": "gateway",
+    "detail": "local gateway (SDK)"
+  },
+  {
+    "provider": "moomoo",
+    "category": "smart_money",
+    "url": "moomoo://get_insider_trade_list",
+    "ok": false,
+    "code": "gateway",
+    "detail": "local gateway (SDK)"
+  },
+  {
+    "provider": "moomoo",
+    "category": "analyst_ratings",
+    "url": "moomoo://get_research_rating_summary",
+    "ok": false,
+    "code": "gateway",
+    "detail": "local gateway (SDK)"
+  },
+  {
+    "provider": "moomoo",
+    "category": "earnings_calendar",
+    "url": "moomoo://get_earnings_calendar",
+    "ok": false,
+    "code": "gateway",
+    "detail": "local gateway (SDK)"
+  },
+  {
+    "provider": "tiingo",
+    "category": "core_stock_apis",
+    "url": "https://api.tiingo.com/tiingo/daily/AAPL/prices",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "tiingo",
+    "category": "fundamental_data",
+    "url": "https://api.tiingo.com/tiingo/fundamentals/AAPL/statements",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "twelvedata",
+    "category": "core_stock_apis",
+    "url": "https://api.twelvedata.com/time_series",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "stockdata",
+    "category": "core_stock_apis",
+    "url": "https://api.stockdata.org/v1/data/eod",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "stockdata",
+    "category": "news_data",
+    "url": "https://api.stockdata.org/v1/news/all",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "benzinga",
+    "category": "news_data",
+    "url": "https://api.benzinga.com/api/v2/news",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "benzinga",
+    "category": "analyst_ratings",
+    "url": "https://api.benzinga.com/api/v2.1/calendar/ratings",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "benzinga",
+    "category": "earnings_calendar",
+    "url": "https://api.benzinga.com/api/v2.1/calendar/earnings",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "benzinga",
+    "category": "corporate_actions",
+    "url": "https://api.benzinga.com/api/v2.2/calendar/dividends",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "benzinga",
+    "category": "analyst_actions",
+    "url": "https://api.benzinga.com/api/v1/analyst/insights",
+    "ok": false,
+    "code": "auth",
+    "detail": "HTTP 403"
+  },
+  {
+    "provider": "benzinga",
+    "category": "fda_calendar",
+    "url": "https://api.benzinga.com/api/v2.1/calendar/fda",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "benzinga",
+    "category": "guidance_revisions",
+    "url": "https://api.benzinga.com/api/v2.1/calendar/guidance",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "benzinga",
+    "category": "news_retractions",
+    "url": "https://api.benzinga.com/api/v2/news-removed",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "benzinga",
+    "category": "offerings_calendar",
+    "url": "https://api.benzinga.com/api/v2.1/calendar/offerings",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "alpha_vantage",
+    "category": "news_data",
+    "url": "https://www.alphavantage.co/query",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "alpha_vantage",
+    "category": "news_sentiment",
+    "url": "https://www.alphavantage.co/query",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "alpha_vantage",
+    "category": "fundamental_data",
+    "url": "https://www.alphavantage.co/query",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "alpha_vantage",
+    "category": "technical_indicators",
+    "url": "https://www.alphavantage.co/query",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "newsapi",
+    "category": "news_data",
+    "url": "https://newsapi.org/v2/everything",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "fred",
+    "category": "macro_data",
+    "url": "https://api.stlouisfed.org/fred/series/observations",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "polymarket",
+    "category": "prediction_markets",
+    "url": "https://gamma-api.polymarket.com/markets",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "gdelt",
+    "category": "news_sentiment",
+    "url": "https://api.gdeltproject.org/api/v2/doc/doc",
+    "ok": false,
+    "code": "rate_limited",
+    "detail": "HTTP 429"
+  },
+  {
+    "provider": "federal_reserve",
+    "category": "risk_free_curve",
+    "url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "cboe",
+    "category": "options_surface",
+    "url": "https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "massive",
+    "category": "core_stock_apis",
+    "url": "https://api.massive.com/v2/aggs/ticker/AAPL/prev",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  }
+]
