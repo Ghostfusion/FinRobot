@@ -31,9 +31,13 @@ export const ICON_UPDATE = 'M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5V5H11'
 export function ReadOnlyCredential({
   configured,
   ariaLabel,
+  placeholder,
 }: {
   configured: boolean
   ariaLabel?: string
+  /** Overrides the default "keys are managed in .env" copy for non-key
+   * credentials (the SEC identity shows its expected format instead). */
+  placeholder?: string
 }): React.ReactElement {
   const { t } = useI18n()
   return (
@@ -41,7 +45,7 @@ export function ReadOnlyCredential({
       className="settings-input"
       type="text"
       value={configured ? '••••••••' : ''}
-      placeholder={t('settings.keysManagedInEnv')}
+      placeholder={placeholder ?? t('settings.keysManagedInEnv')}
       readOnly
       disabled
       aria-label={ariaLabel}

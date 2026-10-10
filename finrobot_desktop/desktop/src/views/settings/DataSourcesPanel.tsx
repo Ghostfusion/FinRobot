@@ -155,14 +155,12 @@ interface DataSourcesPanelProps {
   alphaVantageConfigured: boolean
   dataTestState: DataTestState
   setDataTestState: React.Dispatch<React.SetStateAction<DataTestState>>
-  scheduleStandardSave: (payload: Record<string, unknown>) => void
   /** Persists any in-flight debounced edit before the connectivity probe, so the
    * backend tests the latest saved config — not a value the debounced auto-save
    * hasn't written yet (see useSettingsSave.flushPending). */
   flushPending: () => Promise<void>
-  secUserAgent: string
-  setSecUserAgent: (v: string) => void
-  /** settingsResp.sec_user_agent — what the server currently holds. */
+  /** settingsResp.sec_user_agent — the identity the server holds, sourced from
+   * the repo-root .env. Read-only in the UI, like the provider key rows. */
   serverSecUserAgent: string
   secIdentityActive: boolean
 }
@@ -176,10 +174,7 @@ export function DataSourcesPanel({
   alphaVantageConfigured,
   dataTestState,
   setDataTestState,
-  scheduleStandardSave,
   flushPending,
-  secUserAgent,
-  setSecUserAgent,
   serverSecUserAgent,
   secIdentityActive,
 }: DataSourcesPanelProps): React.ReactElement {
@@ -191,21 +186,21 @@ export function DataSourcesPanel({
   // error page, wrong endpoint) must degrade to dim dots, never crash.
   const healthEntries = Array.isArray(healthResp?.providers) ? healthResp.providers : []
   const healthByName = new Map(healthEntries.map((p) => [p.name, p]))
-  const secIdentityLocallyValid = isValidSecIdentity(secUserAgent)
-  const secIdentityMatchesServer = secUserAgent.trim() === serverSecUserAgent.trim()
-  const secIdentityPreview = secHeaderIdentityPreview(secUserAgent)
-  // Empty ≠ error: SEC is recommended-not-required, so an untouched field shows
-  // calm guidance. Red only kicks in once the user has typed something invalid.
-  const secIdentityInvalidInput = secUserAgent.trim() !== '' && !secIdentityLocallyValid
+  // The identity is read-only in the UI, so every derived value reads the SERVER
+  // state — there is no draft to diff against, hence no "pending" state.
+  const secIdentityConfigured = serverSecUserAgent.trim() !== ''
+  const secIdentityValid = isValidSecIdentity(serverSecUserAgent)
+  const secIdentityPreview = secHeaderIdentityPreview(serverSecUserAgent)
+  // Empty ≠ error: SEC is recommended-not-required, so an unconfigured .env shows
+  // calm guidance. Red only when .env actually holds something malformed.
   const secIdentityHint = (() => {
-    if (!secUserAgent.trim())
+    if (!secIdentityConfigured)
       return { cls: '', text: t('settings.sec.hintEmpty', { example: SEC_IDENTITY_EXAMPLE }) }
-    if (!secIdentityLocallyValid)
+    if (!secIdentityValid)
       return {
         cls: 'is-bad',
         text: t('settings.sec.hintInvalid', { example: SEC_IDENTITY_EXAMPLE }),
       }
-    if (!secIdentityMatchesServer) return { cls: 'is-warn', text: t('settings.sec.hintPending') }
     if (secIdentityActive) return { cls: 'is-ok', text: t('settings.sec.hintActive') }
     return { cls: 'is-warn', text: t('settings.sec.hintUnconfirmed') }
   })()
@@ -235,11 +230,6 @@ export function DataSourcesPanel({
       }))
     }
   }
-  const handleSecAgentChange = (v: string) => {
-    setSecUserAgent(v)
-    scheduleStandardSave({ sec_user_agent: v })
-  }
-
   /** Inline controls for one unified data-source row: a read-only credential
    * display + test button on the row's single line. The test OUTCOME
    * deliberately lives on the row's status line (renderTestResult) — inline it
@@ -441,15 +431,16 @@ export function DataSourcesPanel({
           ))}
 
         {/* SEC EDGAR identity — not a secret key (unlocks 10-K / 10-Q /
-        8-K / Form 4 / 13F filings); its two-part hint runs taller
-        than the key rows, so it anchors the list. */}
+        8-K / Form 4 / 13F filings) but credential-shaped all the same: it is
+        set in the repo-root .env and read-only here, like the key rows. Its
+        two-part hint runs taller than the key rows, so it anchors the list. */}
         <DataSourceRow
           health={healthByName.get('edgar_tools')}
           name={PROVIDER_DISPLAY_NAMES.edgar_tools}
           badge={
             secIdentityActive ? (
               <span className="settings-badge is-ok">{t('settings.badge.active')}</span>
-            ) : secIdentityLocallyValid ? (
+            ) : secIdentityValid ? (
               <span className="settings-badge is-pending">{t('settings.badge.pending')}</span>
             ) : (
               <span className="settings-badge is-recommended">
@@ -458,16 +449,10 @@ export function DataSourcesPanel({
             )
           }
           control={
-            <input
-              className={`settings-input${secIdentityInvalidInput ? ' is-invalid' : ''}`}
-              type="text"
-              value={secUserAgent}
-              onChange={(e) => handleSecAgentChange(e.target.value)}
+            <ReadOnlyCredential
+              configured={secIdentityConfigured}
+              ariaLabel={t('settings.sec.label')}
               placeholder={t('settings.sec.placeholder')}
-              autoComplete="off"
-              spellCheck={false}
-              aria-invalid={secIdentityInvalidInput}
-              aria-label={t('settings.sec.label')}
             />
           }
           hint={
@@ -479,6 +464,7 @@ export function DataSourcesPanel({
                   {secIdentityPreview}
                 </span>
               )}
+              {renderEnvHint()}
             </>
           }
         />

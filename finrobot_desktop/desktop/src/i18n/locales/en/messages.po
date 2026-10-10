@@ -1485,10 +1485,6 @@ msgid "settings.sec.hintInvalid"
 msgstr "Invalid: don't enter only an email — include a name and email like {example}"
 
 #. js-lingui-explicit-id
-msgid "settings.sec.hintPending"
-msgstr "Format looks valid — saving automatically; the SEC data layer reloads once saved."
-
-#. js-lingui-explicit-id
 msgid "settings.sec.hintActive"
 msgstr "Active: new analyses fetch 10-K / Ownership / XBRL; existing reports need a re-run to update."
 

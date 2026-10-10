@@ -1485,10 +1485,6 @@ msgid "settings.sec.hintInvalid"
 msgstr "格式未通过：不要只填邮箱；必须像 {example} 这样包含名称和邮箱"
 
 #. js-lingui-explicit-id
-msgid "settings.sec.hintPending"
-msgstr "格式有效，正在自动保存；保存后后台会重新加载 SEC 数据层。"
-
-#. js-lingui-explicit-id
 msgid "settings.sec.hintActive"
 msgstr "已启用：新分析会拉取 10-K / Ownership / XBRL；已经生成的报告需要重新跑才会更新"
 

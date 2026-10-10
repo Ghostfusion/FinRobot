@@ -132,6 +132,13 @@ describe('SettingsView', () => {
     // Keys are managed in the repo-root .env, so there is no clear action.
     expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
     expect(screen.getAllByText(/repo-root \.env/).length).toBeGreaterThan(0)
+    // The SEC identity is credential-shaped too: it lives in the repo-root .env
+    // and is read-only here. It used to be the one editable credential field,
+    // which meant a save wrote settings.json and thereby shadowed .env.
+    const secField = screen.getByLabelText('SEC EDGAR Identity (User-Agent)')
+    expect(secField).toBeDisabled()
+    expect(secField).toHaveAttribute('readonly')
+    expect(secField).toHaveValue('••••••••')
     // yfinance row: a tripped breaker takes over the row's single badge slot
     // (COOLDOWN + 429 marker, cooldown-end time on hover) — the always-on
     // badge yields to it until the circuit closes again.

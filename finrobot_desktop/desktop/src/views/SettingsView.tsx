@@ -76,9 +76,8 @@ export default function SettingsView() {
   })
 
   // ── Editable local state ───────────────────────────────────────────────────
-  // Only non-secret settings are editable here: the SEC identity and the LLM
-  // selection. API keys live in the repo-root .env and are read-only in the UI.
-  const [secUserAgent, setSecUserAgent] = useState('')
+  // Only the LLM selection is editable here. API keys AND the SEC identity live
+  // in the repo-root .env and are read-only in the UI.
   const [modelName, setModelName] = useState('')
   // When true, the AI Model section shows the "add a custom provider" form
   // (triggered from the provider dropdown's "＋ add" entry).
@@ -103,7 +102,6 @@ export default function SettingsView() {
     if (!settingsResp || initializedRef.current) return
     initializedRef.current = true
     if (settingsResp.model_name) setModelName(settingsResp.model_name)
-    if (settingsResp.sec_user_agent) setSecUserAgent(settingsResp.sec_user_agent)
   }, [settingsResp, initializedRef])
 
   // ── Derived ──────────────────────────────────────────────────────────────
@@ -327,10 +325,7 @@ export default function SettingsView() {
                   alphaVantageConfigured={alphaVantageConfigured}
                   dataTestState={dataTestState}
                   setDataTestState={setDataTestState}
-                  scheduleStandardSave={scheduleStandardSave}
                   flushPending={flushPending}
-                  secUserAgent={secUserAgent}
-                  setSecUserAgent={setSecUserAgent}
                   serverSecUserAgent={settingsResp.sec_user_agent ?? ''}
                   secIdentityActive={settingsResp.sec_identity_active ?? false}
                 />
