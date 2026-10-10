@@ -1561,20 +1561,12 @@ msgid "settings.fmp.label"
 msgstr "FMP API Key"
 
 #. js-lingui-explicit-id
-msgid "settings.fmp.placeholder"
-msgstr "Enter FMP API key"
-
-#. js-lingui-explicit-id
 msgid "settings.fmp.hint"
 msgstr "Accurate financials, D&A & earnings surprises — free tier"
 
 #. js-lingui-explicit-id
 msgid "settings.finnhub.label"
 msgstr "Finnhub API Key"
-
-#. js-lingui-explicit-id
-msgid "settings.finnhub.placeholder"
-msgstr "Enter Finnhub API key"
 
 #. js-lingui-explicit-id
 msgid "settings.finnhub.hint"
@@ -1585,20 +1577,12 @@ msgid "settings.adanos.label"
 msgstr "Adanos API Key"
 
 #. js-lingui-explicit-id
-msgid "settings.adanos.placeholder"
-msgstr "Enter Adanos API key"
-
-#. js-lingui-explicit-id
 msgid "settings.adanos.hint"
 msgstr "Retail sentiment from Reddit, X & Polymarket"
 
 #. js-lingui-explicit-id
 msgid "settings.alphaVantage.label"
 msgstr "Alpha Vantage API Key"
-
-#. js-lingui-explicit-id
-msgid "settings.alphaVantage.placeholder"
-msgstr "Enter Alpha Vantage API key"
 
 #. js-lingui-explicit-id
 msgid "settings.alphaVantage.hint"
@@ -2693,68 +2677,24 @@ msgid "coverage.starter.researchTicker"
 msgstr "Research {ticker}"
 
 #. js-lingui-explicit-id
-msgid "settings.clearKey.button"
-msgstr "Clear"
-
-#. js-lingui-explicit-id
-msgid "settings.clearKey.confirmTitle"
-msgstr "Clear saved API key?"
-
-#. js-lingui-explicit-id
-msgid "settings.clearKey.confirmBody"
-msgstr "This removes the API key from secure storage (the OS keychain). You'll need to re-enter it before that service works again."
-
-#. js-lingui-explicit-id
 msgid "settings.clearKey.cancel"
 msgstr "Cancel"
 
 #. js-lingui-explicit-id
-msgid "settings.clearKey.confirm"
-msgstr "Clear"
-
-#. js-lingui-explicit-id
-msgid "settings.clearKey.doneTitle"
-msgstr "Cleared"
-
-#. js-lingui-explicit-id
-msgid "settings.clearKey.doneBody"
-msgstr "The API key was removed from secure storage."
-
-#. js-lingui-explicit-id
-msgid "settings.clearKey.failTitle"
-msgstr "Couldn't clear key"
+msgid "settings.keysManagedInEnv"
+msgstr "API keys are managed in the repo-root .env file"
 
 #. js-lingui-explicit-id
 msgid "settings.subtitle"
-msgstr "Configure your API keys and data sources here — everything is stored locally on this machine."
-
-#. js-lingui-explicit-id
-msgid "settings.secretStorage.localFile"
-msgstr "Keys are stored in a local file on this device"
-
-#. js-lingui-explicit-id
-msgid "settings.llm.apiKeyLabel"
-msgstr "API key"
-
-#. js-lingui-explicit-id
-msgid "settings.llm.apiKeyPlaceholder"
-msgstr "Enter your {provider} API key"
+msgstr "Configure your AI model and data sources here — credentials live in the repo-root .env file."
 
 #. js-lingui-explicit-id
 msgid "settings.onboarding.title"
-msgstr "Add an AI model key to begin"
+msgstr "Configure an AI model to begin"
 
 #. js-lingui-explicit-id
 msgid "settings.onboarding.body"
-msgstr "FinRobot uses a large language model to write the report narrative — pick a provider and paste its API key to begin. The data-source keys below (FMP, etc.) are optional and improve financial-data quality."
-
-#. js-lingui-explicit-id
-msgid "settings.key.show"
-msgstr "Show"
-
-#. js-lingui-explicit-id
-msgid "settings.key.hide"
-msgstr "Hide"
+msgstr "FinRobot uses a large language model to write the report narrative — pick a provider below; its key is read from the repo-root .env. The data-source keys (FMP, etc.) are optional and live in the same file."
 
 #. js-lingui-explicit-id
 msgid "settings.provider.label"
@@ -2791,14 +2731,6 @@ msgstr "Remove"
 #. js-lingui-explicit-id
 msgid "settings.customProvider.baseUrl"
 msgstr "Base URL"
-
-#. js-lingui-explicit-id
-msgid "settings.customProvider.apiKey"
-msgstr "API Key"
-
-#. js-lingui-explicit-id
-msgid "settings.customProvider.apiKeyPlaceholder"
-msgstr "Enter the provider's API key"
 
 #. js-lingui-explicit-id
 msgid "settings.customProvider.add"

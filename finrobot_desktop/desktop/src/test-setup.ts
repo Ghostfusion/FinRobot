@@ -1,5 +1,28 @@
 import '@testing-library/jest-dom'
 
+// Node >=26 defines a `localStorage` global that is `undefined` unless the
+// process is started with `--localstorage-file`, and it shadows the working
+// jsdom implementation. The i18n store (zustand persist) needs a real store, so
+// install an in-memory fallback whenever the global is missing/unusable. On the
+// supported Node range jsdom already provides one, so this is a no-op there.
+if (typeof globalThis.localStorage === 'undefined') {
+  const memory = new Map<string, string>()
+  globalThis.localStorage = {
+    get length() {
+      return memory.size
+    },
+    clear: () => memory.clear(),
+    getItem: (key: string) => (memory.has(key) ? memory.get(key)! : null),
+    key: (index: number) => [...memory.keys()][index] ?? null,
+    removeItem: (key: string) => {
+      memory.delete(key)
+    },
+    setItem: (key: string, value: string) => {
+      memory.set(key, String(value))
+    },
+  } as Storage
+}
+
 // Tests assert on English UI strings (e.g. "Run DCF", "More").
 // Default locale was changed to zh for retail-investor product positioning,
 // so pin tests to en via the persisted zustand store key before any module load.

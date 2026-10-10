@@ -1,15 +1,15 @@
 // SettingsView — container for the tabbed settings surface (left nav rail +
 // one panel rendered at a time: AI Model / Data Sources / Updates). All edit
-// state lives here (not in the panels) so it survives panel switches and so
-// the clear-secret flow can reset every key field in one place; the panels in
-// ./settings/ are pure render + handler composition over props.
+// state lives here (not in the panels) so it survives panel switches; the
+// panels in ./settings/ are pure render + handler composition over props.
+// Credentials are read-only here — Data Layer v3 sources every key from the
+// repo-root .env, so the panels only report configured state and probe it.
 
 import { useState, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { api, BASE_URL } from '../api/client'
 import { fetchWithTimeout } from '../api/fetch'
-import { useToastStore } from '../stores/toastStore'
-import { mapErrorToUserMessage, FetchHttpError } from '../utils/errorMessage'
+import { FetchHttpError } from '../utils/errorMessage'
 import { useI18n, tSync } from '../i18n'
 import { Icon, ICON_MODEL, ICON_DATA, ICON_UPDATE } from './settings/controls'
 import { useSettingsSave } from './settings/useSettingsSave'
@@ -21,7 +21,6 @@ import {
 } from './settings/DataSourcesPanel'
 import { SecHoldingsSection } from './settings/SecHoldingsSection'
 import { UpdatesSection } from './settings/UpdatesSection'
-import { ClearKeyConfirmModal } from './settings/ClearKeyConfirmModal'
 import { AI_CHAT_ENABLED } from '../config/features'
 
 // Re-exported so the SEC-identity validators keep their historical import path
@@ -44,8 +43,6 @@ type SettingsPanel = (typeof NAV_ITEMS)[number]['id']
 
 export default function SettingsView() {
   const { t, locale } = useI18n()
-  const queryClient = useQueryClient()
-  const addToast = useToastStore((s) => s.addToast)
 
   // ── Remote settings ──────────────────────────────────────────────────────
   const {
@@ -79,13 +76,10 @@ export default function SettingsView() {
   })
 
   // ── Editable local state ───────────────────────────────────────────────────
-  const [fmpKey, setFmpKey] = useState('')
-  const [finnhubKey, setFinnhubKey] = useState('')
-  const [adanosKey, setAdanosKey] = useState('')
-  const [alphaVantageKey, setAlphaVantageKey] = useState('')
+  // Only non-secret settings are editable here: the SEC identity and the LLM
+  // selection. API keys live in the repo-root .env and are read-only in the UI.
   const [secUserAgent, setSecUserAgent] = useState('')
   const [modelName, setModelName] = useState('')
-  const [llmApiKey, setLlmApiKey] = useState('')
   // When true, the AI Model section shows the "add a custom provider" form
   // (triggered from the provider dropdown's "＋ add" entry).
   const [addingCustom, setAddingCustom] = useState(false)
@@ -93,14 +87,9 @@ export default function SettingsView() {
     name: '',
     baseUrl: '',
     modelId: '',
-    apiKey: '',
   })
   const [testState, setTestState] = useState<LlmTestState>({ status: 'idle' })
   const [dataTestState, setDataTestState] = useState<DataTestState>({})
-
-  // Pending SECRET field awaiting confirmation before its stored keychain key is
-  // deleted via POST /api/settings/clear-secret (BUG-005).
-  const [pendingClearSecret, setPendingClearSecret] = useState<string | null>(null)
 
   // ── Debounced auto-save machinery (PUT /api/settings) ────────────────────
   const { saveState, scheduleStandardSave, retrySave, flushPending, initializedRef } =
@@ -116,58 +105,6 @@ export default function SettingsView() {
     if (settingsResp.model_name) setModelName(settingsResp.model_name)
     if (settingsResp.sec_user_agent) setSecUserAgent(settingsResp.sec_user_agent)
   }, [settingsResp, initializedRef])
-
-  // ── POST /api/settings/clear-secret mutation ─────────────────────────────
-  // Explicit "wipe this stored API key" — the backend PUT never deletes a
-  // secret on an empty value (BUG-005), so removing a stored key is this
-  // deliberate call. Deletes from the keychain, then rebuilds runtime settings.
-  const clearSecretMutation = useMutation({
-    mutationFn: async (field: string) => {
-      const resp = await fetchWithTimeout(`${BASE_URL}/api/settings/clear-secret`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ field }),
-      })
-      if (!resp.ok) {
-        const j = await resp.json().catch(() => ({}))
-        if (j?.detail) throw new Error(j.detail)
-        throw new FetchHttpError(resp.status, resp.statusText)
-      }
-      return (await resp.json()) as never
-    },
-    onSuccess: (data, field) => {
-      queryClient.setQueryData(['settings'], data)
-      // Clearing the Adanos key drops the sentiment provider server-side — drop
-      // the cached snapshot so the card flips back to the configure CTA at once.
-      if (field === 'adanos_api_key') {
-        void queryClient.invalidateQueries({ queryKey: ['ticker-sentiment'] })
-      }
-      setFmpKey('')
-      setFinnhubKey('')
-      setAdanosKey('')
-      setAlphaVantageKey('')
-      setLlmApiKey('')
-      const r = data as { model_name?: string; sec_user_agent?: string }
-      if (r?.model_name) setModelName(r.model_name)
-      if (r?.sec_user_agent !== undefined) setSecUserAgent(r.sec_user_agent ?? '')
-      addToast({
-        type: 'success',
-        title: t('settings.clearKey.doneTitle'),
-        description: t('settings.clearKey.doneBody'),
-      })
-    },
-    onError: (err: Error) => {
-      addToast({
-        type: 'error',
-        title: t('settings.clearKey.failTitle'),
-        description: mapErrorToUserMessage(err),
-      })
-    },
-  })
-
-  const handleClearSecret = (field: string) => {
-    if (field) setPendingClearSecret(field)
-  }
 
   // ── Derived ──────────────────────────────────────────────────────────────
   const fmpConfigured = settingsResp?.fmp_api_key_set ?? false
@@ -264,31 +201,6 @@ export default function SettingsView() {
           </div>
         </div>
 
-        {/* Honest secret-storage disclosure. The backend stores secrets in the
-            OS keychain where it can; on an unsigned macOS build / Linux without a
-            keyring it falls back to a local file, and `secret_storage_mode` then
-            reports 'plaintext'. Surface that NEUTRALLY (it's a normal state, not
-            an error — muted, not red) so a user knows where their keys live. Page
-            level because it covers every secret across all panels. */}
-        {settingsResp.secret_storage_mode === 'plaintext' && (
-          <div
-            data-testid="secret-storage-plaintext"
-            style={{
-              background: 'var(--bg-card-faint)',
-              border: '1px solid var(--border-soft)',
-              borderRadius: 'var(--r-md)',
-              padding: '10px 14px',
-              marginBottom: 'var(--sp-5)',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 11.5,
-              lineHeight: 1.5,
-              color: 'var(--text-secondary)',
-            }}
-          >
-            {t('settings.secretStorage.localFile')}
-          </div>
-        )}
-
         {/* Startup error banner (a chosen-but-broken LLM config). Scoped to the
             AI Model panel — a boot config error is an LLM concern, so dangling
             it over Data Sources / Updates only confused (it read like every
@@ -345,8 +257,8 @@ export default function SettingsView() {
             </div>
             <div style={{ color: 'var(--text-muted)', fontSize: 11, lineHeight: 1.5 }}>
               {locale === 'zh'
-                ? `价格、财务、估值(DCF / LBO / 可比公司)等所有确定性数字无需配置即可使用;只有 AI 研报${AI_CHAT_ENABLED ? '、AI 对话' : ''}需要一个模型。在下方选择 provider、填入 key 即可开始。`
-                : `Prices, financials, and valuations (DCF / LBO / comps) — every deterministic number — work with no key. Only AI reports${AI_CHAT_ENABLED ? ' and AI chat' : ''} need a model. Pick a provider below and add its key to begin.`}
+                ? `价格、财务、估值(DCF / LBO / 可比公司)等所有确定性数字无需配置即可使用;只有 AI 研报${AI_CHAT_ENABLED ? '、AI 对话' : ''}需要一个模型。在下方选择 provider 即可开始(密钥取自仓库根目录的 .env)。`
+                : `Prices, financials, and valuations (DCF / LBO / comps) — every deterministic number — work with no key. Only AI reports${AI_CHAT_ENABLED ? ' and AI chat' : ''} need a model. Pick a provider below — its key comes from the repo-root .env.`}
             </div>
           </div>
         )}
@@ -393,8 +305,6 @@ export default function SettingsView() {
                 serverModelName={settingsResp.model_name}
                 modelName={modelName}
                 setModelName={setModelName}
-                llmApiKey={llmApiKey}
-                setLlmApiKey={setLlmApiKey}
                 addingCustom={addingCustom}
                 setAddingCustom={setAddingCustom}
                 draftProvider={draftProvider}
@@ -403,7 +313,6 @@ export default function SettingsView() {
                 setTestState={setTestState}
                 scheduleStandardSave={scheduleStandardSave}
                 flushPending={flushPending}
-                onClearSecret={handleClearSecret}
               />
             )}
 
@@ -416,19 +325,10 @@ export default function SettingsView() {
                   finnhubConfigured={finnhubConfigured}
                   adanosConfigured={adanosConfigured}
                   alphaVantageConfigured={alphaVantageConfigured}
-                  fmpKey={fmpKey}
-                  setFmpKey={setFmpKey}
-                  finnhubKey={finnhubKey}
-                  setFinnhubKey={setFinnhubKey}
-                  adanosKey={adanosKey}
-                  setAdanosKey={setAdanosKey}
-                  alphaVantageKey={alphaVantageKey}
-                  setAlphaVantageKey={setAlphaVantageKey}
                   dataTestState={dataTestState}
                   setDataTestState={setDataTestState}
                   scheduleStandardSave={scheduleStandardSave}
                   flushPending={flushPending}
-                  onClearSecret={handleClearSecret}
                   secUserAgent={secUserAgent}
                   setSecUserAgent={setSecUserAgent}
                   serverSecUserAgent={settingsResp.sec_user_agent ?? ''}
@@ -444,17 +344,6 @@ export default function SettingsView() {
           </div>
         </div>
       </div>
-
-      {pendingClearSecret && (
-        <ClearKeyConfirmModal
-          onCancel={() => setPendingClearSecret(null)}
-          onConfirm={() => {
-            const f = pendingClearSecret
-            setPendingClearSecret(null)
-            clearSecretMutation.mutate(f)
-          }}
-        />
-      )}
     </div>
   )
 }

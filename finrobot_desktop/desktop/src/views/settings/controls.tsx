@@ -1,7 +1,6 @@
 // Shared primitive controls for the Settings panels: inline icon glyphs, the
-// show/hide secret input, and the toggle-switch row.
+// read-only credential display, and the toggle-switch row.
 
-import { useState } from 'react'
 import { useI18n } from '../../i18n'
 
 // ─── Small inline icons (cosmic spec: simple glyphs as inline SVG) ────────────
@@ -24,67 +23,31 @@ export const ICON_DATA =
   'M2.5 4c0-1.1 2.5-2 5.5-2s5.5.9 5.5 2-2.5 2-5.5 2-5.5-.9-5.5-2Zm0 0v8c0 1.1 2.5 2 5.5 2s5.5-.9 5.5-2V4'
 export const ICON_UPDATE = 'M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5V5H11'
 
-// ─── Password input with show/hide toggle ────────────────────────────────────
+// ─── Read-only credential display ────────────────────────────────────────────
+// Data Layer v3 sources every credential from the repository-root .env, so the
+// UI only reports whether a key is present — it never accepts, edits, or clears
+// one. Masked when configured; empty otherwise.
 
-export function SecretInput({
-  value,
-  onChange,
-  placeholder,
-  invalid,
+export function ReadOnlyCredential({
+  configured,
   ariaLabel,
-  disabled,
 }: {
-  value: string
-  onChange: (v: string) => void
-  placeholder?: string
-  invalid?: boolean
+  configured: boolean
   ariaLabel?: string
-  disabled?: boolean
-}) {
+}): React.ReactElement {
   const { t } = useI18n()
-  const [revealed, setRevealed] = useState(false)
   return (
-    <div className="settings-input-wrap">
-      <input
-        className={`settings-input has-trailing${invalid ? ' is-invalid' : ''}`}
-        type={revealed ? 'text' : 'password'}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        autoComplete="off"
-        spellCheck={false}
-        aria-label={ariaLabel}
-        disabled={disabled}
-      />
-      <button
-        type="button"
-        className="settings-eye"
-        aria-label={revealed ? t('settings.key.hide') : t('settings.key.show')}
-        title={revealed ? t('settings.key.hide') : t('settings.key.show')}
-        onClick={() => setRevealed((r) => !r)}
-        disabled={disabled}
-      >
-        {revealed ? (
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden>
-            <path
-              d="M2 8s2.4-4 6-4 6 4 6 4-2.4 4-6 4-6-4-6-4Z"
-              stroke="currentColor"
-              strokeWidth="1.3"
-            />
-            <circle cx="8" cy="8" r="1.8" stroke="currentColor" strokeWidth="1.3" />
-          </svg>
-        ) : (
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden>
-            <path
-              d="M2 8s2.4-4 6-4 6 4 6 4-2.4 4-6 4-6-4-6-4Z"
-              stroke="currentColor"
-              strokeWidth="1.3"
-            />
-            <path d="m3 3 10 10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-          </svg>
-        )}
-      </button>
-    </div>
+    <input
+      className="settings-input"
+      type="text"
+      value={configured ? '••••••••' : ''}
+      placeholder={t('settings.keysManagedInEnv')}
+      readOnly
+      disabled
+      aria-label={ariaLabel}
+      autoComplete="off"
+      spellCheck={false}
+    />
   )
 }
 

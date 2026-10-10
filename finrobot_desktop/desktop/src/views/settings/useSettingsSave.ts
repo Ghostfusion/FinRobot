@@ -36,13 +36,6 @@ export function useSettingsSave() {
     },
     onSuccess: (data, variables) => {
       queryClient.setQueryData(['settings'], data)
-      // Saving the Adanos key rebuilds the data layer server-side, so the retail
-      // sentiment card's cached `available:false` is now stale. Without this it
-      // keeps showing "Adanos not configured" until staleTime (5 min) elapses —
-      // the user configures the key and the card still calls them unconfigured.
-      if (variables && 'adanos_api_key' in variables) {
-        void queryClient.invalidateQueries({ queryKey: ['ticker-sentiment'] })
-      }
       if (lastPayloadRef.current === variables) {
         lastPayloadRef.current = null
       }

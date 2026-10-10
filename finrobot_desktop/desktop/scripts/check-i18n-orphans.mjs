@@ -17,7 +17,11 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const ROOT = new URL('..', import.meta.url).pathname
+// `import.meta.url` is a file: URL when this runs as a script, but a bare
+// Windows path (scheme `d:`) when vitest imports the module for its unit test —
+// fileURLToPath would throw there, so only use it for real file URLs.
+const rootUrl = new URL('..', import.meta.url)
+const ROOT = rootUrl.protocol === 'file:' ? fileURLToPath(rootUrl) : rootUrl.pathname
 const SRC = join(ROOT, 'src')
 const PO = join(SRC, 'i18n', 'locales', 'en', 'messages.po')
 

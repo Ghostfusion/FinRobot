@@ -35,7 +35,6 @@ import settingsAiModelPanelSrc from '../views/settings/AiModelPanel.tsx?raw'
 import settingsDataSourcesPanelSrc from '../views/settings/DataSourcesPanel.tsx?raw'
 import settingsSecHoldingsSrc from '../views/settings/SecHoldingsSection.tsx?raw'
 import settingsUpdatesSrc from '../views/settings/UpdatesSection.tsx?raw'
-import settingsClearKeyModalSrc from '../views/settings/ClearKeyConfirmModal.tsx?raw'
 import versionDiffBannerSrc from '../components/VersionDiffBanner.tsx?raw'
 import aiChatTabSrc from '../layout/RightChatPanel/AiChatTab.tsx?raw'
 import chatHeaderSrc from '../layout/RightChatPanel/chat/AiPanelHeader.tsx?raw'
@@ -58,7 +57,6 @@ const GUARDED: Array<[string, string]> = [
   ['views/settings/DataSourcesPanel.tsx', settingsDataSourcesPanelSrc],
   ['views/settings/SecHoldingsSection.tsx', settingsSecHoldingsSrc],
   ['views/settings/UpdatesSection.tsx', settingsUpdatesSrc],
-  ['views/settings/ClearKeyConfirmModal.tsx', settingsClearKeyModalSrc],
   ['components/VersionDiffBanner.tsx', versionDiffBannerSrc],
   // AiChatTab was split into chat/* (2026-06-11) — same guard, every shard.
   ['layout/RightChatPanel/AiChatTab.tsx', aiChatTabSrc],

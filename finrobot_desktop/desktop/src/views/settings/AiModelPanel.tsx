@@ -8,7 +8,7 @@ import { api } from '../../api/client'
 import { useToastStore } from '../../stores/toastStore'
 import { useI18n } from '../../i18n'
 import type { components } from '../../api/schema'
-import { SecretInput } from './controls'
+import { ReadOnlyCredential } from './controls'
 import { ProviderDropdown, type ProviderOption } from './ProviderDropdown'
 
 type ProviderInfo = components['schemas']['ProviderInfo']
@@ -25,7 +25,6 @@ export interface DraftProvider {
   name: string
   baseUrl: string
   modelId: string
-  apiKey: string
 }
 
 /** Result of the most recent "Test connection" click for the selected provider. */
@@ -43,8 +42,6 @@ interface AiModelPanelProps {
   serverModelName: string | undefined
   modelName: string
   setModelName: (v: string) => void
-  llmApiKey: string
-  setLlmApiKey: (v: string) => void
   addingCustom: boolean
   setAddingCustom: (v: boolean) => void
   draftProvider: DraftProvider
@@ -53,9 +50,8 @@ interface AiModelPanelProps {
   setTestState: (v: LlmTestState) => void
   scheduleStandardSave: (payload: Record<string, unknown>, onSaved?: () => void) => void
   /** Persists any in-flight debounced edit before the "Test connection" probe,
-   * so a fast click tests the key the user just typed (see useSettingsSave). */
+   * so a fast click tests the latest saved config (see useSettingsSave). */
   flushPending: () => Promise<void>
-  onClearSecret: (field: string) => void
 }
 
 export function AiModelPanel({
@@ -64,8 +60,6 @@ export function AiModelPanel({
   serverModelName,
   modelName,
   setModelName,
-  llmApiKey,
-  setLlmApiKey,
   addingCustom,
   setAddingCustom,
   draftProvider,
@@ -74,7 +68,6 @@ export function AiModelPanel({
   setTestState,
   scheduleStandardSave,
   flushPending,
-  onClearSecret,
 }: AiModelPanelProps): React.ReactElement {
   const { t } = useI18n()
   const addToast = useToastStore((s) => s.addToast)
@@ -122,7 +115,6 @@ export function AiModelPanel({
     const nextModel = p && currentModelId && p.models.includes(currentModelId) ? currentModelId : ''
     const next = `${providerId}:${nextModel}`
     setModelName(next)
-    setLlmApiKey('')
     setAddingCustom(false)
     setTestState({ status: 'idle' })
     // Auto-test only if the provider is ALREADY keyed AND a model carried over.
@@ -141,23 +133,9 @@ export function AiModelPanel({
     const autoTest = mid && llmKeyConfigured ? () => void testConnection(pid, mid) : undefined
     scheduleStandardSave({ model_name: next }, autoTest)
   }
-  const handleLlmKeyChange = (v: string) => {
-    if (!providerSelected) return
-    setLlmApiKey(v)
-    setTestState({ status: 'idle' })
-    if (!v.trim()) return
-    const pid = currentProviderId
-    const mid = currentModelId
-    // The key is the last piece of a complete config — auto-test the moment it
-    // saves (debounce coalesces keystrokes, so one PUT, one ping). Needs a model
-    // chosen; without one the probe can't know what to call.
-    const autoTest = mid ? () => void testConnection(pid, mid) : undefined
-    scheduleStandardSave({ provider_keys: { [pid]: v.trim() } }, autoTest)
-  }
-  // Persist the on-screen key BEFORE probing. Without this, a click inside the
-  // 500ms auto-save window tests a key the backend hasn't stored yet and falsely
-  // reports "no key" — the bug where every key seemed to need 2-3 attempts. The
-  // data-source Test path already does this; this brings the LLM path to parity.
+  // Persist any debounced edit BEFORE probing, so a click inside the 500ms
+  // auto-save window does not test a config the backend hasn't stored yet. The
+  // credential itself lives in the repo-root .env and is read-only in the UI.
   const handleTestConnection = async () => {
     if (!providerSelected) return
     await flushPending()
@@ -197,15 +175,10 @@ export function AiModelPanel({
       custom_providers: next,
       model_name: `${providerId}:${modelId}`,
     }
-    const hasKey = !!draftProvider.apiKey.trim()
-    if (hasKey) payload.provider_keys = { [providerId]: draftProvider.apiKey.trim() }
-    // A custom provider added WITH a key + model is a complete config → auto-test.
-    const autoTest = hasKey && modelId ? () => void testConnection(providerId, modelId) : undefined
-    scheduleStandardSave(payload, autoTest)
+    scheduleStandardSave(payload)
     setModelName(`${providerId}:${modelId}`) // select the new provider
-    setLlmApiKey('')
     setTestState({ status: 'idle' })
-    setDraftProvider({ name: '', baseUrl: '', modelId: '', apiKey: '' })
+    setDraftProvider({ name: '', baseUrl: '', modelId: '' })
     setAddingCustom(false)
   }
   // Inline-edit the base_url of the currently-selected custom provider.
@@ -307,16 +280,6 @@ export function AiModelPanel({
                 spellCheck={false}
               />
             </div>
-            <div className="settings-field">
-              <label className="settings-field-label">
-                <span className="label-text">{t('settings.customProvider.apiKey')}</span>
-              </label>
-              <SecretInput
-                value={draftProvider.apiKey}
-                onChange={(v) => setDraftProvider((d) => ({ ...d, apiKey: v }))}
-                placeholder={t('settings.customProvider.apiKeyPlaceholder')}
-              />
-            </div>
             <div className="settings-form-actions">
               <button
                 type="button"
@@ -330,7 +293,7 @@ export function AiModelPanel({
                 className="settings-btn"
                 onClick={() => {
                   setAddingCustom(false)
-                  setDraftProvider({ name: '', baseUrl: '', modelId: '', apiKey: '' })
+                  setDraftProvider({ name: '', baseUrl: '', modelId: '' })
                 }}
               >
                 {t('settings.customProvider.cancel')}
@@ -389,7 +352,8 @@ export function AiModelPanel({
               </div>
             )}
 
-            {/* API key for the selected provider */}
+            {/* Read-only key state for the selected provider (the credential
+              itself is sourced from the repo-root .env). */}
             <div className="settings-field">
               <label className="settings-field-label">
                 <span className="label-text">
@@ -402,28 +366,14 @@ export function AiModelPanel({
                 ) : (
                   <span className="settings-badge is-required">{t('settings.badge.required')}</span>
                 )}
-                {llmKeyConfigured && (
-                  <button
-                    type="button"
-                    className="settings-clear-btn"
-                    onClick={() => onClearSecret(`provider_key:${currentProviderId}`)}
-                  >
-                    {t('settings.clearKey.button')}
-                  </button>
-                )}
               </label>
-              <SecretInput
-                value={llmApiKey}
-                onChange={handleLlmKeyChange}
-                disabled={!providerSelected}
-                placeholder={
-                  llmKeyConfigured
-                    ? '••••••••'
-                    : t('settings.llm.apiKeyPlaceholder', {
-                        provider: currentProviderInfo?.label ?? currentProviderId,
-                      })
-                }
+              <ReadOnlyCredential
+                configured={llmKeyConfigured}
+                ariaLabel={t('settings.llm.apiKeyLabelFor', {
+                  provider: currentProviderInfo?.label ?? currentProviderId,
+                })}
               />
+              <span className="settings-hint">{t('settings.keysManagedInEnv')}</span>
               <div className="settings-test-row">
                 <button
                   type="button"

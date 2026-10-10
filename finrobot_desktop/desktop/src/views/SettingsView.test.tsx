@@ -121,12 +121,17 @@ describe('SettingsView', () => {
 
   // The settings page is tabbed: only the selected panel renders, so data-source
   // assertions must first switch panels via the left nav.
-  it('renders unified data-source rows: live circuit state + inline key config', async () => {
+  it('renders unified data-source rows: live circuit state + read-only key display', async () => {
     renderWithQuery(<SettingsView />)
     fireEvent.click(await screen.findByRole('button', { name: 'Data Sources' }))
-    // fmp row: name + inline key input + test button on the same row.
+    // fmp row: name + read-only key field + test button on the same row.
     expect(await screen.findByText('FMP')).toBeInTheDocument()
-    expect(screen.getByLabelText('FMP API Key')).toBeInTheDocument()
+    const fmpKey = screen.getByLabelText('FMP API Key')
+    expect(fmpKey).toBeDisabled()
+    expect(fmpKey).toHaveAttribute('readonly')
+    // Keys are managed in the repo-root .env, so there is no clear action.
+    expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument()
+    expect(screen.getAllByText(/repo-root \.env/).length).toBeGreaterThan(0)
     // yfinance row: a tripped breaker takes over the row's single badge slot
     // (COOLDOWN + 429 marker, cooldown-end time on hover) — the always-on
     // badge yields to it until the circuit closes again.

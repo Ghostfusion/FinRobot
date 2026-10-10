@@ -3,11 +3,12 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { api } from '../../api/client'
 import { AiModelPanel, type DraftProvider, type LlmTestState } from './AiModelPanel'
 
-// Auto-test-on-save wiring: the instant a COMPLETE provider+model+key config is
-// saved, AiModelPanel fires the live /test-provider probe so a wrong key shows
-// ✗ at config time (soft-block — the key is still saved, the user just retries).
-// scheduleStandardSave is stubbed to invoke its onSaved synchronously, so these
-// assert the wiring without the real debounce/react-query timing (non-flaky).
+// Data Layer v3: provider API keys are read-only (they live in the repo-root
+// .env), so these cover the two things still editable — provider/model
+// selection and custom-provider add — plus the live "Test connection" probe,
+// which must flush any pending edit before firing. scheduleStandardSave is
+// stubbed to invoke its onSaved synchronously, so the assertions stay free of
+// the real debounce/react-query timing (non-flaky).
 
 vi.mock('../../api/client', () => ({
   api: { POST: vi.fn(), PUT: vi.fn() },
@@ -37,17 +38,14 @@ function renderPanel(over: Partial<React.ComponentProps<typeof AiModelPanel>> = 
     serverModelName: 'anthropic:claude-sonnet-4-6',
     modelName: 'anthropic:claude-sonnet-4-6',
     setModelName: vi.fn(),
-    llmApiKey: '',
-    setLlmApiKey: vi.fn(),
     addingCustom: false,
     setAddingCustom: vi.fn(),
-    draftProvider: { name: '', baseUrl: '', modelId: '', apiKey: '' } as DraftProvider,
+    draftProvider: { name: '', baseUrl: '', modelId: '' } as DraftProvider,
     setDraftProvider: vi.fn(),
     testState: { status: 'idle' } as LlmTestState,
     setTestState: vi.fn(),
     scheduleStandardSave: saveSpy,
     flushPending: vi.fn().mockResolvedValue(undefined),
-    onClearSecret: vi.fn(),
     ...over,
   }
   return render(<AiModelPanel {...props} />)
@@ -61,31 +59,36 @@ beforeEach(() => {
   } as never)
 })
 
-const keyInput = () => screen.getByPlaceholderText('settings.llm.apiKeyPlaceholder')
-
-describe('AiModelPanel auto-test on save', () => {
-  it('saves the key AND auto-runs /test-provider when a model is selected', async () => {
+describe('AiModelPanel read-only credentials', () => {
+  it('renders the provider key as a disabled read-only field with the .env hint', () => {
     renderPanel()
-    fireEvent.change(keyInput(), { target: { value: 'sk-bad-key' } })
 
-    // Soft-block: the key is still persisted...
-    expect(saveSpy).toHaveBeenCalledWith(
-      { provider_keys: { anthropic: 'sk-bad-key' } },
-      expect.any(Function),
-    )
-    // ...and the live probe fired with the exact provider+model.
-    expect(api.POST).toHaveBeenCalledWith('/api/settings/test-provider', {
-      body: { provider_id: 'anthropic', model_id: 'claude-sonnet-4-6' },
-    })
+    // The label is aria-linked to the field; mocked t() returns the raw key.
+    const keyField = screen.getByLabelText('settings.llm.apiKeyLabelFor')
+    expect(keyField).toBeDisabled()
+    expect(keyField).toHaveAttribute('readonly')
+    // No way to edit or clear the key from here any more.
+    expect(
+      screen.queryByRole('button', { name: 'settings.clearKey.button' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText('settings.keysManagedInEnv')).toBeInTheDocument()
   })
 
-  it('does NOT auto-test when no model is chosen yet (probe has nothing to call)', () => {
-    renderPanel({ modelName: 'anthropic:', serverModelName: 'anthropic:' })
-    fireEvent.change(keyInput(), { target: { value: 'sk-x' } })
+  it('keeps the model id editable and saves model_name on change', () => {
+    renderPanel({
+      providers: [{ ...ANTHROPIC, key_set: true }],
+      modelName: 'anthropic:',
+      serverModelName: 'anthropic:',
+    })
 
-    // Key still saved, but onSaved is undefined → no probe.
-    expect(saveSpy).toHaveBeenCalledWith({ provider_keys: { anthropic: 'sk-x' } }, undefined)
-    expect(api.POST).not.toHaveBeenCalled()
+    const modelInput = screen.getByPlaceholderText('settings.model.idPlaceholder')
+    expect(modelInput).toBeEnabled()
+    fireEvent.change(modelInput, { target: { value: 'claude-sonnet-4-6' } })
+
+    expect(saveSpy).toHaveBeenCalledWith(
+      { model_name: 'anthropic:claude-sonnet-4-6' },
+      expect.any(Function),
+    )
   })
 
   it('does not show the provider first suggestion as a fake model default', () => {
@@ -95,57 +98,42 @@ describe('AiModelPanel auto-test on save', () => {
     expect(screen.queryByPlaceholderText('claude-sonnet-4-6')).not.toBeInTheDocument()
   })
 
-  it('disables model/key/test controls until a provider is selected', () => {
+  it('disables model/test controls until a provider is selected', () => {
     renderPanel({ modelName: '', serverModelName: '' })
 
     expect(screen.getByPlaceholderText('settings.model.idPlaceholder')).toBeDisabled()
-    expect(keyInput()).toBeDisabled()
+    expect(screen.getByLabelText('settings.llm.apiKeyLabelFor')).toBeDisabled()
     expect(screen.getByRole('button', { name: 'settings.test.button' })).toBeDisabled()
-
-    fireEvent.change(keyInput(), { target: { value: 'sk-should-not-save' } })
-    expect(saveSpy).not.toHaveBeenCalled()
   })
 
-  it('normalizes a custom provider id before saving model_name and provider_keys', async () => {
+  it('normalizes a custom provider id and saves it without any provider_keys payload', () => {
     renderPanel({
       addingCustom: true,
       draftProvider: {
         name: 'OpenRouter',
         baseUrl: 'https://openrouter.ai/api/v1',
         modelId: 'openai/gpt-4o-mini',
-        apiKey: 'sk-openrouter',
       },
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'settings.customProvider.add' }))
 
-    expect(saveSpy).toHaveBeenCalledWith(
-      {
-        custom_providers: [
-          {
-            id: 'openrouter',
-            label: 'OpenRouter',
-            kind: 'openai-compatible',
-            base_url: 'https://openrouter.ai/api/v1',
-            models: ['openai/gpt-4o-mini'],
-          },
-        ],
-        model_name: 'openrouter:openai/gpt-4o-mini',
-        provider_keys: { openrouter: 'sk-openrouter' },
-      },
-      expect.any(Function),
-    )
-    await vi.waitFor(() =>
-      expect(api.POST).toHaveBeenCalledWith('/api/settings/test-provider', {
-        body: { provider_id: 'openrouter', model_id: 'openai/gpt-4o-mini' },
-      }),
-    )
+    // Credentials are never part of the PUT payload — only the provider config.
+    expect(saveSpy).toHaveBeenCalledWith({
+      custom_providers: [
+        {
+          id: 'openrouter',
+          label: 'OpenRouter',
+          kind: 'openai-compatible',
+          base_url: 'https://openrouter.ai/api/v1',
+          models: ['openai/gpt-4o-mini'],
+        },
+      ],
+      model_name: 'openrouter:openai/gpt-4o-mini',
+    })
   })
 
   it('flushes the pending save BEFORE the manual Test probe (no test-before-save race)', async () => {
-    // Regression for "every key had to be configured 2-3 times": clicking Test
-    // inside the 500ms auto-save window must persist the on-screen key FIRST,
-    // else the backend probes a key it hasn't stored yet and reports "no key".
     const flushPending = vi.fn().mockResolvedValue(undefined)
     renderPanel({ flushPending })
     fireEvent.click(screen.getByRole('button', { name: 'settings.test.button' }))
@@ -162,13 +150,13 @@ describe('AiModelPanel auto-test on save', () => {
     )
   })
 
-  it('surfaces the failure verdict (✗ auth) without rolling back the save', async () => {
+  it('surfaces the failure verdict (✗ auth) without touching the read-only key', async () => {
     const setTestState = vi.fn()
     renderPanel({ setTestState })
-    fireEvent.change(keyInput(), { target: { value: 'sk-bad-key' } })
+    fireEvent.click(screen.getByRole('button', { name: 'settings.test.button' }))
 
     // testConnection flips to "testing" then resolves to the failed verdict.
-    expect(setTestState).toHaveBeenCalledWith({ status: 'testing' })
+    await vi.waitFor(() => expect(setTestState).toHaveBeenCalledWith({ status: 'testing' }))
     await vi.waitFor(() =>
       expect(setTestState).toHaveBeenCalledWith({
         status: 'done',

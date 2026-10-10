@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const root = new URL('..', import.meta.url).pathname
+const rootUrl = new URL('..', import.meta.url)
+const root = rootUrl.protocol === 'file:' ? fileURLToPath(rootUrl) : rootUrl.pathname
 const catalogs = ['en', 'zh'].map((locale) => ({
   locale,
   path: join(root, 'src', 'i18n', 'locales', locale, 'messages.po'),

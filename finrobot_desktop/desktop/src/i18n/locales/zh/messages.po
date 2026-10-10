@@ -1561,20 +1561,12 @@ msgid "settings.fmp.label"
 msgstr "FMP API 密钥"
 
 #. js-lingui-explicit-id
-msgid "settings.fmp.placeholder"
-msgstr "输入 FMP API 密钥"
-
-#. js-lingui-explicit-id
 msgid "settings.fmp.hint"
 msgstr "准确财报、D&A 与盈利惊喜 — 有免费额度"
 
 #. js-lingui-explicit-id
 msgid "settings.finnhub.label"
 msgstr "Finnhub API 密钥"
-
-#. js-lingui-explicit-id
-msgid "settings.finnhub.placeholder"
-msgstr "输入 Finnhub API 密钥"
 
 #. js-lingui-explicit-id
 msgid "settings.finnhub.hint"
@@ -1585,20 +1577,12 @@ msgid "settings.adanos.label"
 msgstr "Adanos API 密钥"
 
 #. js-lingui-explicit-id
-msgid "settings.adanos.placeholder"
-msgstr "输入 Adanos API 密钥"
-
-#. js-lingui-explicit-id
 msgid "settings.adanos.hint"
 msgstr "来自 Reddit、X、Polymarket 的散户情绪"
 
 #. js-lingui-explicit-id
 msgid "settings.alphaVantage.label"
 msgstr "Alpha Vantage API 密钥"
-
-#. js-lingui-explicit-id
-msgid "settings.alphaVantage.placeholder"
-msgstr "输入 Alpha Vantage API 密钥"
 
 #. js-lingui-explicit-id
 msgid "settings.alphaVantage.hint"
@@ -2693,68 +2677,24 @@ msgid "coverage.starter.researchTicker"
 msgstr "研究 {ticker}"
 
 #. js-lingui-explicit-id
-msgid "settings.clearKey.button"
-msgstr "清除"
-
-#. js-lingui-explicit-id
-msgid "settings.clearKey.confirmTitle"
-msgstr "清除已保存的 API 密钥？"
-
-#. js-lingui-explicit-id
-msgid "settings.clearKey.confirmBody"
-msgstr "将从安全存储（系统钥匙串）中删除这个 API 密钥。删除后需要重新填写才能使用该服务。"
-
-#. js-lingui-explicit-id
 msgid "settings.clearKey.cancel"
 msgstr "取消"
 
 #. js-lingui-explicit-id
-msgid "settings.clearKey.confirm"
-msgstr "清除"
-
-#. js-lingui-explicit-id
-msgid "settings.clearKey.doneTitle"
-msgstr "已清除"
-
-#. js-lingui-explicit-id
-msgid "settings.clearKey.doneBody"
-msgstr "API 密钥已从安全存储中删除。"
-
-#. js-lingui-explicit-id
-msgid "settings.clearKey.failTitle"
-msgstr "清除失败"
+msgid "settings.keysManagedInEnv"
+msgstr "API 密钥统一在仓库根目录的 .env 文件中管理"
 
 #. js-lingui-explicit-id
 msgid "settings.subtitle"
-msgstr "API 密钥与数据源在这里配置，全部保存在本机。"
-
-#. js-lingui-explicit-id
-msgid "settings.secretStorage.localFile"
-msgstr "密钥存储在本机的本地文件中"
-
-#. js-lingui-explicit-id
-msgid "settings.llm.apiKeyLabel"
-msgstr "API 密钥"
-
-#. js-lingui-explicit-id
-msgid "settings.llm.apiKeyPlaceholder"
-msgstr "填入 {provider} 的 API 密钥"
+msgstr "在此配置 AI 模型与数据源 — 凭证统一放在仓库根目录的 .env 文件中。"
 
 #. js-lingui-explicit-id
 msgid "settings.onboarding.title"
-msgstr "先配置一个 AI 模型密钥"
+msgstr "先配置一个 AI 模型"
 
 #. js-lingui-explicit-id
 msgid "settings.onboarding.body"
-msgstr "FinRobot 用大模型生成研报叙事——选一个服务商、填入它的 API 密钥即可开始。下方数据源密钥（FMP 等）可选，用于更高质量的财务数据。"
-
-#. js-lingui-explicit-id
-msgid "settings.key.show"
-msgstr "显示"
-
-#. js-lingui-explicit-id
-msgid "settings.key.hide"
-msgstr "隐藏"
+msgstr "FinRobot 用大模型生成研报叙事——在下方选一个服务商即可，密钥从仓库根目录的 .env 读取。数据源密钥（FMP 等）可选，也放在同一文件中。"
 
 #. js-lingui-explicit-id
 msgid "settings.provider.label"
@@ -2791,14 +2731,6 @@ msgstr "删除"
 #. js-lingui-explicit-id
 msgid "settings.customProvider.baseUrl"
 msgstr "Base URL"
-
-#. js-lingui-explicit-id
-msgid "settings.customProvider.apiKey"
-msgstr "API Key"
-
-#. js-lingui-explicit-id
-msgid "settings.customProvider.apiKeyPlaceholder"
-msgstr "填入该服务商的 API Key"
 
 #. js-lingui-explicit-id
 msgid "settings.customProvider.add"

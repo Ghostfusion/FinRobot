@@ -11,7 +11,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useI18n } from '../../i18n'
 import { formatDate } from '../../utils/format'
 import { openExternal } from '../../lib/tauri'
-import { SecretInput } from './controls'
+import { ReadOnlyCredential } from './controls'
 import { SEC_IDENTITY_EXAMPLE, isValidSecIdentity, secHeaderIdentityPreview } from './secIdentity'
 
 /** Where a user signs up for each data-source API key. Shown as a "Get a key"
@@ -153,22 +153,13 @@ interface DataSourcesPanelProps {
   finnhubConfigured: boolean
   adanosConfigured: boolean
   alphaVantageConfigured: boolean
-  fmpKey: string
-  setFmpKey: (v: string) => void
-  finnhubKey: string
-  setFinnhubKey: (v: string) => void
-  adanosKey: string
-  setAdanosKey: (v: string) => void
-  alphaVantageKey: string
-  setAlphaVantageKey: (v: string) => void
   dataTestState: DataTestState
   setDataTestState: React.Dispatch<React.SetStateAction<DataTestState>>
   scheduleStandardSave: (payload: Record<string, unknown>) => void
   /** Persists any in-flight debounced edit before the connectivity probe, so the
-   * backend tests the key the user just typed — not the value the 500ms auto-save
+   * backend tests the latest saved config — not a value the debounced auto-save
    * hasn't written yet (see useSettingsSave.flushPending). */
   flushPending: () => Promise<void>
-  onClearSecret: (field: string) => void
   secUserAgent: string
   setSecUserAgent: (v: string) => void
   /** settingsResp.sec_user_agent — what the server currently holds. */
@@ -183,19 +174,10 @@ export function DataSourcesPanel({
   finnhubConfigured,
   adanosConfigured,
   alphaVantageConfigured,
-  fmpKey,
-  setFmpKey,
-  finnhubKey,
-  setFinnhubKey,
-  adanosKey,
-  setAdanosKey,
-  alphaVantageKey,
-  setAlphaVantageKey,
   dataTestState,
   setDataTestState,
   scheduleStandardSave,
   flushPending,
-  onClearSecret,
   secUserAgent,
   setSecUserAgent,
   serverSecUserAgent,
@@ -229,28 +211,10 @@ export function DataSourcesPanel({
   })()
 
   // ── Field change handlers ────────────────────────────────────────────────
-  const handleFmpKeyChange = (v: string) => {
-    setFmpKey(v)
-    setDataTestState((s) => ({ ...s, fmp: { status: 'idle' } }))
-    if (v.trim()) scheduleStandardSave({ fmp_api_key: v.trim() })
-  }
-  const handleFinnhubKeyChange = (v: string) => {
-    setFinnhubKey(v)
-    setDataTestState((s) => ({ ...s, finnhub: { status: 'idle' } }))
-    if (v.trim()) scheduleStandardSave({ finnhub_api_key: v.trim() })
-  }
-  const handleAdanosKeyChange = (v: string) => {
-    setAdanosKey(v)
-    setDataTestState((s) => ({ ...s, adanos: { status: 'idle' } }))
-    if (v.trim()) scheduleStandardSave({ adanos_api_key: v.trim() })
-  }
-  const handleAlphaVantageKeyChange = (v: string) => {
-    setAlphaVantageKey(v)
-    setDataTestState((s) => ({ ...s, alpha_vantage: { status: 'idle' } }))
-    if (v.trim()) scheduleStandardSave({ alpha_vantage_api_key: v.trim() })
-  }
-  // Live connectivity test for a data-source key. Flushes any unsaved edit first
-  // so the backend tests the key the user is looking at, then probes it.
+  // Live connectivity test for a data-source key. The credential itself lives in
+  // the repo-root .env and is read-only in the UI; this only probes the
+  // configured key. Flushes any unsaved edit first so the probe sees the latest
+  // server-side settings.
   const handleTestDataProvider = async (provider: string) => {
     setDataTestState((s) => ({ ...s, [provider]: { status: 'testing' } }))
     try {
@@ -276,30 +240,21 @@ export function DataSourcesPanel({
     scheduleStandardSave({ sec_user_agent: v })
   }
 
-  /** Inline key controls for one unified data-source row: secret input + test
-   * button + clear on the row's single line. The test OUTCOME deliberately
-   * lives on the row's status line (renderTestResult) — inline it would
-   * squeeze the input and wrap the buttons. FMP / Finnhub / Adanos / Alpha
-   * Vantage are structurally identical — they only differ in copy, the
+  /** Inline controls for one unified data-source row: a read-only credential
+   * display + test button on the row's single line. The test OUTCOME
+   * deliberately lives on the row's status line (renderTestResult) — inline it
+   * would squeeze the control and wrap the buttons. FMP / Finnhub / Adanos /
+   * Alpha Vantage are structurally identical — they only differ in copy, the
    * configured flag, and the settings field names. */
   const renderKeyControl = (cfg: {
     labelKey: string
-    placeholderKey: string
     configured: boolean
-    value: string
-    onChange: (v: string) => void
-    clearField: string
     testProvider: string
   }): React.ReactElement => {
     const st = dataTestState[cfg.testProvider] ?? { status: 'idle' as const }
     return (
       <>
-        <SecretInput
-          value={cfg.value}
-          onChange={cfg.onChange}
-          placeholder={cfg.configured ? '••••••••' : t(cfg.placeholderKey)}
-          ariaLabel={t(cfg.labelKey)}
-        />
+        <ReadOnlyCredential configured={cfg.configured} ariaLabel={t(cfg.labelKey)} />
         <button
           type="button"
           className="settings-btn"
@@ -308,15 +263,6 @@ export function DataSourcesPanel({
         >
           {st.status === 'testing' ? t('settings.test.testing') : t('settings.test.button')}
         </button>
-        {cfg.configured && (
-          <button
-            type="button"
-            className="settings-clear-btn"
-            onClick={() => onClearSecret(cfg.clearField)}
-          >
-            {t('settings.clearKey.button')}
-          </button>
-        )}
       </>
     )
   }
@@ -375,6 +321,14 @@ export function DataSourcesPanel({
       </a>
     </>
   )
+  /** The read-only-credentials note appended to every keyed row's hint — keys
+   * are sourced from the repo-root .env, never entered or cleared in the UI. */
+  const renderEnvHint = (): React.ReactElement => (
+    <>
+      {' · '}
+      <span className="settings-hint">{t('settings.keysManagedInEnv')}</span>
+    </>
+  )
 
   return (
     <section className="settings-section" data-section="dataSources">
@@ -402,17 +356,14 @@ export function DataSourcesPanel({
           badge={renderKeyBadge(fmpConfigured, 'core', 'fmp')}
           control={renderKeyControl({
             labelKey: 'settings.fmp.label',
-            placeholderKey: 'settings.fmp.placeholder',
             configured: fmpConfigured,
-            value: fmpKey,
-            onChange: handleFmpKeyChange,
-            clearField: 'fmp_api_key',
             testProvider: 'fmp',
           })}
           result={renderTestResult('fmp')}
           hint={
             <>
               {t('settings.fmp.hint')}
+              {renderEnvHint()}
               {renderSignupLink(DATA_SOURCE_SIGNUP_URLS.fmp)}
             </>
           }
@@ -424,17 +375,14 @@ export function DataSourcesPanel({
           badge={renderKeyBadge(finnhubConfigured, 'optional', 'finnhub')}
           control={renderKeyControl({
             labelKey: 'settings.finnhub.label',
-            placeholderKey: 'settings.finnhub.placeholder',
             configured: finnhubConfigured,
-            value: finnhubKey,
-            onChange: handleFinnhubKeyChange,
-            clearField: 'finnhub_api_key',
             testProvider: 'finnhub',
           })}
           result={renderTestResult('finnhub')}
           hint={
             <>
               {t('settings.finnhub.hint')}
+              {renderEnvHint()}
               {renderSignupLink(DATA_SOURCE_SIGNUP_URLS.finnhub)}
             </>
           }
@@ -446,17 +394,14 @@ export function DataSourcesPanel({
           badge={renderKeyBadge(adanosConfigured, 'optional', 'adanos')}
           control={renderKeyControl({
             labelKey: 'settings.adanos.label',
-            placeholderKey: 'settings.adanos.placeholder',
             configured: adanosConfigured,
-            value: adanosKey,
-            onChange: handleAdanosKeyChange,
-            clearField: 'adanos_api_key',
             testProvider: 'adanos',
           })}
           result={renderTestResult('adanos')}
           hint={
             <>
               {t('settings.adanos.hint')}
+              {renderEnvHint()}
               {renderSignupLink(DATA_SOURCE_SIGNUP_URLS.adanos)}
             </>
           }
@@ -470,17 +415,14 @@ export function DataSourcesPanel({
           badge={renderKeyBadge(alphaVantageConfigured, 'optional', 'alpha_vantage')}
           control={renderKeyControl({
             labelKey: 'settings.alphaVantage.label',
-            placeholderKey: 'settings.alphaVantage.placeholder',
             configured: alphaVantageConfigured,
-            value: alphaVantageKey,
-            onChange: handleAlphaVantageKeyChange,
-            clearField: 'alpha_vantage_api_key',
             testProvider: 'alpha_vantage',
           })}
           result={renderTestResult('alpha_vantage')}
           hint={
             <>
               {t('settings.alphaVantage.hint')}
+              {renderEnvHint()}
               {renderSignupLink(DATA_SOURCE_SIGNUP_URLS.alphaVantage)}
             </>
           }
