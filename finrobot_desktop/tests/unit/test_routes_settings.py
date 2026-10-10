@@ -1206,6 +1206,42 @@ async def test_put_key_rejected_by_env_store_is_user_visible(
 
 
 @pytest.mark.asyncio
+async def test_credentials_route_returns_env_values(tmp_path: Path, monkeypatch: Any) -> None:
+    """/api/settings/credentials hands the Settings screen the live strings behind
+    its read-only fields, while the general payload keeps masking them. Values
+    resolve through the env store, so an unset credential is '' — never a
+    fabricated or leftover value."""
+    from finrobot.secret_store import EnvSecretStore
+
+    env = {"FMP_API_KEY": "fmp-env-key", "OPENROUTER_API_KEY": "openrouter-env-key"}
+    monkeypatch.setattr("finrobot.secret_store.env_value", lambda name: env.get(name))
+    app = _make_app(tmp_path, secret_store=EnvSecretStore())
+
+    async with _client(app) as c:
+        resp = await c.get("/api/settings/credentials")
+
+    assert resp.status_code == 200, resp.text
+    # A payload of live credentials must never be cached.
+    assert resp.headers["cache-control"] == "no-store"
+    body = resp.json()
+    assert body["data_keys"]["fmp_api_key"] == "fmp-env-key"
+    assert body["data_keys"]["finnhub_api_key"] == ""
+    assert body["provider_keys"]["openrouter"] == "openrouter-env-key"
+    # Only the fields the UI renders — not every configured data provider.
+    assert set(body["data_keys"]) == {
+        "fmp_api_key",
+        "finnhub_api_key",
+        "adanos_api_key",
+        "alpha_vantage_api_key",
+    }
+
+    # ...and the general settings payload still does not carry the value.
+    async with _client(app) as c:
+        settings_resp = await c.get("/api/settings")
+    assert "fmp-env-key" not in settings_resp.text
+
+
+@pytest.mark.asyncio
 async def test_clear_secret_failure_is_user_visible(tmp_path: Path, monkeypatch: Any) -> None:
     """A store that refuses the delete must fail the clear loudly — the secret
     is still stored, so pretending success would lie to the user."""

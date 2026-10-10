@@ -77,6 +77,18 @@ const PROVIDER_HEALTH = {
   ],
 }
 
+/** /api/settings/credentials — the live values behind the read-only fields.
+ * Values only ever come from the repo-root .env server-side. */
+const CREDENTIALS = {
+  data_keys: {
+    fmp_api_key: 'live-fmp-key',
+    finnhub_api_key: 'live-finnhub-key',
+    adanos_api_key: '',
+    alpha_vantage_api_key: 'live-av-key',
+  },
+  provider_keys: { openrouter: 'live-openrouter-key' },
+}
+
 beforeEach(() => {
   vi.mocked(api.GET).mockResolvedValue({ data: OK_SETTINGS, error: undefined } as never)
   vi.mocked(api.POST).mockResolvedValue({
@@ -94,7 +106,9 @@ beforeEach(() => {
       json: async () =>
         String(url).includes('/api/settings/provider-health')
           ? PROVIDER_HEALTH
-          : SEC_HOLDINGS_STATUS,
+          : String(url).includes('/api/settings/credentials')
+            ? CREDENTIALS
+            : SEC_HOLDINGS_STATUS,
     })) as unknown as typeof fetch,
   )
 })
@@ -138,7 +152,12 @@ describe('SettingsView', () => {
     const secField = screen.getByLabelText('SEC EDGAR Identity (User-Agent)')
     expect(secField).toBeDisabled()
     expect(secField).toHaveAttribute('readonly')
-    expect(secField).toHaveValue('••••••••')
+    // Read-only, but pre-filled with the live value the credentials endpoint
+    // returns (which resolves it from the repo-root .env).
+    expect(secField).toHaveValue('Acme Capital alpha@acme.com')
+    expect(screen.getByLabelText('FMP API Key')).toHaveValue('live-fmp-key')
+    // An unset credential stays empty rather than showing dots.
+    expect(screen.getByLabelText('Adanos API Key')).toHaveValue('')
     // yfinance row: a tripped breaker takes over the row's single badge slot
     // (COOLDOWN + 429 marker, cooldown-end time on hover) — the always-on
     // badge yields to it until the circuit closes again.

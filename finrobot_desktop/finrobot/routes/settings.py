@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field, field_validator
 from starlette.requests import Request
 
@@ -38,6 +38,16 @@ _DATA_SECRET_FIELDS: tuple[str, ...] = DATA_PROVIDER_SECRET_FIELDS
 
 # Keychain key prefix for an LLM provider's API key: ``provider_key:<provider_id>``.
 _PROVIDER_KEY_PREFIX = "provider_key:"
+
+# Data-provider credentials the Settings screen renders as read-only fields. An
+# explicit list rather than every entry in ``_DATA_SECRET_FIELDS``: the endpoint
+# then reveals exactly what the UI displays and nothing more.
+_UI_CREDENTIAL_FIELDS: tuple[str, ...] = (
+    "fmp_api_key",
+    "finnhub_api_key",
+    "adanos_api_key",
+    "alpha_vantage_api_key",
+)
 
 # Built-in provider ids cannot be deleted or shadowed by a custom provider.
 _BUILTIN_PROVIDER_IDS: frozenset[str] = frozenset(p.id for p in BUILTIN_PROVIDERS)
@@ -1012,3 +1022,43 @@ async def provider_health_route(request: Request) -> ProviderHealthResponse:
             )
         )
     return ProviderHealthResponse(providers=entries)
+
+
+class CredentialsResponse(BaseModel):
+    """Live credential VALUES behind the Settings screen's read-only fields.
+
+    ``GET /api/settings`` deliberately carries only ``*_set`` booleans, but the
+    Settings screen renders each credential in a read-only field and therefore
+    needs the strings themselves. They are read back through the configured
+    :class:`~finrobot.secret_store.SecretStore`, so this endpoint can only echo
+    what the repo-root ``.env`` already holds in plaintext on disk: it decrypts
+    nothing and reveals no value the running app could not already use.
+
+    ``data_keys`` is keyed by settings field name (``fmp_api_key`` …),
+    ``provider_keys`` by LLM provider id (``openrouter`` …). An unset credential
+    is ``""``, not null, so the client renders it without a nil check.
+    """
+
+    data_keys: dict[str, str]
+    provider_keys: dict[str, str]
+
+
+@router.get("/credentials", response_model=CredentialsResponse)
+async def credentials_route(request: Request, response: Response) -> CredentialsResponse:
+    """Credential values for the read-only Settings fields (see the model docstring)."""
+    secret_store = request.app.state.secret_store
+    settings: FinRobotSettings = request.app.state.deps.settings
+    # Never let a proxy or the webview cache a payload of live credentials.
+    response.headers["Cache-Control"] = "no-store"
+
+    data_keys: dict[str, str] = {}
+    for field in _UI_CREDENTIAL_FIELDS:
+        value = await secret_store.get(field)
+        data_keys[field] = value or getattr(settings, field, "") or ""
+
+    provider_keys: dict[str, str] = {}
+    for provider in settings.providers:
+        value = await secret_store.get(_provider_key_name(provider.id))
+        provider_keys[provider.id] = value or settings.provider_key(provider.id) or ""
+
+    return CredentialsResponse(data_keys=data_keys, provider_keys=provider_keys)

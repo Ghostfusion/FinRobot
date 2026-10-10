@@ -162,6 +162,10 @@ interface DataSourcesPanelProps {
   /** settingsResp.sec_user_agent — the identity the server holds, sourced from
    * the repo-root .env. Read-only in the UI, like the provider key rows. */
   serverSecUserAgent: string
+  /** Live credential values keyed by settings field name (``fmp_api_key`` …),
+   * fetched from /api/settings/credentials. Undefined = not loaded yet, which
+   * falls back to the masked "configured" display. */
+  dataKeyValues?: Record<string, string>
   secIdentityActive: boolean
 }
 
@@ -176,6 +180,7 @@ export function DataSourcesPanel({
   setDataTestState,
   flushPending,
   serverSecUserAgent,
+  dataKeyValues,
   secIdentityActive,
 }: DataSourcesPanelProps): React.ReactElement {
   const { t } = useI18n()
@@ -240,11 +245,17 @@ export function DataSourcesPanel({
     labelKey: string
     configured: boolean
     testProvider: string
+    /** Settings field name: the key into the credentials payload. */
+    field: string
   }): React.ReactElement => {
     const st = dataTestState[cfg.testProvider] ?? { status: 'idle' as const }
     return (
       <>
-        <ReadOnlyCredential configured={cfg.configured} ariaLabel={t(cfg.labelKey)} />
+        <ReadOnlyCredential
+          configured={cfg.configured}
+          ariaLabel={t(cfg.labelKey)}
+          value={dataKeyValues?.[cfg.field]}
+        />
         <button
           type="button"
           className="settings-btn"
@@ -348,6 +359,7 @@ export function DataSourcesPanel({
             labelKey: 'settings.fmp.label',
             configured: fmpConfigured,
             testProvider: 'fmp',
+            field: 'fmp_api_key',
           })}
           result={renderTestResult('fmp')}
           hint={
@@ -367,6 +379,7 @@ export function DataSourcesPanel({
             labelKey: 'settings.finnhub.label',
             configured: finnhubConfigured,
             testProvider: 'finnhub',
+            field: 'finnhub_api_key',
           })}
           result={renderTestResult('finnhub')}
           hint={
@@ -386,6 +399,7 @@ export function DataSourcesPanel({
             labelKey: 'settings.adanos.label',
             configured: adanosConfigured,
             testProvider: 'adanos',
+            field: 'adanos_api_key',
           })}
           result={renderTestResult('adanos')}
           hint={
@@ -407,6 +421,7 @@ export function DataSourcesPanel({
             labelKey: 'settings.alphaVantage.label',
             configured: alphaVantageConfigured,
             testProvider: 'alpha_vantage',
+            field: 'alpha_vantage_api_key',
           })}
           result={renderTestResult('alpha_vantage')}
           hint={
@@ -453,6 +468,7 @@ export function DataSourcesPanel({
               configured={secIdentityConfigured}
               ariaLabel={t('settings.sec.label')}
               placeholder={t('settings.sec.placeholder')}
+              value={serverSecUserAgent}
             />
           }
           hint={

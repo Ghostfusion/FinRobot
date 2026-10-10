@@ -52,6 +52,9 @@ interface AiModelPanelProps {
   /** Persists any in-flight debounced edit before the "Test connection" probe,
    * so a fast click tests the latest saved config (see useSettingsSave). */
   flushPending: () => Promise<void>
+  /** Live LLM provider key values keyed by provider id, from
+   * /api/settings/credentials. Undefined = not loaded (masked fallback). */
+  providerKeyValues?: Record<string, string>
 }
 
 export function AiModelPanel({
@@ -68,6 +71,7 @@ export function AiModelPanel({
   setTestState,
   scheduleStandardSave,
   flushPending,
+  providerKeyValues,
 }: AiModelPanelProps): React.ReactElement {
   const { t } = useI18n()
   const addToast = useToastStore((s) => s.addToast)
@@ -372,6 +376,7 @@ export function AiModelPanel({
                 ariaLabel={t('settings.llm.apiKeyLabelFor', {
                   provider: currentProviderInfo?.label ?? currentProviderId,
                 })}
+                value={providerKeyValues?.[currentProviderId]}
               />
               <span className="settings-hint">{t('settings.keysManagedInEnv')}</span>
               <div className="settings-test-row">

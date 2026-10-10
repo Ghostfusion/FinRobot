@@ -41,6 +41,11 @@ names only.
 - **`secret_store.py`** — added `EnvSecretStore` (reads `.env`, rejects writes);
   `create_secret_store()` returns it with mode `"env"`; `SecretStorageMode` gains
   `"env"`; dropped the orphaned `sys` import.
+- **`routes/settings.py`** — added `GET /api/settings/credentials`: the live
+  credential strings behind the Settings screen's read-only fields, scoped to the
+  fields that screen renders. The general `GET /api/settings` payload keeps
+  carrying only `*_set` booleans. Design doc §10 records the scope and the
+  mitigations (loopback bind, CORS allowlist, `no-store`).
 - **`cli.py`** — `_build_deps` uses `get_settings(use_env=True)`; added the `probe` command.
 - **`sdk.py`** — `FinRobot.__init__` uses `get_settings(use_env=True)`.
 
@@ -86,6 +91,12 @@ Classification vocabulary: `ok | auth | plan | rate_limited | not_found | connec
   build where the `.env` overlay was not yet applied at boot, §8).
 - **Lint:** `ruff check finrobot/` (the CI rule set) is clean after fixing one
   orphaned import; `ruff format` applied to all changed files.
+- **Credentials endpoint (live):** `GET /api/settings/credentials` returned the
+  four displayed data-provider values and the active LLM provider's key, each
+  byte-identical to its `.env` entry (verified by comparison, not by printing
+  values), with `Cache-Control: no-store`; an unset key came back as `""`. The
+  Settings screen rendered all five in its read-only fields. The general
+  `GET /api/settings` payload still carried no key values.
 - **Types/tests:** see §9 (recorded after the run).
 
 ## 8. Defects fixed on the spot

@@ -274,9 +274,11 @@ Replaces (or edits):
   `isinstance(EdgarToolsProvider/FMPProvider)` fast-paths are re-expressed as
   category lookups.
 - `routes/settings.py` — keychain probes removed; `secret_storage_mode` retired;
-  `available_providers` / `_PROVIDER_KEY_FIELDS` / PUT+clear-secret reworked.
+  `available_providers` / `_PROVIDER_KEY_FIELDS` / PUT+clear-secret reworked; added
+  `GET /api/settings/credentials` (§10) for the read-only fields' live values.
 - Frontend `SettingsView.tsx` / `DataSourcesPanel.tsx` / `schema.d.ts` — key
-  entry becomes read-only (keys live in `.env`); provider list becomes dynamic.
+  entry becomes read-only (keys live in `.env`), and those fields DISPLAY the live
+  values from `GET /api/settings/credentials`; provider list becomes dynamic.
 - `pyproject.toml` — drop `keyring`, add `moomoo-api` (optional extra).
 
 Tests to update (pinned today, per recon): `test_sdk.py`, `test_routes_data_provider_note.py`,
@@ -311,11 +313,22 @@ unit tests.
   into artifacts/PDFs.
 - `_provider_keys` stays a `PrivateAttr` (never in `model_dump()`).
 - The design doc and all commits reference variable **names** only.
+- **One deliberate exception — the Settings screen.** `GET /api/settings/credentials`
+  returns the live strings for the credentials that screen renders (the four
+  displayed data-provider keys, plus the active LLM provider key), because its
+  read-only fields are specified to SHOW what `.env` holds. It is scoped to the
+  displayed fields rather than every configured provider, served
+  `Cache-Control: no-store`, and inherits both the loopback-only bind and the CORS
+  allowlist (vite dev + Tauri origins) in `server.py`. It resolves through
+  `EnvSecretStore`, so it can only echo values `.env` already stores in plaintext
+  on disk — it decrypts nothing and reveals nothing the app could not already use.
+  The general `GET /api/settings` payload keeps carrying only `*_set` booleans.
 
 ## 11. Open questions (owner)
 
-1. `SEC_USER_AGENT` — keep in `.env` or leave app-stored? (Design default: `.env`
-   when present, else app-stored.)
+1. `SEC_USER_AGENT` — **resolved:** `.env` only. The Settings field is read-only
+   (the UI keeps no write path, so `settings.json` can no longer shadow `.env`);
+   `apply_env_secrets` stays fill-only for hand-edited app config.
 2. `adanos` (retail sentiment) is in the repo today but absent from the priority
    table and absent from `.env`; it therefore registers keyless-disabled. Confirm
    it stays (and gets an env var) or is dropped.

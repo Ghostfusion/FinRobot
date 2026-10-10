@@ -27,6 +27,14 @@ import { AI_CHAT_ENABLED } from '../config/features'
 // (`views/SettingsView`) for tests and any future consumer.
 export { isValidSecIdentity, secHeaderIdentityPreview } from './settings/secIdentity'
 
+/** GET /api/settings/credentials — the live values behind the read-only
+ * credential fields (see the backend CredentialsResponse docstring). Keyed by
+ * settings field name for data sources, by provider id for LLM providers. */
+interface CredentialsPayload {
+  data_keys: Record<string, string>
+  provider_keys: Record<string, string>
+}
+
 // ─── Panel nav (left rail) ────────────────────────────────────────────────────
 // True tabbed panels, not a scroll-spy over one long page: clicking a nav item
 // renders ONLY that panel. SEC 13F holdings lives inside Data Sources.
@@ -73,6 +81,20 @@ export default function SettingsView() {
       return (await resp.json()) as { providers: ProviderHealthEntryShape[] }
     },
     refetchInterval: 30_000,
+  })
+
+  // Live credential VALUES for the read-only credential fields. Deliberately a
+  // separate endpoint from GET /api/settings (which carries only *_set booleans):
+  // these strings come straight from the repo-root .env and exist so the fields
+  // can SHOW what is configured. No refetchInterval — .env only changes across a
+  // restart, so polling would burn requests for nothing.
+  const { data: credentials } = useQuery<CredentialsPayload>({
+    queryKey: ['credentials'],
+    queryFn: async () => {
+      const resp = await fetchWithTimeout(`${BASE_URL}/api/settings/credentials`)
+      if (!resp.ok) throw new FetchHttpError(resp.status, resp.statusText)
+      return (await resp.json()) as CredentialsPayload
+    },
   })
 
   // ── Editable local state ───────────────────────────────────────────────────
@@ -311,6 +333,7 @@ export default function SettingsView() {
                 setTestState={setTestState}
                 scheduleStandardSave={scheduleStandardSave}
                 flushPending={flushPending}
+                providerKeyValues={credentials?.provider_keys}
               />
             )}
 
@@ -323,6 +346,7 @@ export default function SettingsView() {
                   finnhubConfigured={finnhubConfigured}
                   adanosConfigured={adanosConfigured}
                   alphaVantageConfigured={alphaVantageConfigured}
+                  dataKeyValues={credentials?.data_keys}
                   dataTestState={dataTestState}
                   setDataTestState={setDataTestState}
                   flushPending={flushPending}

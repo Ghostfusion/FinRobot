@@ -32,19 +32,24 @@ export function ReadOnlyCredential({
   configured,
   ariaLabel,
   placeholder,
+  value,
 }: {
   configured: boolean
   ariaLabel?: string
   /** Overrides the default "keys are managed in .env" copy for non-key
    * credentials (the SEC identity shows its expected format instead). */
   placeholder?: string
+  /** The credential's live value, read from the repo-root .env by the caller.
+   * Omitted (e.g. the credentials fetch failed) degrades to masked dots, so the
+   * field still distinguishes configured from unconfigured. */
+  value?: string
 }): React.ReactElement {
   const { t } = useI18n()
   return (
     <input
       className="settings-input"
       type="text"
-      value={configured ? '••••••••' : ''}
+      value={value ?? (configured ? '••••••••' : '')}
       placeholder={placeholder ?? t('settings.keysManagedInEnv')}
       readOnly
       disabled
