@@ -1709,23 +1709,25 @@ class TestCircuitBreakerWiring:
         rate-limited provider entirely (no second timeout) and the chain's next
         provider serves the request."""
         health = ProviderHealth(failure_threshold=3, base_cooldown_s=600)
-        eo = MockProvider(
-            "eodhd", ["price"], raises=ProviderError("Too Many Requests. Rate limited.")
+        fmp = MockProvider(
+            "fmp", ["price"], raises=ProviderError("Too Many Requests. Rate limited.")
         )
-        fmp = MockProvider("fmp", ["price"], result=_make_result(data_type="price", provider="fmp"))
-        layer = DataLayer([eo, fmp], cache, health=health)
+        yf = MockProvider(
+            "yfinance", ["price"], result=_make_result(data_type="price", provider="yfinance")
+        )
+        layer = DataLayer([fmp, yf], cache, health=health)
 
-        # Call 1: eodhd 429s (1 attempt), FMP serves it. Breaker now open on eodhd.
+        # Call 1: FMP 429s (1 attempt), yfinance serves it. Breaker now open on FMP.
         r1 = await layer.fetch("price", "NVDA")
-        assert r1.provider == "fmp"
-        assert eo.fetch_called == 1
+        assert r1.provider == "yfinance"
+        assert fmp.fetch_called == 1
 
-        # Call 2 (fresh ticker so cache is cold): eodhd is in cooldown and is
+        # Call 2 (fresh ticker so cache is cold): FMP is in cooldown and is
         # NOT re-attempted — that's the whole point of BUG-045.
         r2 = await layer.fetch("price", "TSLA")
-        assert r2.provider == "fmp"
-        assert eo.fetch_called == 1  # still 1 — skipped, did not pay the timeout
-        assert fmp.fetch_called == 2
+        assert r2.provider == "yfinance"
+        assert fmp.fetch_called == 1  # still 1 — skipped, did not pay the timeout
+        assert yf.fetch_called == 2
 
     async def test_consecutive_failures_trip_breaker(self, cache):
         """Below threshold the provider is retried; at threshold it trips and is

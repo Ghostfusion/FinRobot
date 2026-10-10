@@ -103,10 +103,10 @@ Classification vocabulary: `ok | auth | plan | rate_limited | not_found | connec
 2. **`SEC_USER_AGENT`** — not present in `.env`, so `sec_edgar` does not
    register and `sec_filings` has no provider. Add `SEC_USER_AGENT="Name email"`
    to `.env` to enable it (design doc §11 Q1).
-3. **Providers unlisted by the owner's table** — `fmp`, `massive`, `adanos`
-   register (fmp/massive are keyed) but appear in NO priority list, so they never
-   outrank a listed provider. Confirm whether FMP should be added to
-   `fundamental_data` / `core_stock_apis`.
+3. **Providers unlisted by the owner's table** — resolved for FMP (owner
+   request): `fmp` now leads `core_stock_apis` and `fundamental_data`. `massive`
+   and `adanos` remain registered but absent from every priority list, so they
+   never outrank a listed provider; add them to a category if that should change.
 4. **`federal_reserve` base URL** — `api.fiscaldata.treasury.gov` exposes no daily
    par-yield-curve dataset; the adapter reads the official Treasury `daily-treasury-rates`
    CSV from `home.treasury.gov` instead. Confirm acceptable.

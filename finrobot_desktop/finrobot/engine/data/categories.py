@@ -63,10 +63,13 @@ class Category(StrEnum):
     OFFERINGS_CALENDAR = "offerings_calendar"
 
 
-#: Category → ordered provider ids (highest priority first). Authoritative:
-#: transcribed verbatim from the owner's reference table.
+#: Category → ordered provider ids (highest priority first). Transcribed from the
+#: owner's reference table, with one owner-requested addition: ``fmp`` leads
+#: ``core_stock_apis`` and ``fundamental_data`` (the reference table omitted it,
+#: but the engine treats FMP as the primary financials/quote source).
 PRIORITY: dict[Category, tuple[str, ...]] = {
     Category.CORE_STOCK_APIS: (
+        "fmp",
         "eodhd",
         "moomoo",
         "yfinance",
@@ -84,7 +87,7 @@ PRIORITY: dict[Category, tuple[str, ...]] = {
         "stockdata",
         "newsapi",
     ),
-    Category.FUNDAMENTAL_DATA: ("moomoo", "yfinance", "tiingo", "alpha_vantage"),
+    Category.FUNDAMENTAL_DATA: ("fmp", "moomoo", "yfinance", "tiingo", "alpha_vantage"),
     Category.ANALYST_RATINGS: ("moomoo", "finnhub", "yfinance", "benzinga"),
     Category.EARNINGS_CALENDAR: ("moomoo", "finnhub", "yfinance", "benzinga"),
     Category.TECHNICAL_INDICATORS: ("moomoo", "yfinance", "alpha_vantage"),

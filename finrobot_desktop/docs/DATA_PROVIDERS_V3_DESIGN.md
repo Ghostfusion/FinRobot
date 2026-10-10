@@ -140,13 +140,16 @@ flowchart LR
 
 ### 5.2 Priority table (authoritative)
 
-Fallback chains (left = highest priority):
+Fallback chains (left = highest priority). One owner-requested deviation from
+the original reference table: **`fmp` leads `core_stock_apis` and
+`fundamental_data`** (the table omitted FMP; the engine treats it as the primary
+financials/quote source, and the pre-existing chain-order tests encode that).
 
 | Category | Order |
 |---|---|
-| `core_stock_apis` | eodhd > moomoo > yfinance > tiingo > twelvedata > stockdata > benzinga |
+| `core_stock_apis` | fmp > eodhd > moomoo > yfinance > tiingo > twelvedata > stockdata > benzinga |
 | `news_data` | eodhd > benzinga > moomoo > yfinance > alpha_vantage > stockdata > newsapi |
-| `fundamental_data` | moomoo > yfinance > tiingo > alpha_vantage |
+| `fundamental_data` | fmp > moomoo > yfinance > tiingo > alpha_vantage |
 | `analyst_ratings` | moomoo > finnhub > yfinance > benzinga |
 | `earnings_calendar` | moomoo > finnhub > yfinance > benzinga |
 | `technical_indicators` | moomoo > yfinance > alpha_vantage |
