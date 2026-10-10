@@ -445,7 +445,7 @@ async def _clear_secret_locked(body: ClearSecretRequest, request: Request) -> Se
     # construction, so we reconstruct rather than patch.
     from finrobot.config import get_settings
 
-    rebuilt = get_settings(**load_non_secret_settings(settings_path))
+    rebuilt = get_settings(use_env=True, **load_non_secret_settings(settings_path))
     from finrobot.server import hydrate_settings_from_secrets
 
     rebuilt = await hydrate_settings_from_secrets(rebuilt, secret_store)

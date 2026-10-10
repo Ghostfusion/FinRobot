@@ -74,6 +74,21 @@ _COVERAGE_SNAPSHOT_DEGRADABLE = (
 )
 
 
+def load_boot_settings(settings_path: Path) -> tuple[Any, str | None]:
+    """Compose settings from ``settings.json`` (app config) + the repo-root ``.env``.
+
+    ``use_env=True`` is what overlays the ``.env``: the SEC identity, the
+    OpenRouter base URL + model, moomoo host/port and every data-provider key.
+    Without it the server boots on the *placeholder* SEC identity and an empty
+    model — ``EnvSecretStore`` still hydrates API keys (so the chain looks
+    populated), but ``sec_edgar`` never registers and every LLM route answers
+    "no usable model". The CLI and SDK entrypoints already pass ``use_env=True``;
+    the lifespan and the clear-secret rebuild must match them.
+    """
+    non_secret_overrides, settings_file_error = load_non_secret_settings_with_error(settings_path)
+    return get_settings(use_env=True, **non_secret_overrides), settings_file_error
+
+
 async def hydrate_settings_from_secrets(settings: Any, secret_store: SecretStore) -> Any:
     """Return settings with API keys loaded from the keychain.
 
@@ -177,8 +192,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # corrupt file must NEVER prevent boot — the desktop app needs HTTP up so
     # the user can repair the config in SettingsView. We degrade to defaults and
     # surface the corruption via the startup_error banner below.
-    non_secret_overrides, settings_file_error = load_non_secret_settings_with_error(settings_path)
-    settings = get_settings(**non_secret_overrides)
+    settings, settings_file_error = load_boot_settings(settings_path)
     secret_store, secret_storage_mode = create_secret_store()
     settings = await hydrate_settings_from_secrets(settings, secret_store)
 

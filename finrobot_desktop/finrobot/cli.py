@@ -528,7 +528,7 @@ def backtest(
     if auto:
         from finrobot.engine.backtest.strategy_agent import run_strategy_selection
 
-        settings = get_settings(model_name=model)
+        settings = get_settings(use_env=True, model_name=model)
 
         # Catch a missing/invalid LLM key up front (same check _build_deps runs)
         # so --auto fails with a clean message instead of a late traceback from
@@ -570,7 +570,7 @@ def backtest(
             initial_cash=cash,
         )
 
-        settings = get_settings()
+        settings = get_settings(use_env=True)
 
         async def _run_manual() -> BacktestResult:
             data_layer = build_data_layer(settings)

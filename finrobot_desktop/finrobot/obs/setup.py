@@ -14,7 +14,11 @@ from finrobot.obs.formatters import HumanFormatter, JsonFormatter
 if TYPE_CHECKING:
     from finrobot.config import FinRobotSettings
 
-_NOISY = ("httpx", "httpcore", "urllib3", "yfinance", "filelock")
+#: Loggers pinned to WARNING. ``edgar`` (edgartools) logs the configured SEC
+#: identity — a person's name + email, i.e. personal data — at INFO when its REST
+#: client is initialised, and the JSON file handler would persist it to
+#: finrobot.log. Pinning it keeps the library's warnings/errors without the leak.
+_NOISY = ("httpx", "httpcore", "urllib3", "yfinance", "filelock", "edgar")
 _CONFIGURED = False
 
 

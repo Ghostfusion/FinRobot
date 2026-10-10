@@ -99,6 +99,17 @@ Classification vocabulary: `ok | auth | plan | rate_limited | not_found | connec
   category has a single vendor). Added `registry.PROVIDER_NAME_BY_ID` +
   `provider_runtime_name()` and resolved ids in both rank maps;
   `tests/unit/test_data_categories.py` pins the invariant.
+- `server.lifespan` built settings with a bare `get_settings(...)`, so
+  `apply_env_secrets` never ran: the app booted on the *placeholder* SEC identity
+  and an empty `model_name`, and `sec_edgar` never registered. `EnvSecretStore`
+  still hydrated data-provider API keys, so the chain looked populated and hid
+  the fault. Extracted `server.load_boot_settings()` (`use_env=True`) for the boot
+  path + the clear-secret rebuild, and fixed the two `finrobot backtest` call
+  sites that had the same omission. `tests/unit/test_boot_settings_env.py` pins it.
+- The `edgar` logger logged the configured SEC identity (a person's name + email)
+  at INFO on client init, and the JSON file handler persisted it to
+  `finrobot.log`. Pinned `edgar` to WARNING in `obs.setup._NOISY`. Existing log
+  files still contain earlier occurrences.
 
 ## 9. Known gaps / follow-ups
 
@@ -109,6 +120,10 @@ Classification vocabulary: `ok | auth | plan | rate_limited | not_found | connec
 2. **`SEC_USER_AGENT`** — resolved: with a valid `Name email` identity in `.env`,
    `sec_edgar` registers (under the runtime name `edgar_tools`) and `sec_filings`
    is served. No longer a gap.
+   **Precedence caveat (design doc §11 Q1):** `apply_env_secrets` only fills fields
+   still at their default, so a non-placeholder `sec_user_agent` in `settings.json`
+   wins over `.env`. If `.env` is to be the *single* source for the identity too,
+   the overlay has to override rather than fill — owner call.
 3. **Providers unlisted by the owner's table** — resolved for FMP (owner
    request): `fmp` now leads `core_stock_apis` and `fundamental_data`. `massive`
    and `adanos` remain registered but absent from every priority list, so they
