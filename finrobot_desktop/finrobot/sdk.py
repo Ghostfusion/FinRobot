@@ -61,7 +61,8 @@ class FinRobot:
         if model:
             overrides["model_name"] = model
         overrides.update(kwargs)
-        self._settings = get_settings(**overrides)
+        # Credentials come from the repo-root .env (Data Layer v3).
+        self._settings = get_settings(use_env=True, **overrides)
         # Fail fast on bad model config (P3 audit D2). ValueError bubbles
         # out of __init__ so the SDK user sees the error immediately
         # instead of waiting for the first LLM call to surface it.

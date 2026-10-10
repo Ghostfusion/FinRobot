@@ -288,7 +288,9 @@ async def test_get_settings_exposes_provider_registry(tmp_path: Path) -> None:
     assert resp.status_code == 200, resp.text
     body = resp.json()
     providers = {p["id"]: p for p in body["providers"]}
-    assert set(providers) == {"anthropic", "openai"}
+    assert set(providers) == {"openrouter", "anthropic", "openai"}
+    assert providers["openrouter"]["is_builtin"] is True
+    assert providers["openrouter"]["key_set"] is False
     assert providers["openai"]["is_builtin"] is True
     # openai is the active model and its key is injected → key_set True.
     assert providers["openai"]["key_set"] is True
@@ -530,12 +532,13 @@ async def test_put_lowercases_custom_provider_id_before_persisting(
 async def test_put_normalizes_model_name_provider_prefix_with_custom_provider(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
-    """A single PUT that adds ``OpenRouter`` and selects ``OpenRouter:model``
+    """A single PUT that adds ``LocalLLM`` and selects ``LocalLLM:model``
     must persist a coherent lower-case provider id everywhere.
 
-    Regression: custom_providers[].id was normalized to ``openrouter`` while
-    model_name stayed ``OpenRouter:...``, leaving the saved config unable to
-    find its own provider.
+    Regression: custom_providers[].id was normalized to ``localllm`` while
+    model_name stayed ``LocalLLM:...``, leaving the saved config unable to
+    find its own provider. (OpenRouter is a built-in now, so a custom id can
+    no longer use that name.)
     """
     secret_store = AsyncMock()
     secret_store.has = AsyncMock(return_value=False)
@@ -551,10 +554,10 @@ async def test_put_normalizes_model_name_provider_prefix_with_custom_provider(
 
     custom = [
         {
-            "id": "OpenRouter",
-            "label": "OpenRouter",
+            "id": "LocalLLM",
+            "label": "LocalLLM",
             "kind": "openai-compatible",
-            "base_url": "https://openrouter.ai/api/v1",
+            "base_url": "https://local/v1",
             "models": ["openai/gpt-4o-mini"],
         }
     ]
@@ -563,20 +566,20 @@ async def test_put_normalizes_model_name_provider_prefix_with_custom_provider(
             "/api/settings",
             json={
                 "custom_providers": custom,
-                "model_name": "OpenRouter:openai/gpt-4o-mini",
-                "provider_keys": {"OpenRouter": "sk-test"},
+                "model_name": "LocalLLM:openai/gpt-4o-mini",
+                "provider_keys": {"LocalLLM": "sk-test"},
             },
         )
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["model_name"] == "openrouter:openai/gpt-4o-mini"
-    assert body["custom_providers"][0]["id"] == "openrouter"
+    assert body["model_name"] == "localllm:openai/gpt-4o-mini"
+    assert body["custom_providers"][0]["id"] == "localllm"
     assert body["model_configured"] is True
     assert body["startup_error"] is None
-    secret_store.set.assert_awaited_with("provider_key:openrouter", "sk-test")
+    secret_store.set.assert_awaited_with("provider_key:localllm", "sk-test")
     content = json.loads((tmp_path / "settings.json").read_text())
-    assert content["model_name"] == "openrouter:openai/gpt-4o-mini"
+    assert content["model_name"] == "localllm:openai/gpt-4o-mini"
 
 
 @pytest.mark.asyncio

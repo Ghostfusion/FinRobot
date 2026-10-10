@@ -29,8 +29,15 @@ class TestDefaults:
     def test_default_providers_are_the_builtins(self):
         s = FinRobotSettings()
         ids = [p.id for p in s.providers]
-        # Only the two majors are built in; everything else is a custom provider.
-        assert ids == ["anthropic", "openai"]
+        # OpenRouter leads (Data Layer v3 default LLM); the two majors follow.
+        # Everything else is a user-wired custom provider.
+        assert ids == ["openrouter", "anthropic", "openai"]
+        openrouter = s.provider_by_id("openrouter")
+        assert (
+            openrouter is not None
+            and openrouter.kind == "openai-compatible"
+            and openrouter.base_url == "https://openrouter.ai/api/v1"
+        )
         openai = s.provider_by_id("openai")
         assert openai is not None and openai.kind == "openai-compatible"
 

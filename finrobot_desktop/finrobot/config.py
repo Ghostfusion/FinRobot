@@ -9,6 +9,16 @@ import httpx
 from pydantic import BaseModel, Field, PrivateAttr, field_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 
+from finrobot.env import (
+    ENV_BY_PROVIDER,
+    ENV_LLM_BASE_URL,
+    ENV_LLM_KEY,
+    ENV_LLM_MODEL,
+    ENV_MOOMOO_HOST,
+    ENV_MOOMOO_PORT,
+    env_values,
+)
+
 if TYPE_CHECKING:
     # Annotation-only (create_model's return type). Importing pydantic_ai.models
     # at runtime pulls the pydantic_ai stack onto the cold-start path, and config
@@ -122,6 +132,16 @@ class ProviderConfig(BaseModel):
 # is free text, so the user can run any model the provider exposes (we can't keep
 # a complete, current list of every model id, and don't pretend to).
 BUILTIN_PROVIDERS: tuple[ProviderConfig, ...] = (
+    # OpenRouter first: Data Layer v3 makes it the default LLM. The key + base
+    # URL + model come from .env (OPENROUTER_*); ``openai-compatible`` already
+    # covers the transport, so no create_model branch was added.
+    ProviderConfig(
+        id="openrouter",
+        label="OpenRouter",
+        kind="openai-compatible",
+        base_url="https://openrouter.ai/api/v1",
+        models=["deepseek/deepseek-v4.1-flash"],
+    ),
     ProviderConfig(
         id="anthropic",
         label="Anthropic",
@@ -141,28 +161,42 @@ BUILTIN_PROVIDERS: tuple[ProviderConfig, ...] = (
 # fields (these are financial-data API keys, NOT LLM provider keys — those use
 # the dynamic provider_key:<id> scheme). Single source of truth shared by the
 # server's hydrate step and the settings route, so the two can't drift apart.
-DATA_PROVIDER_SECRET_FIELDS: tuple[str, ...] = (
-    "fmp_api_key",
-    "finnhub_api_key",
-    "alpha_vantage_api_key",
-    "adanos_api_key",
-)
+#: Data-provider id → settings field that holds its API key. Single source of
+#: truth for the env hydrator (``apply_env_secrets``), ``data_key()``, and the
+#: settings route. Keyless providers (yfinance/polymarket/gdelt/federal_reserve/
+#: cboe) and the gateway provider (moomoo) are absent — they have no API key.
+DATA_PROVIDER_KEY_FIELDS: dict[str, str] = {
+    "fmp": "fmp_api_key",
+    "finnhub": "finnhub_api_key",
+    "alpha_vantage": "alpha_vantage_api_key",
+    "adanos": "adanos_api_key",
+    "eodhd": "eodhd_api_key",
+    "tiingo": "tiingo_api_key",
+    "twelvedata": "twelvedata_api_key",
+    "stockdata": "stockdata_api_key",
+    "benzinga": "benzinga_api_key",
+    "newsapi": "newsapi_api_key",
+    "fred": "fred_api_key",
+    "massive": "massive_api_key",
+}
+
+DATA_PROVIDER_SECRET_FIELDS: tuple[str, ...] = tuple(DATA_PROVIDER_KEY_FIELDS.values())
 
 
 class FinRobotSettings(BaseSettings):
     """FinRobot configuration.
 
-    User configuration — API keys, model selection, SEC identity, output
-    language, logging — comes ONLY from app storage: ``settings.json`` (loaded
-    by the server and passed as constructor kwargs) and the OS keychain. It is
-    NEVER read from process environment variables or a ``.env`` file. A packaged
-    desktop app must not depend on a ``.env`` shipped in (or missing from) the
-    bundle, and the user fills these in via the in-app Settings screen — there
-    is no second, invisible source to disagree with what they typed.
+    Credentials — API keys and the LLM provider config — come from the repo-root
+    ``.env`` (via :func:`apply_env_secrets`); non-secret app config lives in
+    ``settings.json``. This is Data Layer v3: it replaced the former
+    keychain-only design (reversing ADR-0013). See
+    ``docs/DATA_PROVIDERS_V3_DESIGN.md`` §3.
 
     Resolution order for user config (highest priority first):
     1. Constructor kwargs (settings.json values, or test/code overrides)
-    2. Defaults below
+    2. repo-root ``.env`` (credentials + OpenRouter model/base URL) — opt-in via
+       ``get_settings(use_env=True)`` so unit tests stay hermetic
+    3. Defaults below
 
     The only fields that still consult the environment are pure infrastructure
     knobs set by the runtime / bundle / ops, never by the user in-app —
@@ -181,13 +215,15 @@ class FinRobotSettings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        """Read ONLY from constructor kwargs — drop the env and .env sources.
+        """Read ONLY from constructor kwargs — do NOT let pydantic-settings pull
+        ``FINROBOT_*`` env vars or a ``.env`` in ahead of the defaults.
 
-        This is what makes user config app-stored-only: pydantic-settings would
-        otherwise pull ``FINROBOT_*`` env vars and a ``.env`` file in ahead of
-        the defaults, reintroducing the very ambiguity (and packaging fragility)
-        we removed. Infra knobs that legitimately need the environment read it
-        explicitly in ``model_post_init`` instead.
+        Credentials still come from the repo-root ``.env``, but through the
+        explicit :func:`apply_env_secrets` layer (opt-in via
+        ``get_settings(use_env=True)``), not an implicit settings source — so a
+        stray environment variable can never silently override app config and
+        unit tests stay hermetic. Infra knobs that legitimately need the
+        environment read it explicitly in ``model_post_init``.
         """
         return (init_settings,)
 
@@ -218,12 +254,27 @@ class FinRobotSettings(BaseSettings):
     # via ``with_provider_keys``. See ADR-0013.
     _provider_keys: dict[str, str] = PrivateAttr(default_factory=dict)
 
-    # Data provider API keys (P2a). These are DataProvider secrets, not LLM
-    # provider keys, so they stay as fixed fields hydrated by their own names.
+    # Data provider API keys (Data Layer v3). Hydrated from the repo-root .env
+    # by ``apply_env_secrets`` (see docs/DATA_PROVIDERS_V3_DESIGN.md §3.3); the
+    # field names are the single source in ``DATA_PROVIDER_KEY_FIELDS`` above.
     fmp_api_key: str = ""
     finnhub_api_key: str = ""
     alpha_vantage_api_key: str = ""
     adanos_api_key: str = ""
+    eodhd_api_key: str = ""
+    tiingo_api_key: str = ""
+    twelvedata_api_key: str = ""
+    stockdata_api_key: str = ""
+    benzinga_api_key: str = ""
+    newsapi_api_key: str = ""
+    fred_api_key: str = ""
+    massive_api_key: str = ""
+    # moomoo OpenD local gateway (quote-only). Host/port only — the project never
+    # holds the moomoo password (see design doc §6).
+    moomoo_host: str = ""
+    moomoo_port: int = 0
+    # OpenRouter base-URL override from .env; empty = the built-in default.
+    openrouter_base_url: str = ""
     sec_user_agent: str = "FinRobot admin@example.com"
     # 2026-05-27 (EdgarTools migration): Per SEC policy, automated tools
     # MUST declare a real identity in the User-Agent. The default above is
@@ -351,6 +402,23 @@ class FinRobotSettings(BaseSettings):
     def provider_key(self, provider_id: str) -> str | None:
         """The configured API key for a provider id, or None."""
         return self._provider_keys.get(provider_id) or None
+
+    def data_key(self, provider_id: str) -> str | None:
+        """The API key for a DATA provider id (e.g. ``"eodhd"``), or None.
+
+        Keyless providers and the moomoo gateway have no entry in
+        ``DATA_PROVIDER_KEY_FIELDS`` and always return None.
+        """
+        field = DATA_PROVIDER_KEY_FIELDS.get(provider_id)
+        if field is None:
+            return None
+        return getattr(self, field, "") or None
+
+    def _effective_base_url(self, cfg: ProviderConfig) -> str | None:
+        """Base URL for a provider, honouring the ``OPENROUTER_BASE_URL`` override."""
+        if cfg.id == "openrouter" and self.openrouter_base_url:
+            return self.openrouter_base_url
+        return cfg.base_url
 
     @staticmethod
     def _parse_model_name(name: str) -> tuple[str, str]:
@@ -552,7 +620,7 @@ class FinRobotSettings(BaseSettings):
             return OpenAIChatModel(
                 model_id,
                 provider=OpenAIProvider(
-                    base_url=cfg.base_url, api_key=api_key, http_client=http_client
+                    base_url=self._effective_base_url(cfg), api_key=api_key, http_client=http_client
                 ),
             )
         elif cfg.kind == "test":
@@ -563,20 +631,70 @@ class FinRobotSettings(BaseSettings):
             raise ValueError(f"Unsupported provider kind '{cfg.kind}' for '{name}'.")
 
 
+def apply_env_secrets(settings: FinRobotSettings) -> FinRobotSettings:
+    """Overlay credentials from the repo-root ``.env`` onto a settings object.
+
+    ``.env`` values fill fields that are still at their default (empty), so an
+    explicit constructor kwarg always wins — this is what keeps tests hermetic
+    (they never reach here). See docs/DATA_PROVIDERS_V3_DESIGN.md §3.
+
+    Also seeds the LLM model/key for OpenRouter when unset.
+    """
+    values = env_values()
+    update: dict[str, Any] = {}
+    for provider_id, field in DATA_PROVIDER_KEY_FIELDS.items():
+        var = ENV_BY_PROVIDER.get(provider_id)
+        if not var:
+            continue
+        value = values.get(var)
+        if value and not getattr(settings, field, ""):
+            update[field] = value
+
+    host = values.get(ENV_MOOMOO_HOST)
+    if host and not settings.moomoo_host:
+        update["moomoo_host"] = host
+    port = values.get(ENV_MOOMOO_PORT)
+    if port and not settings.moomoo_port:
+        try:
+            update["moomoo_port"] = int(port)
+        except ValueError:
+            pass
+    sec_identity = values.get(ENV_BY_PROVIDER["sec_edgar"])
+    if sec_identity and settings.sec_user_agent == "FinRobot admin@example.com":
+        update["sec_user_agent"] = sec_identity
+    base_url = values.get(ENV_LLM_BASE_URL)
+    if base_url and not settings.openrouter_base_url:
+        update["openrouter_base_url"] = base_url
+    if not settings.model_name.strip():
+        model = values.get(ENV_LLM_MODEL)
+        if model:
+            update["model_name"] = f"openrouter:{model}"
+
+    if update:
+        settings = settings.model_copy(update=update)
+
+    llm_key = values.get(ENV_LLM_KEY)
+    if llm_key and not settings.provider_key("openrouter"):
+        settings = settings.with_provider_keys({"openrouter": llm_key})
+    return settings
+
+
 def get_settings(
-    *, provider_keys: dict[str, str] | None = None, **overrides: Any
+    *, provider_keys: dict[str, str] | None = None, use_env: bool = False, **overrides: Any
 ) -> FinRobotSettings:
     """Get settings. ``overrides`` carry the app-stored config values.
 
-    The server loads ``settings.json`` and passes the non-secret fields here as
-    kwargs; tests pass explicit values. There is no env / ``.env`` source — see
-    ``FinRobotSettings`` for why user config is app-stored-only.
+    With ``use_env=True`` (real entrypoints: server / CLI / SDK) credentials are
+    first overlaid from the repo-root ``.env``; tests and internal callers leave
+    it False so a populated ``.env`` never leaks into a unit test.
 
     ``provider_keys`` injects LLM provider API keys (``{provider_id: key}``) into
     the runtime-only ``_provider_keys`` map — used by tests and by callers that
-    already hold the keychain values. They are never persisted.
+    already hold the values. They are never persisted.
     """
     settings = FinRobotSettings(**overrides)
+    if use_env:
+        settings = apply_env_secrets(settings)
     if provider_keys:
         settings = settings.with_provider_keys(provider_keys)
     return settings

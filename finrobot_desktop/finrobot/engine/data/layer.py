@@ -24,6 +24,7 @@ from finrobot.engine.data.normalize import (
     normalize_forward_estimates,
     normalize_price,
 )
+from finrobot.engine.data.categories import PRIORITY, category_of
 from finrobot.engine.data.types import DataType
 from finrobot.engine.data.normalize.currency import normalize_canonical_financials_currency
 from finrobot.engine.data.normalize.contracts import (
@@ -43,6 +44,22 @@ from finrobot.engine.data.validator import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _serves(provider: DataProvider, data_type: str | DataType) -> bool:
+    """True if ``provider`` can serve ``data_type``.
+
+    Bridges the two capability vocabularies: legacy providers declare
+    ``DataType`` values; Data Layer v3 providers declare ``Category`` values.
+    A match on either, or a DataType whose category the provider declares, is a
+    serve.
+    """
+    caps = provider.capabilities()
+    if data_type in caps:
+        return True
+    category = category_of(data_type)
+    return category is not None and category in caps
+
 
 # Union of the typed contracts the canonical gate can serve. FORWARD_ESTIMATES
 # joined PRICE / FINANCIALS in 2026-06 (hard single-source for the DCF-seed
@@ -120,6 +137,29 @@ class DataLayer:
         logger.info("Provider '%s' in cooldown (circuit open) — skipping", provider.name)
         return True
 
+    def _ordered(self, data_type: str | DataType) -> list[DataProvider]:
+        """Providers ordered by the requested data type's category priority.
+
+        Only providers NAMED in ``PRIORITY[category]`` are moved to their table
+        rank; every other provider keeps its position in the chain. A category
+        with no table entry — or whose listed providers are all absent — is
+        returned unchanged, so the table never disturbs a chain it has no opinion
+        about. The sort is stable, so ties keep the chain's relative order.
+        """
+        category = category_of(data_type)
+        priority = PRIORITY.get(category) if category is not None else None
+        if not priority:
+            return self._providers
+        rank = {pid: i for i, pid in enumerate(priority)}
+        if not any(provider.name in rank for provider in self._providers):
+            return self._providers
+        return [
+            provider
+            for _, provider in sorted(
+                enumerate(self._providers), key=lambda pair: rank.get(pair[1].name, pair[0])
+            )
+        ]
+
     def _preferred_canonical_provider(self, data_type: DataType) -> str | None:
         """Name of the provider a canonical FINANCIALS fetch would prefer RIGHT
         NOW — the first chain provider both capable of FINANCIALS and
@@ -145,8 +185,8 @@ class DataLayer:
         """
         if data_type != DataType.FINANCIALS:
             return None
-        for provider in self._providers:
-            if data_type not in provider.capabilities():
+        for provider in self._ordered(data_type):
+            if not _serves(provider, data_type):
                 continue
             if not self._health.is_available(provider.name):
                 continue
@@ -266,8 +306,8 @@ class DataLayer:
         primary_result: DataResult | None = None
         secondary_count = 0
         circuit_open: list[str] = []
-        for provider in self._providers:
-            if data_type not in provider.capabilities():
+        for provider in self._ordered(data_type):
+            if not _serves(provider, data_type):
                 continue
             if self._health_gated(provider):
                 circuit_open.append(provider.name)
@@ -786,8 +826,8 @@ class DataLayer:
         if cached is not None and not cached.is_stale:
             return self._split_yearly(cached.data)
 
-        for provider in self._providers:
-            if data_type not in provider.capabilities():
+        for provider in self._ordered(data_type):
+            if not _serves(provider, data_type):
                 continue
             if self._health_gated(provider):
                 continue
@@ -945,8 +985,8 @@ class DataLayer:
         """
         last_error: ProviderError | None = None
         gated_capable: list[str] = []
-        for provider in self._providers:
-            if DataType.QUOTE not in provider.capabilities():
+        for provider in self._ordered(DataType.QUOTE):
+            if not _serves(provider, DataType.QUOTE):
                 continue
             if self._health_gated(provider):
                 gated_capable.append(provider.name)
@@ -994,8 +1034,8 @@ class DataLayer:
 
         async def _fetch() -> dict[str, Any]:
             last_error: ProviderError | None = None
-            for provider in self._providers:
-                if DataType.PRICE_RANGE not in provider.capabilities():
+            for provider in self._ordered(DataType.PRICE_RANGE):
+                if not _serves(provider, DataType.PRICE_RANGE):
                     continue
                 if self._health_gated(provider):
                     continue
@@ -1054,8 +1094,8 @@ class DataLayer:
         quote_only_provider = ""
         chosen: DataResult | None = None
         chosen_provider = ""
-        for provider in self._providers:
-            if DataType.PRICE not in provider.capabilities():
+        for provider in self._ordered(DataType.PRICE):
+            if not _serves(provider, DataType.PRICE):
                 continue
             if self._health_gated(provider):
                 circuit_open.append(provider.name)
@@ -1182,10 +1222,10 @@ class DataLayer:
         probe, not a data dependency) and does NOT touch the health breaker, which
         governs real fetches. Returns ``[]`` when no second provider answers.
         """
-        for provider in self._providers:
+        for provider in self._ordered(DataType.QUOTE):
             if provider.name == skip_provider:
                 continue
-            if DataType.QUOTE not in provider.capabilities():
+            if not _serves(provider, DataType.QUOTE):
                 continue
             if self._health_gated(provider):
                 continue

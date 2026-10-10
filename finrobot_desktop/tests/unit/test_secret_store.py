@@ -12,6 +12,7 @@ import pytest
 
 import finrobot.secret_store as secret_store_module
 from finrobot.secret_store import (
+    EnvSecretStore,
     FileSecretStore,
     KeychainSecretStore,
     SecretStoreError,
@@ -178,79 +179,102 @@ async def test_keychain_delete_denied_raises_secret_store_error() -> None:
 
 
 # ---------------------------------------------------------------------------
-# create_secret_store — platform-aware, prompt-free backend selection.
-# macOS has no prompt-free keychain without a stable code signature, so it
-# defaults to the file; Windows/Linux use the silent OS credential store.
+# create_secret_store — Data Layer v3: credentials live in the repo-root .env,
+# so every runtime (dev mode, macOS, Windows, Linux, keychain opt-in) gets the
+# same read-only EnvSecretStore. The OS keychain and plaintext file store are
+# retired and must never be constructed.
 # ---------------------------------------------------------------------------
 
 
-def _forbid_keychain(monkeypatch: Any) -> None:
-    """Fail loudly if KeychainSecretStore is constructed — proves the macOS and
-    dev paths never touch the OS keychain (the whole point of the fix)."""
+def _forbid_retired_stores(monkeypatch: Any) -> None:
+    """Fail loudly if KeychainSecretStore / FileSecretStore is constructed —
+    proves create_secret_store always returns the EnvSecretStore."""
 
     def _boom(*_a: Any, **_k: Any) -> None:
-        raise AssertionError("KeychainSecretStore must not be constructed here")
+        raise AssertionError("retired secret store must not be constructed here")
 
     monkeypatch.setattr(secret_store_module, "KeychainSecretStore", _boom)
+    monkeypatch.setattr(secret_store_module, "FileSecretStore", _boom)
 
 
-def test_create_store_dev_mode_uses_file(monkeypatch: Any) -> None:
+def test_create_store_returns_env_store(monkeypatch: Any) -> None:
     monkeypatch.delenv("FINROBOT_DEV_MODE", raising=False)
-    _forbid_keychain(monkeypatch)
+    _forbid_retired_stores(monkeypatch)
+    store, mode = create_secret_store()
+    assert isinstance(store, EnvSecretStore)
+    assert mode == "env"
+
+
+def test_create_store_ignores_dev_mode_arg(monkeypatch: Any) -> None:
+    monkeypatch.delenv("FINROBOT_DEV_MODE", raising=False)
+    _forbid_retired_stores(monkeypatch)
     store, mode = create_secret_store(dev_mode=True)
-    assert isinstance(store, FileSecretStore)
-    assert mode == "plaintext"
+    assert isinstance(store, EnvSecretStore)
+    assert mode == "env"
 
 
-def test_create_store_dev_mode_via_env(monkeypatch: Any) -> None:
+def test_create_store_ignores_dev_mode_env(monkeypatch: Any) -> None:
     monkeypatch.setenv("FINROBOT_DEV_MODE", "1")
-    _forbid_keychain(monkeypatch)
-    _, mode = create_secret_store()
-    assert mode == "plaintext"
-
-
-def test_create_store_macos_defaults_to_file(monkeypatch: Any) -> None:
-    monkeypatch.setattr(sys, "platform", "darwin")
-    monkeypatch.delenv("FINROBOT_DEV_MODE", raising=False)
-    monkeypatch.delenv("FINROBOT_USE_KEYCHAIN", raising=False)
-    _forbid_keychain(monkeypatch)  # macOS must skip the keychain entirely
+    _forbid_retired_stores(monkeypatch)
     store, mode = create_secret_store()
-    assert isinstance(store, FileSecretStore)
-    assert mode == "plaintext"
+    assert isinstance(store, EnvSecretStore)
+    assert mode == "env"
 
 
-def test_create_store_macos_opt_in_keychain(monkeypatch: Any) -> None:
+def test_create_store_macos_ignores_keychain_opt_in(monkeypatch: Any) -> None:
     monkeypatch.setattr(sys, "platform", "darwin")
-    monkeypatch.delenv("FINROBOT_DEV_MODE", raising=False)
     monkeypatch.setenv("FINROBOT_USE_KEYCHAIN", "1")
-    sentinel = object()
-    monkeypatch.setattr(secret_store_module, "KeychainSecretStore", lambda *_a, **_k: sentinel)
+    _forbid_retired_stores(monkeypatch)
     store, mode = create_secret_store()
-    assert store is sentinel
-    assert mode == "keychain"
+    assert isinstance(store, EnvSecretStore)
+    assert mode == "env"
 
 
-def test_create_store_windows_uses_keychain(monkeypatch: Any) -> None:
+def test_create_store_windows_returns_env_store(monkeypatch: Any) -> None:
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.delenv("FINROBOT_DEV_MODE", raising=False)
-    sentinel = object()
-    monkeypatch.setattr(secret_store_module, "KeychainSecretStore", lambda *_a, **_k: sentinel)
+    _forbid_retired_stores(monkeypatch)
     store, mode = create_secret_store()
-    assert store is sentinel
-    assert mode == "keychain"
+    assert isinstance(store, EnvSecretStore)
+    assert mode == "env"
 
 
-def test_create_store_keychain_unavailable_falls_back_to_file(monkeypatch: Any) -> None:
-    monkeypatch.setattr(sys, "platform", "win32")
-    monkeypatch.delenv("FINROBOT_DEV_MODE", raising=False)
-
-    def _boom(*_a: Any, **_k: Any) -> None:
-        raise RuntimeError("no functional backend")
-
-    monkeypatch.setattr(secret_store_module, "KeychainSecretStore", _boom)
+def test_create_store_linux_returns_env_store(monkeypatch: Any) -> None:
+    monkeypatch.setattr(sys, "platform", "linux")
+    _forbid_retired_stores(monkeypatch)
     store, mode = create_secret_store()
-    assert isinstance(store, FileSecretStore)
-    assert mode == "plaintext"
+    assert isinstance(store, EnvSecretStore)
+    assert mode == "env"
+
+
+# ---------------------------------------------------------------------------
+# EnvSecretStore — reads resolve a settings field name to its .env var; writes
+# are rejected because credentials are edited in .env, not via the API.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_env_secret_store_reads_data_key_from_env(monkeypatch: Any) -> None:
+    monkeypatch.setattr("finrobot.env.env_values", lambda: {"FMP_API_KEY": "sk-env-fmp"})
+    store = EnvSecretStore()
+    assert await store.get("fmp_api_key") == "sk-env-fmp"
+    assert await store.has("fmp_api_key") is True
+
+
+@pytest.mark.asyncio
+async def test_env_secret_store_unknown_key_is_none() -> None:
+    store = EnvSecretStore()
+    assert await store.get("not_a_secret") is None
+    assert await store.has("not_a_secret") is False
+
+
+@pytest.mark.asyncio
+async def test_env_secret_store_writes_are_rejected() -> None:
+    store = EnvSecretStore()
+    with pytest.raises(SecretStoreError):
+        await store.set("fmp_api_key", "sk-x")
+    with pytest.raises(SecretStoreError):
+        await store.delete("fmp_api_key")
 
 
 @pytest.mark.asyncio

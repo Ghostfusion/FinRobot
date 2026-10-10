@@ -5,15 +5,16 @@ import json
 import logging
 import os
 import stat
-import sys
 import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Literal
 
+from finrobot.env import ENV_BY_PROVIDER, ENV_LLM_KEY, env_value
+
 logger = logging.getLogger(__name__)
 
-SecretStorageMode = Literal["keychain", "plaintext"]
+SecretStorageMode = Literal["keychain", "plaintext", "env"]
 
 
 class SecretStoreError(RuntimeError):
@@ -48,6 +49,47 @@ class SecretStore(ABC):
     @abstractmethod
     async def has(self, key: str) -> bool:
         """Check if a secret exists without retrieving it."""
+
+
+class EnvSecretStore(SecretStore):
+    """Read-only secret store backed by the repo-root ``.env`` (Data Layer v3).
+
+    Keeps the :class:`SecretStore` interface so the settings routes keep working
+    unchanged: reads resolve a secret key name to its env-var value; writes are
+    REJECTED because credentials are edited in ``.env``, not via the API. See
+    ``docs/DATA_PROVIDERS_V3_DESIGN.md`` §3.
+    """
+
+    def _env_name(self, key: str) -> str | None:
+        if key.startswith("provider_key:"):
+            provider_id = key.split(":", 1)[1]
+            return ENV_LLM_KEY if provider_id == "openrouter" else None
+        # Data-provider keys arrive as settings field names (e.g. fmp_api_key).
+        from finrobot.config import DATA_PROVIDER_KEY_FIELDS
+
+        for provider_id, field in DATA_PROVIDER_KEY_FIELDS.items():
+            if field == key:
+                return ENV_BY_PROVIDER.get(provider_id)
+        return None
+
+    async def get(self, key: str) -> str | None:
+        name = self._env_name(key)
+        return env_value(name) if name else None
+
+    async def has(self, key: str) -> bool:
+        return (await self.get(key)) is not None
+
+    async def set(self, key: str, value: str) -> None:
+        raise SecretStoreError(
+            "Credentials are managed in the repo-root .env file. Edit that file "
+            "and restart instead of saving keys from the app."
+        )
+
+    async def delete(self, key: str) -> None:
+        raise SecretStoreError(
+            "Credentials are managed in the repo-root .env file. Remove the line "
+            "there instead of clearing it from the app."
+        )
 
 
 class KeychainSecretStore(SecretStore):
@@ -306,28 +348,8 @@ def create_secret_store(
       certificate; fall back to the file if the backend is unavailable.
     - **dev mode** (``FINROBOT_DEV_MODE=1``): always the file, every platform.
     """
-    use_dev = dev_mode
-    if use_dev is None:
-        use_dev = os.environ.get("FINROBOT_DEV_MODE") == "1"
-    if use_dev:
-        logger.info("Using FileSecretStore (dev mode)")
-        return FileSecretStore(), "plaintext"
-    if sys.platform == "darwin" and os.environ.get("FINROBOT_USE_KEYCHAIN") != "1":
-        logger.info(
-            "Using FileSecretStore (macOS without a stable code signature — "
-            "avoids the per-item keychain prompt storm). Set "
-            "FINROBOT_USE_KEYCHAIN=1 on a Developer ID-signed build to use the "
-            "keychain instead."
-        )
-        return FileSecretStore(), "plaintext"
-    try:
-        store = KeychainSecretStore()
-        logger.info("Using KeychainSecretStore (OS credential store)")
-        return store, "keychain"
-    except RuntimeError as exc:
-        logger.warning(
-            "OS credential store unavailable (%s), falling back to FileSecretStore. "
-            "Secrets will be stored as a permission-locked local file.",
-            exc,
-        )
-        return FileSecretStore(), "plaintext"
+    # Data Layer v3: credentials live in the repo-root .env; the OS keychain and
+    # the plaintext file store are retired. ``dev_mode`` is retained for
+    # signature compatibility but no longer selects a backend.
+    logger.info("Using EnvSecretStore (repo-root .env)")
+    return EnvSecretStore(), "env"

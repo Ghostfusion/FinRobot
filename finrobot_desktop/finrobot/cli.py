@@ -45,13 +45,14 @@ def _build_deps(model: str | None = None) -> "FinRobotDeps":
     Used by pipeline commands that create their own sub-agents."""
     from finrobot.obs import setup_logging
 
-    setup_logging(get_settings())
+    setup_logging(get_settings(use_env=True))
 
     from finrobot.engine.data.factory import build_data_layer
     from finrobot.engine.deps import FinRobotDeps
     from finrobot.engine.skills.registry import SkillRegistry
 
-    settings = get_settings(model_name=model) if model else get_settings()
+    # Credentials come from the repo-root .env (Data Layer v3).
+    settings = get_settings(use_env=True, model_name=model) if model else get_settings(use_env=True)
 
     # Runtime config validation: checks LLM key + FMP key (required).
     # Raises ValueError; we convert to ClickException for clean CLI output.
@@ -169,6 +170,21 @@ class CliProgress:
 @click.version_option(version=__version__, prog_name="finrobot")
 def cli() -> None:
     """FinRobot — financial AI agent platform."""
+
+
+@cli.command()
+@click.option("--provider", multiple=True, help="Limit to provider id(s)")
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON")
+def probe(provider: tuple[str, ...], as_json: bool) -> None:
+    """Probe every configured data provider's endpoints (live key check)."""
+    from finrobot import probe as probe_mod
+
+    argv: list[str] = []
+    for provider_id in provider:
+        argv += ["--provider", provider_id]
+    if as_json:
+        argv.append("--json")
+    raise SystemExit(probe_mod.main(argv))
 
 
 # --- Skill subcommands ---
