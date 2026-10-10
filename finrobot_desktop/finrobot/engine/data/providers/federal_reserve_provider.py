@@ -36,7 +36,12 @@ from finrobot.engine.data.types import DataType
 
 _BASE_URL = "https://home.treasury.gov"
 _CSV_PATH = "/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/{year}/all"
-_TIMEOUT = 15.0
+_TIMEOUT = 45.0
+#: The Treasury CSV endpoint is genuinely slow rather than broken: a live call
+#: measured ~17s for the 2026 daily yield curve (15.9 KB). The old 15s timeout
+#: meant this provider could NEVER return the risk-free curve — the probe
+#: reported `connect / ReadTimeout` and so did the adapter. Deliberately above
+#: the ~17s measurement, still bounded.
 _MIN_INTERVAL = 0.5
 _SUPPORTED: list[str | DataType] = [Category.RISK_FREE_CURVE]
 

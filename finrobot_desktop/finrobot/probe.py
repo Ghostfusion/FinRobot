@@ -40,6 +40,22 @@ class ProbeResult:
     detail: str = ""
 
 
+def _make_client() -> httpx.AsyncClient:
+    """The HTTP client for one probe run.
+
+    Two settings deliberately mirror production rather than httpx's defaults,
+    because a probe that disagrees with the adapters is worse than no probe:
+
+    * ``follow_redirects`` — the cboe adapter follows cdn.cboe.com's 302 to
+      cdn-api.cboe.com, so a non-following probe reported a false ``http 307``.
+    * ``timeout`` — must not be shorter than the slowest adapter, or the probe
+      reports false failures for endpoints production handles. The Treasury CSV
+      (federal_reserve) needs ~17s. ``test_probe_render`` pins this against the
+      adapters' own ``_TIMEOUT`` values.
+    """
+    return httpx.AsyncClient(timeout=45.0, follow_redirects=True)
+
+
 def _classify(exc: BaseException) -> tuple[str, str]:
     """Map a probe failure to (code, key-free detail). NEVER returns raw text:
     the exception message can embed the request URL (which carries the key)."""
@@ -117,7 +133,7 @@ async def probe_provider(
         ]
 
     results: list[ProbeResult] = []
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with _make_client() as client:
         for cat, ep in rows.items():
             if category is not None and str(cat) != category:
                 continue
