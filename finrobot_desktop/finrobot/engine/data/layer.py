@@ -25,6 +25,7 @@ from finrobot.engine.data.normalize import (
     normalize_price,
 )
 from finrobot.engine.data.categories import PRIORITY, category_of
+from finrobot.engine.data.registry import provider_runtime_name
 from finrobot.engine.data.types import DataType
 from finrobot.engine.data.normalize.currency import normalize_canonical_financials_currency
 from finrobot.engine.data.normalize.contracts import (
@@ -145,12 +146,16 @@ class DataLayer:
         with no table entry — or whose listed providers are all absent — is
         returned unchanged, so the table never disturbs a chain it has no opinion
         about. The sort is stable, so ties keep the chain's relative order.
+
+        Table entries are registry ids, not runtime names (``sec_edgar`` vs
+        ``edgar_tools``), so each id is resolved before ranking — an unresolved
+        id would leave its provider unranked and the whole entry a no-op.
         """
         category = category_of(data_type)
         priority = PRIORITY.get(category) if category is not None else None
         if not priority:
             return self._providers
-        rank = {pid: i for i, pid in enumerate(priority)}
+        rank = {provider_runtime_name(pid): i for i, pid in enumerate(priority)}
         if not any(provider.name in rank for provider in self._providers):
             return self._providers
         return [

@@ -86,6 +86,23 @@ REGISTRY: dict[str, ProviderSpec] = {
 }
 
 
+#: Registry id → runtime provider ``name``, for the ids where the two differ.
+#: ``sec_edgar`` is the registry/env id, but ``EdgarToolsProvider.name`` reports
+#: ``"edgar_tools"`` — the long-standing runtime name carried by the UI
+#: (``DataSourcesPanel``), ``routes/settings.py``, cache provenance and the
+#: provider tests. Category priority tables are written in registry-id
+#: vocabulary, so any code that matches *runtime names* must resolve through
+#: this map. Without it the ``sec_filings`` entry silently no-ops — invisible
+#: while the category has a single vendor, but it would ignore SEC's rank the
+#: moment a second filings provider is added.
+PROVIDER_NAME_BY_ID: dict[str, str] = {"sec_edgar": "edgar_tools"}
+
+
+def provider_runtime_name(provider_id: str) -> str:
+    """Runtime ``.name`` a provider id registers under (identity by default)."""
+    return PROVIDER_NAME_BY_ID.get(provider_id, provider_id)
+
+
 def _global_order() -> list[str]:
     """Deterministic provider order = first appearance across the priority
     table, then any registry-only ids (registry insertion order).
@@ -183,7 +200,12 @@ def build_provider_chain(settings: Any) -> list[DataProvider]:
 
 def order_for_category(category: Any, provider_names: list[str]) -> list[str]:
     """Reorder provider names by ``PRIORITY[category]``; unlisted names keep
-    their relative order after the listed ones."""
+    their relative order after the listed ones.
+
+    Priority entries are registry **ids**, which are not always the runtime name
+    a provider reports (``sec_edgar`` → ``edgar_tools``), so every id is resolved
+    through :func:`provider_runtime_name` before ranking.
+    """
     priority = PRIORITY.get(category, ())
-    rank = {pid: i for i, pid in enumerate(priority)}
+    rank = {provider_runtime_name(pid): i for i, pid in enumerate(priority)}
     return sorted(provider_names, key=lambda name: rank.get(name, len(rank)))

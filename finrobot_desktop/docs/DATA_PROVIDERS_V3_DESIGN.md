@@ -186,6 +186,14 @@ Single-vendor (no fallback):
 | `news_retractions` | benzinga |
 | `offerings_calendar` | benzinga |
 
+**Id vs runtime name.** Table entries are registry ids. One provider registers
+under a different runtime name: `sec_edgar` (registry/env id) is `edgar_tools` at
+runtime — the name the UI (`DataSourcesPanel`), `routes/settings.py` and cache
+provenance use. `registry.PROVIDER_NAME_BY_ID` + `provider_runtime_name()` map the
+pair, and both `order_for_category()` and `DataLayer._ordered()` rank through it.
+Without that resolution the entry silently no-ops: harmless while the category
+has one vendor, wrong the moment a second filings provider is added.
+
 ### 5.3 Why "single chain" ≠ one global sort
 
 The per-category orders **conflict** (e.g. `core_stock_apis` wants
@@ -283,8 +291,13 @@ unit tests.
 - Keep the deterministic offline gate (`pytest -m "not integration"`) green; the
   live probe network calls are `@pytest.mark.integration`.
 - New unit tests: `.env` parsing + precedence; OpenRouter provider construction;
-  category→order resolution; catalog completeness (every priority entry has a
-  provider + catalog rows); moomoo skip-when-unreachable.
+  category→order resolution; catalog completeness; moomoo skip-when-unreachable.
+  Implemented as `tests/unit/test_data_categories.py`: every `PRIORITY` id is a
+  known registry id and resolves to the runtime name its provider reports;
+  `sec_filings` ranks `edgar_tools`; and every priority provider either has
+  catalog rows or is on the documented vendored-adapter exemption list
+  (`yfinance`, `fmp`, `finnhub`, `adanos`, `news_aggregator`, `sec_edgar` — they
+  predate the catalog and declare no module-level `ENDPOINTS`).
 - Shape parity: every price/financials adapter must satisfy the existing
   `test_provider_price_shape.py` / canonical-traceability contracts (or the
   category's canonical contract).

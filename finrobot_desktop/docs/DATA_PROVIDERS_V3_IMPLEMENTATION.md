@@ -93,6 +93,12 @@ Classification vocabulary: `ok | auth | plan | rate_limited | not_found | connec
   fixed (params now substitute both `$KEY` and `{ticker}`).
 - `EndpointSpec` could not express a scheme-prefixed auth header (Tiingo's
   `Token <key>`) — added `auth_value`; Tiingo's rows set `"Token $KEY"`.
+- The `sec_filings` priority entry named the registry id `sec_edgar` while the
+  provider reports `edgar_tools`, so neither `order_for_category()` nor
+  `DataLayer._ordered()` ever ranked it — a silent no-op (invisible while the
+  category has a single vendor). Added `registry.PROVIDER_NAME_BY_ID` +
+  `provider_runtime_name()` and resolved ids in both rank maps;
+  `tests/unit/test_data_categories.py` pins the invariant.
 
 ## 9. Known gaps / follow-ups
 
@@ -100,9 +106,9 @@ Classification vocabulary: `ok | auth | plan | rate_limited | not_found | connec
    render editable key fields. Under the new model a PUT of a key is rejected by
    `EnvSecretStore` (by design), so those fields should become read-only and the
    provider list should be driven by `/provider-health`. Not yet done.
-2. **`SEC_USER_AGENT`** — not present in `.env`, so `sec_edgar` does not
-   register and `sec_filings` has no provider. Add `SEC_USER_AGENT="Name email"`
-   to `.env` to enable it (design doc §11 Q1).
+2. **`SEC_USER_AGENT`** — resolved: with a valid `Name email` identity in `.env`,
+   `sec_edgar` registers (under the runtime name `edgar_tools`) and `sec_filings`
+   is served. No longer a gap.
 3. **Providers unlisted by the owner's table** — resolved for FMP (owner
    request): `fmp` now leads `core_stock_apis` and `fundamental_data`. `massive`
    and `adanos` remain registered but absent from every priority list, so they
