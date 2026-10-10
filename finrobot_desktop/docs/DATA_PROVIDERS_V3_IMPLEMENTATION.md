@@ -13,7 +13,7 @@ names only.
 | Credential source | OS keychain + `settings.json`; env/`.env` deliberately dropped | **Repo-root `.env`** is the single source |
 | LLM | anthropic + openai built-ins | **OpenRouter** built-in, model/key/base URL from `.env` |
 | Data chain | hard-coded 6-provider list | **category-priority failover** over a provider registry |
-| Providers | 6 chain members | **+13 adapters** (eodhd, tiingo, twelvedata, stockdata, benzinga, newsapi, massive, alpha_vantage, fred, federal_reserve, cboe, gdelt, polymarket, moomoo) |
+| Providers | 6 chain members | **+14 adapters** (eodhd, tiingo, twelvedata, stockdata, benzinga, newsapi, massive, alpha_vantage, fred, federal_reserve, cboe, gdelt, polymarket, moomoo) |
 | Endpoints | implicit | declarative **catalog** + live **probe** |
 
 ## 2. New modules
@@ -80,9 +80,10 @@ Classification vocabulary: `ok | auth | plan | rate_limited | not_found | connec
   data keys, and `moomoo_host/port` from `.env`; keyless `data_key("yfinance")`
   returned None.
 - **Catalog:** `endpoint_catalog()` aggregated 14 providers / 49 endpoint rows.
-- **Chain build (live):** 18 providers registered from `.env`, including
-  `moomoo` (its OpenD gateway was reachable) and `sec_edgar` omitted (no valid SEC
-  identity configured — see gaps).
+- **Chain build (live):** 19 providers registered from `.env`, including `moomoo`
+  (its OpenD gateway was reachable) and `edgar_tools` (the `sec_edgar` adapter,
+  served from `SEC_USER_AGENT` — see §9.2; this superseded an earlier 18-provider
+  build where the `.env` overlay was not yet applied at boot, §8).
 - **Lint:** `ruff check finrobot/` (the CI rule set) is clean after fixing one
   orphaned import; `ruff format` applied to all changed files.
 - **Types/tests:** see §9 (recorded after the run).
@@ -108,34 +109,56 @@ Classification vocabulary: `ok | auth | plan | rate_limited | not_found | connec
   sites that had the same omission. `tests/unit/test_boot_settings_env.py` pins it.
 - The `edgar` logger logged the configured SEC identity (a person's name + email)
   at INFO on client init, and the JSON file handler persisted it to
-  `finrobot.log`. Pinned `edgar` to WARNING in `obs.setup._NOISY`. Existing log
-  files still contain earlier occurrences.
+  `finrobot.log`. Pinned `edgar` to WARNING in `obs.setup._NOISY`, and scrubbed
+  the 143 lines earlier boots had already written to that log.
 
 ## 9. Known gaps / follow-ups
 
-1. **Frontend key entry** — `SettingsView.tsx` / `DataSourcesPanel.tsx` still
-   render editable key fields. Under the new model a PUT of a key is rejected by
-   `EnvSecretStore` (by design), so those fields should become read-only and the
-   provider list should be driven by `/provider-health`. Not yet done.
+1. **Frontend credential entry** — resolved. Key rows render read-only
+   (`ReadOnlyCredential`; `SettingsView.test.tsx` pins `disabled` + `readonly`),
+   the provider list is driven by `/api/settings/provider-health`, and a PUT
+   carrying a key is refused by `EnvSecretStore` with a user-visible error
+   (`test_routes_settings.py`). The SEC identity field — the last editable
+   credential control — is read-only too; it used to write `settings.json` and
+   thereby shadow `.env` (see §9.2).
 2. **`SEC_USER_AGENT`** — resolved: with a valid `Name email` identity in `.env`,
    `sec_edgar` registers (under the runtime name `edgar_tools`) and `sec_filings`
    is served. No longer a gap.
-   **Precedence caveat (design doc §11 Q1):** `apply_env_secrets` only fills fields
-   still at their default, so a non-placeholder `sec_user_agent` in `settings.json`
-   wins over `.env`. If `.env` is to be the *single* source for the identity too,
-   the overlay has to override rather than fill — owner call.
-3. **Providers unlisted by the owner's table** — resolved for FMP (owner
-   request): `fmp` now leads `core_stock_apis` and `fundamental_data`. `massive`
-   and `adanos` remain registered but absent from every priority list, so they
-   never outrank a listed provider; add them to a category if that should change.
-4. **`federal_reserve` base URL** — `api.fiscaldata.treasury.gov` exposes no daily
-   par-yield-curve dataset; the adapter reads the official Treasury `daily-treasury-rates`
-   CSV from `home.treasury.gov` instead. Confirm acceptable.
-5. **Legacy stores** — `KeychainSecretStore` / `FileSecretStore` are now unused
-   (kept so their existing tests import cleanly); remove in a follow-up along with
-   the `keyring` dependency in `pyproject.toml`.
-6. **Test updates** — tests pinning the old chain order / keychain behaviour need
-   updating for the new ordering and env source (see design doc §8).
-7. **moomoo category→SDK-method mapping** — several interpretive categories
-   (expected_move, earnings_catalyst, earnings_surprise, smart_money, market_breadth)
-   use the closest documented OpenD call; confirm against live OpenD.
+   **Precedence (design doc §11 Q1)** — decided: the UI keeps no write path for
+   the identity (read-only field, §9.1), so `settings.json` can no longer shadow
+   `.env` through normal use. `apply_env_secrets` therefore stays fill-only: an
+   operator who edits `settings.json` by hand still wins, which is intended —
+   that file is app config, `.env` is the credential source.
+3. **Providers unlisted by the owner's table** — decided: `massive` and `adanos`
+   stay registered but unranked, so they can never outrank a listed provider and
+   remain usable only as end-of-chain fallbacks. `fmp` leads `core_stock_apis`
+   and `fundamental_data` (owner request).
+4. **`federal_reserve` base URL** — accepted: `api.fiscaldata.treasury.gov`
+   exposes no daily par-yield-curve dataset, so the adapter reads the official
+   Treasury `daily-treasury-rates` CSV from `home.treasury.gov`.
+5. **Legacy stores** — removed: `KeychainSecretStore` / `FileSecretStore` deleted
+   from `secret_store.py` along with the `keyring` dependency in `pyproject.toml`
+   (and its now-obsolete tests). `EnvSecretStore` is the only store.
+   `keyring` remains installed as a transitive dependency of
+   `pydantic-ai[fastmcp]`; nothing in `finrobot/` imports it.
+6. **Test updates** — resolved: no test still pins the old chain order.
+   `tests/unit/test_data_layer.py`'s chain tests are generic 3-provider failover
+   cases, and the suite is green (3317 passed / 10 known Windows-local failures,
+   see design doc §8). The remaining keychain-pinned tests go away with the
+   legacy stores in §9.5.
+7. **moomoo category→SDK-method mapping** — verified against a live OpenD gateway
+   (TCP `MOOMOO_HOST:MOOMOO_PORT` reachable; live `OpenQuoteContext`). All five
+   interpretive mappings returned `ret=0` with real data and are correct as coded;
+   no change needed.
+
+   | Category | OpenD call | Live result |
+   |---|---|---|
+   | `expected_move` | `get_option_underlying_overview` | ret=0, IV / IV-rank / HV columns |
+   | `earnings_catalyst` | `get_financials_earnings_price_history` | ret=0, 584 rows, predicted-vs-actual vola, IV crush |
+   | `earnings_surprise` | `get_financials_earnings_price_move` | ret=0, 110 rows, day-offset price + IV/HV |
+   | `smart_money` | `get_insider_trade_list` + `get_shareholders_holding_changes` | both ret=0, real holder-change rows |
+   | `market_breadth` | `get_rise_fall_distribution` | ret=0, rise/fall bucket distribution |
+
+   One shape note (not a mapping error, left as-is): `get_rise_fall_distribution`
+   returns a dict, not a DataFrame, so `_records` wraps it as a single record with
+   the distribution nested under `range_list`.
