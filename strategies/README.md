@@ -4,9 +4,9 @@ FinRobot's data layer exposes a fixed set of provider endpoints. These documents
 they read the academic literature, extract the techniques that are *implementable from data FinRobot
 can actually fetch*, and mark the inputs no provider can serve as **gap**.
 
-## The three corpora
+## The four corpora
 
-Sibling arXiv harvests covering the three `q-fin` subcategories, all harvested with the same tool and
+Sibling arXiv harvests covering the four `q-fin` subcategories, all harvested with the same tool and
 metadata schema, so they can be read the same way:
 
 | Corpus | arXiv category | Sources | Records | PDFs | Categories | Documents |
@@ -14,16 +14,20 @@ metadata schema, so they can be read the same way:
 | statistical finance | `cat:q-fin.ST` | `E:\fin paper` | 4372 | 4348 | 16 | [`qfin-st/`](qfin-st/README.md) |
 | trading & market microstructure | `cat:q-fin.TR` | `E:\fin paper2` | 2370 | 2359 | 14 | [`qfin-tr/`](qfin-tr/README.md) |
 | general finance | `cat:q-fin.GN` | `E:\fin paper3` | 3095 | 3066 | 16 | [`qfin-gn/`](qfin-gn/README.md) |
-| **unique papers** | | | **9135** | 9076 | 46 | 46 documents |
+| pricing of securities | `cat:q-fin.PR` | `E:\fin paper4` | 2274 | 2250 | 17 | [`qfin-pr/`](qfin-pr/README.md) |
+| **unique papers** | | | **11126** | 11047 | 63 | 63 documents |
 
 The corpora overlap only lightly, so each contributes genuinely distinct ground: `q-fin.ST` ∩ `q-fin.TR`
-= 349 papers, `q-fin.ST` ∩ `q-fin.GN` = 237, `q-fin.TR` ∩ `q-fin.GN` = 136, all three = 20.
+= 349 papers, `q-fin.ST` ∩ `q-fin.GN` = 237, `q-fin.TR` ∩ `q-fin.GN` = 136, all three = 20. The
+`q-fin.PR` harvest is newer ground still — `q-fin.ST` ∩ PR = 104, `q-fin.TR` ∩ PR = 81,
+`q-fin.GN` ∩ PR = 132, and exactly one paper appears in all four.
 
 | Corpus | Reading lens | Papers classified |
 |---|---|---:|
 | q-fin.ST | statistical methods: volatility, regimes, factors, ML and econophysics | 3435/4372 (79%) |
 | q-fin.TR | how trading *mechanically* works: books, liquidity, execution, latency | 1803/2370 (76%) |
 | q-fin.GN | the economic environment: growth, credit, policy, distribution | 2423/3095 (78%) |
+| q-fin.PR | pricing models: options, volatility, hedging, rates, credit, numerical methods | 2111/2274 (93%) |
 
 ## Method
 
@@ -55,6 +59,7 @@ strategies/
   qfin-st/             # 16 docs from cat:q-fin.ST  (+ its own README)
   qfin-tr/             # 14 docs from cat:q-fin.TR  (+ its own README)
   qfin-gn/             # 16 docs from cat:q-fin.GN  (+ its own README)
+  qfin-pr/             # 17 docs from cat:q-fin.PR  (+ its own README)
 ```
 
 ## The shared endpoint inventory
