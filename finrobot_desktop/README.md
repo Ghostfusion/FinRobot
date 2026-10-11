@@ -101,6 +101,22 @@ Seven workflows in `finrobot/engine/pipelines/`, each a sequence of typed steps 
 
 Everything here is pure Python with no model in the loop, which is what makes the numbers reproducible and the provenance checkable.
 
+### Backtest validation
+
+`finrobot/engine/backtest/validation/` is the gate a backtest has to clear before its numbers mean anything. It answers one question — *is this edge distinguishable from luck?* — from a persisted **trial ledger** (every parameter set the optimizer evaluated, with each trial's per-fold returns and its stored pre-Φ DSR statistic), and it calls no model and no network:
+
+- **Splits** — walk-forward (train / validate / step with an embargo between them) and combinatorial purged CV, with the distinct-path count `φ[N,k] = (k/N)·C(N,k)` so fold count is never mistaken for sample size.
+- **Selection objective** — the GT-Score as the paper defines it (a minimized loss) plus the generalization ratio of validation to training return.
+- **Overfitting gates** — PBO by CSCV (candidate-by-fold rank logits), the deflated Sharpe ratio with an *effective* trial count from eigenvalue decorrelation, MinTRL, White/Hansen SPA over a moving-block bootstrap, and a regime-stability diagnostic.
+- **Aggregate** — five gates blended into one 0–100 display whose verdict is enforced, not asserted: `display ≥ 80` exactly when every gate passed, checked at runtime, and re-checked by the test suite.
+
+Two rules are structural rather than stylistic. **Fail closed:** a missing statistic produces a lower verdict, never a synthetic pass — no stored pre-Φ statistic means no score at all, because `Φ(u)` saturates and cannot be inverted. **Deterministic:** every gate is seeded and pure, so a score can be reproduced from the ledger alone. The constants are the source papers' own published calibration (arXiv:2602.00080v1, arXiv:2608.23808v2, arXiv:2209.05559v6), and the methodology is distilled in `../strategies/qfin-st/backtest-methodology.md`.
+
+```bash
+finrobot validate trials.jsonl          # score a ledger with the validation gate
+finrobot validate trials.jsonl --as-json --blocks 6
+```
+
 <div align="center">
 <img src="../figs/desktop-dcf.png" width="92%" alt="DCF forecast table labelled code-computed, next to the LLM narrative"/>
 </div>
@@ -166,6 +182,7 @@ finrobot comps NVDA --peers AMD,INTC
 finrobot ic-memo TSLA
 finrobot ask AAPL "How exposed is the gross margin to tariffs?"
 finrobot backtest ...            # needs the `backtest` extra
+finrobot validate trials.jsonl   # score a backtest ledger against the validation gate
 finrobot serve                   # run the backend on its own
 ```
 

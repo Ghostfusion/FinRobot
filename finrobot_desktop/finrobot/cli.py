@@ -591,6 +591,80 @@ def backtest(
 
 
 @cli.command()
+@click.argument("ledger", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--trial-id", type=int, default=None, help="Trial to score (default: best Sharpe)")
+@click.option("--blocks", default=10, show_default=True, help="CSCV blocks (even, >= 2)")
+@click.option(
+    "--benchmark",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="CSV of per-bar benchmark returns for the SPA test",
+)
+@click.option("--as-json", "as_json", is_flag=True, help="Emit the report as JSON")
+def validate(
+    ledger: Path,
+    trial_id: int | None,
+    blocks: int,
+    benchmark: Path | None,
+    as_json: bool,
+) -> None:
+    """Score a trial ledger with the backtest validation gate.
+
+    The ledger is a JSONL file: one header line, then one evaluated parameter set
+    per line (see ``finrobot.engine.backtest.validation.build_ledger_from_search``
+    to produce one from a search). The gate reports deflated Sharpe, PBO/CSCV,
+    SPA, MinTRL and regime stability, and only Seals a strategy that passes all
+    five. Costs real data: no network calls, everything is computed from the file.
+
+    Example:
+        finrobot validate trials.jsonl --blocks 10
+    """
+    import csv
+
+    from finrobot.engine.backtest.validation import (
+        TrialLedger,
+        ValidationConfig,
+        validate_ledger,
+    )
+
+    try:
+        loaded = TrialLedger.read_jsonl(ledger)
+    except ValueError as e:
+        raise click.ClickException(f"Unreadable ledger '{ledger}': {e}") from e
+
+    benchmark_returns: list[float] | None = None
+    if benchmark is not None:
+        try:
+            with benchmark.open(encoding="utf-8", newline="") as handle:
+                rows = [row for row in csv.reader(handle) if row]
+            benchmark_returns = [
+                float(row[-1]) for row in rows[1:] if not row[0].lower().startswith("date")
+            ]
+        except (OSError, ValueError) as e:
+            raise click.ClickException(f"Unreadable benchmark '{benchmark}': {e}") from e
+        if len(benchmark_returns) != loaded.n_bars:
+            raise click.ClickException(
+                f"Benchmark has {len(benchmark_returns)} bars but the ledger grid has "
+                f"{loaded.n_bars}; they must align bar for bar"
+            )
+
+    try:
+        report = validate_ledger(
+            loaded,
+            winner_trial_id=trial_id,
+            benchmark=benchmark_returns,
+            config=ValidationConfig(n_blocks=blocks),
+        )
+    except ValueError as e:
+        raise click.ClickException(str(e)) from e
+
+    if as_json:
+        click.echo(report.model_dump_json(indent=2))
+    else:
+        click.echo(report.format_summary())
+
+
+@cli.command()
 @click.argument("ticker")
 @click.argument("question")
 @click.option("--model", default=None, help="Override model, e.g. anthropic:claude-sonnet-4-6")
