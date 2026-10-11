@@ -289,6 +289,10 @@ msgid "report.toc.navLabel"
 msgstr "研报章节导航"
 
 #. js-lingui-explicit-id
+msgid "report.toc.auxHeading"
+msgstr "附注"
+
+#. js-lingui-explicit-id
 msgid "report.toc.progressLabel"
 msgstr "阅读进度"
 

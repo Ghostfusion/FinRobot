@@ -199,6 +199,10 @@ export function ReportLeftRail({
 
   const subHeadings = useActiveChapterHeadings(activeId || null, currentArtifactId)
 
+  // The unnumbered note sections, presented as their own group below the
+  // numbered spine (see the nav comment). Page order is preserved inside it.
+  const noteEntries = entries.filter((entry) => entry.kind === 'aux')
+
   const backToTop = (): void => {
     document.getElementById(SCROLL_CONTAINER_ID)?.scrollTo?.({ top: 0, behavior: 'smooth' })
   }
@@ -400,76 +404,49 @@ export function ReportLeftRail({
           </div>
 
           <nav aria-label={t('report.toc.navLabel')}>
-            {entries.map((entry) => {
-              const isActive = entry.id === activeId
-              return (
-                <div key={entry.id}>
-                  <a
-                    href={`#${entry.id}`}
-                    data-testid={`toc-${entry.id}`}
-                    data-active={isActive ? 'true' : 'false'}
-                    // aria-current="location" = "current position within a
-                    // document", which is exactly what a TOC entry is. The colour
-                    // change alone was invisible to assistive tech.
-                    aria-current={isActive ? 'location' : undefined}
-                    style={{
-                      display: 'flex',
-                      gap: 9,
-                      alignItems: 'baseline',
-                      padding: '6px 0',
-                      textDecoration: 'none',
-                      fontFamily: 'var(--font-body)',
-                      fontSize: 12,
-                      lineHeight: 1.3,
-                      color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
-                      transition: 'color 0.16s',
-                    }}
-                  >
-                    <span
-                      aria-hidden
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: entry.kind === 'aux' ? 9 : 10,
-                        color: isActive ? 'var(--secondary)' : 'var(--text-dim)',
-                        width: 16,
-                        flexShrink: 0,
-                      }}
-                    >
-                      {/* Auxiliary sections carry no chapter number — a marker
-                          keeps the numbered spine visually distinct. */}
-                      {entry.kind === 'aux' ? '§' : entry.num}
-                    </span>
-                    {entry.title}
-                  </a>
-                  {/* Second level: the active section's own sub-headings. Only the
-                      active one expands, so the rail stays scannable. */}
-                  {isActive && subHeadings.length > 0 && (
-                    <div data-testid={`toc-sub-${entry.id}`} style={{ marginBottom: 4 }}>
-                      {subHeadings.map((sub) => (
-                        <a
-                          key={sub.id}
-                          href={`#${sub.id}`}
-                          style={{
-                            display: 'block',
-                            padding: '3px 0 3px 25px',
-                            textDecoration: 'none',
-                            fontFamily: 'var(--font-body)',
-                            fontSize: 11,
-                            lineHeight: 1.3,
-                            color: 'var(--text-dim)',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {sub.label}
-                        </a>
-                      ))}
-                    </div>
-                  )}
+            {/* Presentation is TWO groups, in this order:
+                  1. the numbered chapter spine, ascending 01…14;
+                  2. the unnumbered note sections, in page order.
+                The manifest keeps page order (the body render order and the hash
+                validator both depend on it — see ReportChapters.sections.test),
+                but the rail re-groups for reading: interleaving a § row between
+                01 and 02 broke the NUMBER sequence, so the listing read as
+                shuffled even though every number was correct. */}
+            {entries
+              .filter((entry) => entry.kind === 'chapter')
+              .map((entry) => (
+                <TocEntry
+                  key={entry.id}
+                  entry={entry}
+                  active={entry.id === activeId}
+                  subHeadings={subHeadings}
+                />
+              ))}
+
+            {noteEntries.length > 0 && (
+              <>
+                <div
+                  style={{
+                    margin: '14px 0 4px',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 9.5,
+                    letterSpacing: '0.16em',
+                    textTransform: 'uppercase',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  {t('report.toc.auxHeading')}
                 </div>
-              )
-            })}
+                {noteEntries.map((entry) => (
+                  <TocEntry
+                    key={entry.id}
+                    entry={entry}
+                    active={entry.id === activeId}
+                    subHeadings={subHeadings}
+                  />
+                ))}
+              </>
+            )}
           </nav>
 
           {/* Back-to-top: the report runs 14 chapters + appendices, so returning
@@ -485,7 +462,7 @@ export function ReportLeftRail({
               fontSize: 10,
               letterSpacing: '0.14em',
               textTransform: 'uppercase',
-              color: 'var(--text-muted)',
+              color: 'var(--text-secondary)',
               background: 'transparent',
               border: 'none',
               cursor: 'pointer',
@@ -510,6 +487,91 @@ export function ReportLeftRail({
         </div>
       </div>
     </aside>
+  )
+}
+
+/** One table-of-contents row: number/marker + title, and — while it is the
+ *  section the reader is in — that section's own sub-headings beneath it.
+ *
+ *  Contrast: inactive rows sit at --text-secondary (not --text-muted) because the
+ *  TOC is the only way to read the report's structure, and the muted tier left the
+ *  titles fainter than the surrounding chrome; the number/marker keeps a lighter
+ *  tier than its title so the entry still reads as one line. */
+function TocEntry({
+  entry,
+  active,
+  subHeadings,
+}: {
+  entry: ReportSectionEntry
+  active: boolean
+  subHeadings: { id: string; label: string }[]
+}): React.ReactElement {
+  return (
+    <div>
+      <a
+        href={`#${entry.id}`}
+        data-testid={`toc-${entry.id}`}
+        data-active={active ? 'true' : 'false'}
+        // aria-current="location" = "current position within a document", which is
+        // exactly what a TOC entry is. The colour change alone was invisible to
+        // assistive tech.
+        aria-current={active ? 'location' : undefined}
+        style={{
+          display: 'flex',
+          gap: 9,
+          alignItems: 'baseline',
+          padding: '6px 0',
+          textDecoration: 'none',
+          fontFamily: 'var(--font-body)',
+          fontSize: 12,
+          lineHeight: 1.3,
+          color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+          transition: 'color 0.16s',
+        }}
+      >
+        <span
+          aria-hidden
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: entry.kind === 'aux' ? 9 : 10,
+            color: active ? 'var(--secondary)' : 'var(--text-muted)',
+            width: 16,
+            flexShrink: 0,
+          }}
+        >
+          {/* Auxiliary sections carry no chapter number — a marker keeps the
+              numbered spine visually distinct. */}
+          {entry.kind === 'aux' ? '§' : entry.num}
+        </span>
+        {entry.title}
+      </a>
+      {/* Second level: the active section's own sub-headings. Only the active one
+          expands, so the rail stays scannable. */}
+      {active && subHeadings.length > 0 && (
+        <div data-testid={`toc-sub-${entry.id}`} style={{ marginBottom: 4 }}>
+          {subHeadings.map((sub) => (
+            <a
+              key={sub.id}
+              href={`#${sub.id}`}
+              style={{
+                display: 'block',
+                padding: '3px 0 3px 25px',
+                textDecoration: 'none',
+                fontFamily: 'var(--font-body)',
+                fontSize: 11,
+                lineHeight: 1.3,
+                color: 'var(--text-muted)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {sub.label}
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -550,7 +612,7 @@ function RailTab({
         fontSize: 10,
         letterSpacing: '0.14em',
         textTransform: 'uppercase',
-        color: active ? 'var(--secondary)' : 'var(--text-muted)',
+        color: active ? 'var(--secondary)' : 'var(--text-secondary)',
         background: 'transparent',
         border: 'none',
         borderBottom: `1.5px solid ${active ? 'var(--secondary)' : 'transparent'}`,

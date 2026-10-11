@@ -128,6 +128,34 @@ describe('ReportLeftRail contents', () => {
     expect(within(nav).getByText('12')).toBeTruthy() // filings
   })
 
+  it('presents the numbered spine first, in ascending order, then the note group', () => {
+    renderRail()
+    const nav = screen.getByRole('navigation', { name: 'Report sections' })
+    const chapters = ALL_SECTIONS.filter((e) => e.kind === 'chapter')
+    const notes = ALL_SECTIONS.filter((e) => e.kind === 'aux')
+
+    // Chapter rows first (01…14), then the unnumbered notes — never interleaved.
+    // An interleaved § row sat between 01 and 02 and made the numbering read as
+    // shuffled even though every number was correct.
+    const rendered = [...nav.querySelectorAll('a[data-testid^="toc-"]')].map((a) =>
+      a.getAttribute('data-testid'),
+    )
+    expect(rendered).toEqual([
+      ...chapters.map((e) => `toc-${e.id}`),
+      ...notes.map((e) => `toc-${e.id}`),
+    ])
+
+    const markers = [...nav.querySelectorAll('a[data-testid^="toc-"]')].map(
+      (a) => a.querySelector('span')?.textContent ?? '',
+    )
+    expect(markers.slice(0, chapters.length)).toEqual(chapters.map((e) => e.num))
+    expect(markers.slice(chapters.length)).toEqual(notes.map(() => '§'))
+
+    // The note group is labelled, so the unnumbered rows are not read as a gap in
+    // the sequence.
+    expect(within(nav).getByText('Notes')).toBeTruthy()
+  })
+
   it('reports reading progress as a progressbar', () => {
     renderRail()
     const bar = screen.getByRole('progressbar', { name: 'Reading progress' })

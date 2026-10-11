@@ -289,6 +289,10 @@ msgid "report.toc.navLabel"
 msgstr "Report sections"
 
 #. js-lingui-explicit-id
+msgid "report.toc.auxHeading"
+msgstr "Notes"
+
+#. js-lingui-explicit-id
 msgid "report.toc.progressLabel"
 msgstr "Reading progress"
 
