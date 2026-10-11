@@ -155,16 +155,24 @@ Supporting pieces: response caching, a symbol index, quote batching, SEC holding
 
 ### Skills
 
-`skills/` holds **56** analyst playbooks as `SKILL.md` files, grouped by desk:
+`skills/` holds **68** analyst skills as `SKILL.md` files. The 56 vendored playbooks are grouped
+by desk (converted from Anthropic's financial-services plugins); the 12 corpus-derived ones are
+grouped by method domain, generated from the `strategies/` literature reviews by
+`scripts/convert_strategy_docs.py`.
 
 | Category | Count | Category | Count |
 |:---|:---|:---|:---|
-| `financial-analysis` | 11 | `equity-research` | 9 |
+| `financial-analysis` | 11 | `equity-research` | 10 |
 | `private-equity` | 10 | `investment-banking` | 9 |
 | `partner-lseg` | 8 | `wealth-management` | 6 |
-| `partner-spglobal` | 3 | | |
+| `partner-spglobal` | 3 | `quant-research` | 3 |
+| `risk-management` | 2 | `systematic-trading` | 2 |
+| `macro-research` | 1 | `portfolio-management` | 1 |
+| `execution` | 1 | `news-sentiment` | 1 |
 
-Browse them from the CLI with `finrobot skill list` and `finrobot skill search <query>`. Attribution for third-party material is in `skills/ATTRIBUTION.md`.
+Browse them from the CLI with `finrobot skill list` and `finrobot skill search <query>`.
+Provenance for both groups is in `skills/ATTRIBUTION.md`; the verdicts for all 46 corpus
+documents are in `strategies/SKILLS_PLAN.md`.
 
 ---
 
@@ -286,7 +294,7 @@ finrobot_desktop/
 │   ├── cli.py server.py   #   CLI and ASGI entry points
 │   └── sdk.py             #   programmatic API
 ├── desktop/               # Tauri shell + React 19 / Vite 6 / Zustand / Recharts
-├── skills/                # 56 analyst playbooks (SKILL.md)
+├── skills/                # 68 analyst skills (SKILL.md)
 ├── tutorials/             # 4 notebooks
 ├── tests/                 # pytest suite, incl. Hypothesis property tests
 └── scripts/               # maintenance and build tooling

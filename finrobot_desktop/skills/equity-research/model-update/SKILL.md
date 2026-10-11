@@ -15,7 +15,23 @@ triggers:
 - update numbers for [company]
 - new guidance
 - revise estimates
-requires_data: []
+requires_data:
+- input: quarterly reported financials and segment results
+  provider: tiingo
+  category: fundamental_data
+  status: ok
+- input: management guidance changes
+  provider: benzinga
+  category: guidance_revisions
+  status: ok
+- input: macro data (interest rates, FX, commodity prices)
+  provider: fred
+  category: macro_data
+  status: ok
+- input: consensus estimates
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

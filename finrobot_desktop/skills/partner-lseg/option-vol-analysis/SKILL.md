@@ -12,8 +12,26 @@ triggers:
 - option
 - vol
 - analysis
-requires_data: []
-requires_tools: []
+requires_data:
+- input: equity index implied volatility surface
+  provider: cboe
+  category: options_surface
+  status: ok
+- input: historical equity prices
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: FX implied volatility surface
+  provider: ""
+  category: ""
+  status: gap
+requires_tools:
+- equity_vol_surface
+- fx_vol_surface
+- option_value
+- option_template_list
+- tscc_historical_pricing_summaries
+- qa_historical_equity_price
 requires_skills: []
 compatible_models: []
 ---

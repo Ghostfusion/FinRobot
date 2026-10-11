@@ -15,7 +15,35 @@ triggers:
 - trade idea
 - morning call prep
 - daily note
-requires_data: []
+requires_data:
+- input: overnight company news and events
+  provider: eodhd
+  category: news_data
+  status: ok
+- input: earnings results and surprises
+  provider: moomoo
+  category: earnings_surprise
+  status: gateway
+- input: guidance changes
+  provider: benzinga
+  category: guidance_revisions
+  status: ok
+- input: analyst rating changes
+  provider: benzinga
+  category: analyst_ratings
+  status: ok
+- input: overnight and pre-market quotes and sector moves
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: macro data releases
+  provider: fred
+  category: macro_data
+  status: ok
+- input: earnings dates and reporting timing
+  provider: benzinga
+  category: earnings_calendar
+  status: ok
 requires_tools: []
 requires_skills: []
 compatible_models: []

@@ -11,7 +11,31 @@ triggers:
 - fsi
 - strip
 - profile
-requires_data: []
+requires_data:
+- input: company filings
+  provider: sec_edgar
+  category: sec_filings
+  status: ok
+- input: stock prices and market capitalization
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: ownership and shareholder data
+  provider: moomoo
+  category: institution_data
+  status: gateway
+- input: analyst consensus estimates
+  provider: ""
+  category: ""
+  status: gap
+- input: company news and press releases
+  provider: eodhd
+  category: news_data
+  status: ok
+- input: segment revenue breakdown
+  provider: moomoo
+  category: revenue_breakdown
+  status: gateway
 requires_tools: []
 requires_skills: []
 compatible_models: []

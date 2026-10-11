@@ -14,8 +14,27 @@ triggers:
 - draft founder email
 - check if we've seen this company
 - outreach to founder
-requires_data: []
-requires_tools: []
+requires_data:
+- input: target company discovery research (industry reports, trade publications, competitor landscapes)
+  provider: ""
+  category: ""
+  status: gap
+- input: target company profiles
+  provider: ""
+  category: ""
+  status: gap
+- input: firm CRM and prior correspondence with target companies
+  provider: ""
+  category: ""
+  status: gap
+- input: company news for outreach personalization
+  provider: eodhd
+  category: news_data
+  status: ok
+requires_tools:
+- web search
+- Gmail
+- Slack
 requires_skills: []
 compatible_models: []
 ---

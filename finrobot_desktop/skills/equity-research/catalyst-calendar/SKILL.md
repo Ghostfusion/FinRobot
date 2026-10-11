@@ -15,7 +15,27 @@ triggers:
 - earnings calendar
 - event calendar
 - catalyst tracker
-requires_data: []
+requires_data:
+- input: earnings dates and times
+  provider: benzinga
+  category: earnings_calendar
+  status: ok
+- input: economic data releases and central bank dates
+  provider: moomoo
+  category: economic_calendar
+  status: gateway
+- input: Fed policy rate expectations
+  provider: moomoo
+  category: fed_watch
+  status: gateway
+- input: FDA and regulatory decision dates
+  provider: benzinga
+  category: fda_calendar
+  status: ok
+- input: corporate event news (M&A, management changes)
+  provider: eodhd
+  category: news_data
+  status: ok
 requires_tools: []
 requires_skills: []
 compatible_models: []

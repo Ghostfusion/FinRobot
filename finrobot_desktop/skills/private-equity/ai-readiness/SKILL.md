@@ -15,7 +15,15 @@ triggers:
 - AI across the portfolio
 - AI quick wins
 - which portcos are ready for AI
-requires_data: []
+requires_data:
+- input: portfolio company quarterly updates and board packs
+  provider: ""
+  category: ""
+  status: gap
+- input: portfolio company financial statements
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

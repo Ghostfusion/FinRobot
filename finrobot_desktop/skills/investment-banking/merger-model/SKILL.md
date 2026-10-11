@@ -15,7 +15,19 @@ triggers:
 - pro forma EPS
 - merger consequences
 - deal impact analysis
-requires_data: []
+requires_data:
+- input: stock prices and shares outstanding
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: company financial statements
+  provider: tiingo
+  category: fundamental_data
+  status: ok
+- input: consensus estimates
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

@@ -11,7 +11,27 @@ description: 'Populates investment banking pitch deck templates with data from s
 triggers:
 - pitch
 - deck
-requires_data: []
+requires_data:
+- input: company financial statements
+  provider: tiingo
+  category: fundamental_data
+  status: ok
+- input: stock prices and market capitalization
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: market size and growth data
+  provider: ""
+  category: ""
+  status: gap
+- input: comparable company and transaction data
+  provider: ""
+  category: ""
+  status: gap
+- input: company profiles
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

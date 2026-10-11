@@ -14,7 +14,19 @@ triggers:
 - allocation check
 - rebalancing trades
 - my portfolio is out of balance
-requires_data: []
+requires_data:
+- input: current security prices for position market values
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: account holdings, cost basis, and unrealized gains/losses
+  provider: ""
+  category: ""
+  status: gap
+- input: IPS target allocation and rebalancing bands
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

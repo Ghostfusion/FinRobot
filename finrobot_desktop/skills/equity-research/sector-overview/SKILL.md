@@ -15,7 +15,23 @@ triggers:
 - sector analysis
 - industry deep dive
 - thematic research
-requires_data: []
+requires_data:
+- input: company financial statements and valuation multiples
+  provider: tiingo
+  category: fundamental_data
+  status: ok
+- input: sector share prices and market performance
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: company and industry news
+  provider: eodhd
+  category: news_data
+  status: ok
+- input: market sizing and M&A transaction data
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

@@ -11,8 +11,34 @@ description: Create professional equity research earnings update reports (8-12 p
 triggers:
 - earnings
 - analysis
-requires_data: []
-requires_tools: []
+requires_data:
+- input: quarterly earnings results and SEC filings
+  provider: sec_edgar
+  category: sec_filings
+  status: ok
+- input: revenue breakdown by segment and geography
+  provider: moomoo
+  category: revenue_breakdown
+  status: gateway
+- input: guidance changes and prior guidance
+  provider: benzinga
+  category: guidance_revisions
+  status: ok
+- input: stock price history for valuation charts
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: earnings call transcript
+  provider: ""
+  category: ""
+  status: gap
+- input: consensus estimates
+  provider: ""
+  category: ""
+  status: gap
+requires_tools:
+- DOCX
+- XLS
 requires_skills: []
 compatible_models: []
 ---

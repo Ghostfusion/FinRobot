@@ -16,7 +16,23 @@ triggers:
 - estate plan
 - cash flow analysis
 - plan update
-requires_data: []
+requires_data:
+- input: historical market returns by asset class for projections
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: inflation and interest rate assumptions
+  provider: fred
+  category: macro_data
+  status: ok
+- input: account balances, income, expenses, and liabilities
+  provider: ""
+  category: ""
+  status: gap
+- input: Social Security and pension benefit estimates
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

@@ -11,8 +11,27 @@ description: Create institutional-quality equity research initiation reports thr
 triggers:
 - initiating
 - coverage
-requires_data: []
-requires_tools: []
+requires_data:
+- input: historical financial statements and SEC filings
+  provider: sec_edgar
+  category: sec_filings
+  status: ok
+- input: historical stock price data
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: comparable company financials and valuation multiples
+  provider: tiingo
+  category: fundamental_data
+  status: ok
+- input: risk-free rate curve for DCF
+  provider: federal_reserve
+  category: risk_free_curve
+  status: ok
+requires_tools:
+- DOCX
+- XLSX
+- Read
 requires_skills: []
 compatible_models: []
 ---

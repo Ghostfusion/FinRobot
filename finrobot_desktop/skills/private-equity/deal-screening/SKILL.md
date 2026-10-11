@@ -14,7 +14,15 @@ triggers:
 - should we look at this
 - triage this teaser
 - deal screening
-requires_data: []
+requires_data:
+- input: target CIM, teaser, and broker materials
+  provider: ""
+  category: ""
+  status: gap
+- input: fund investment criteria
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

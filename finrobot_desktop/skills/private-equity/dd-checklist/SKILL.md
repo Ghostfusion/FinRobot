@@ -14,7 +14,15 @@ triggers:
 - diligence request list
 - what do we still need
 - data room review
-requires_data: []
+requires_data:
+- input: target company profile and deal parameters
+  provider: ""
+  category: ""
+  status: gap
+- input: data room contents and existing diligence documents
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

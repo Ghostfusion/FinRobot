@@ -12,7 +12,8 @@ triggers:
 - deck
 - refresh
 requires_data: []
-requires_tools: []
+requires_tools:
+- ask_user_question
 requires_skills: []
 compatible_models: []
 ---

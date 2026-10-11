@@ -11,7 +11,27 @@ description: Build professional financial services data packs from various sourc
 triggers:
 - datapack
 - builder
-requires_data: []
+requires_data:
+- input: company financial statements
+  provider: tiingo
+  category: fundamental_data
+  status: ok
+- input: peer financial statements
+  provider: tiingo
+  category: fundamental_data
+  status: ok
+- input: SEC filings
+  provider: sec_edgar
+  category: sec_filings
+  status: ok
+- input: market size and industry data
+  provider: ""
+  category: ""
+  status: gap
+- input: operational and industry KPI data
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

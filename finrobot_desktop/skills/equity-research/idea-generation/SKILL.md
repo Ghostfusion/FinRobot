@@ -16,7 +16,35 @@ triggers:
 - screen for
 - new ideas
 - pitch me something
-requires_data: []
+requires_data:
+- input: company fundamentals and valuation metrics for screens
+  provider: tiingo
+  category: fundamental_data
+  status: ok
+- input: share prices and market caps
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: insider transactions
+  provider: moomoo
+  category: smart_money
+  status: gateway
+- input: short interest
+  provider: moomoo
+  category: short_interest
+  status: gateway
+- input: institutional ownership
+  provider: moomoo
+  category: institution_data
+  status: gateway
+- input: analyst ratings and coverage
+  provider: benzinga
+  category: analyst_ratings
+  status: ok
+- input: recent IPOs and offerings
+  provider: benzinga
+  category: offerings_calendar
+  status: ok
 requires_tools: []
 requires_skills: []
 compatible_models: []

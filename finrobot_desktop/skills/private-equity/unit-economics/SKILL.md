@@ -16,7 +16,19 @@ triggers:
 - net retention
 - revenue quality
 - customer economics
-requires_data: []
+requires_data:
+- input: customer-level ARR and cohort data
+  provider: ""
+  category: ""
+  status: gap
+- input: customer acquisition, churn, and expansion data
+  provider: ""
+  category: ""
+  status: gap
+- input: revenue and gross margin by revenue stream
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

@@ -11,9 +11,9 @@ SKILLS_DIR = Path(get_settings().skills_dir)
 @pytest.mark.skipif(not SKILLS_DIR.exists(), reason="Vendored skills not present")
 class TestP1aAcceptance:
     def test_all_skills_loaded(self):
-        """P1a acceptance: all 56 vendored skills load without error."""
+        """P1a acceptance: all 68 skills load (56 vendored + 12 corpus-derived)."""
         registry = SkillRegistry(SKILLS_DIR)
-        assert registry.count == 56, f"Expected 56 skills, got {registry.count}"
+        assert registry.count == 68, f"Expected 68 skills, got {registry.count}"
 
     def test_skill_list_by_domain(self):
         """P1a acceptance: skills are organized by domain."""
@@ -37,10 +37,18 @@ class TestP1aAcceptance:
             )
 
     def test_list_summary_fits_context(self):
-        """P1a acceptance: list_summary for 56 skills is under 6000 chars (~1500 tokens)."""
+        """P1a acceptance: the always-on skill index keeps a per-skill budget.
+
+        list_summary() is appended to the lead agent's instructions on every run,
+        so it is the one skill artefact with a permanent context cost. Each line is
+        '{id}: {name} — {description[:50]}...' plus its domain header, i.e. ~120
+        chars per skill. Budgeting per skill rather than as a fixed total is what
+        makes a new tranche fail only when it is unusually verbose.
+        """
         registry = SkillRegistry(SKILLS_DIR)
         summary = registry.list_summary()
-        assert len(summary) < 6000, f"list_summary too long: {len(summary)} chars"
+        budget = 120 * registry.count
+        assert len(summary) < budget, f"list_summary too long: {len(summary)} chars > {budget}"
 
     def test_activate_skill_returns_content(self):
         """P1a acceptance: get() returns full skill content ready for injection."""

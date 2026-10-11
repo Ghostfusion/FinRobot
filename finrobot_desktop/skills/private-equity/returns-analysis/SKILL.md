@@ -15,7 +15,19 @@ triggers:
 - what's the return at
 - model the returns
 - back of the envelope
-requires_data: []
+requires_data:
+- input: entry financials and deal terms (EBITDA, entry multiple, net debt, fees)
+  provider: ""
+  category: ""
+  status: gap
+- input: debt financing terms (leverage, rate, amortization)
+  provider: ""
+  category: ""
+  status: gap
+- input: operating and exit assumptions (growth, margins, exit multiple, hold period)
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

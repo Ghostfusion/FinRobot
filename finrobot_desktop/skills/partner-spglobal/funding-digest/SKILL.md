@@ -11,8 +11,27 @@ description: Generate a polished one-page PowerPoint slide summarizing key takea
 triggers:
 - funding
 - digest
-requires_data: []
-requires_tools: []
+requires_data:
+- input: funding rounds and capital markets transactions
+  provider: ""
+  category: ""
+  status: gap
+- input: company profile and status
+  provider: ""
+  category: ""
+  status: gap
+- input: competitor lists
+  provider: ""
+  category: ""
+  status: gap
+requires_tools:
+- get_info_from_identifiers
+- get_rounds_of_funding_from_identifiers
+- get_funding_summary_from_identifiers
+- get_competitors_from_identifiers
+- get_rounds_of_funding_info_from_transaction_ids
+- get_company_summary_from_identifiers
+- present_files
 requires_skills: []
 compatible_models: []
 ---

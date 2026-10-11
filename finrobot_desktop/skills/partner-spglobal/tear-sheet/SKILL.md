@@ -11,7 +11,35 @@ description: Generate professional company tear sheets using S&P Capital IQ data
 triggers:
 - tear
 - sheet
-requires_data: []
+requires_data:
+- input: company financial statements
+  provider: tiingo
+  category: fundamental_data
+  status: ok
+- input: company profile and identifiers
+  provider: ""
+  category: ""
+  status: gap
+- input: stock prices and market capitalization
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: consensus estimates
+  provider: ""
+  category: ""
+  status: gap
+- input: earnings transcripts
+  provider: ""
+  category: ""
+  status: gap
+- input: M&A transactions
+  provider: ""
+  category: ""
+  status: gap
+- input: business relationships
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

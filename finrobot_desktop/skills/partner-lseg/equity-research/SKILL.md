@@ -11,8 +11,29 @@ description: Generate comprehensive equity research snapshots combining analyst 
 triggers:
 - equity
 - research
-requires_data: []
-requires_tools: []
+requires_data:
+- input: company fundamentals
+  provider: tiingo
+  category: fundamental_data
+  status: ok
+- input: historical equity prices
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: macroeconomic indicators
+  provider: fred
+  category: macro_data
+  status: ok
+- input: analyst consensus estimates
+  provider: ""
+  category: ""
+  status: gap
+requires_tools:
+- qa_ibes_consensus
+- qa_company_fundamentals
+- qa_historical_equity_price
+- tscc_historical_pricing_summaries
+- qa_macroeconomic
 requires_skills: []
 compatible_models: []
 ---

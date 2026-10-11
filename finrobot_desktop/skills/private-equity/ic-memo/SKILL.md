@@ -14,7 +14,23 @@ triggers:
 - deal write-up
 - prepare IC materials
 - recommendation memo
-requires_data: []
+requires_data:
+- input: target company historical financial statements
+  provider: ""
+  category: ""
+  status: gap
+- input: due diligence findings across commercial, financial, legal, and operational workstreams
+  provider: ""
+  category: ""
+  status: gap
+- input: deal terms, financing structure, and returns analysis
+  provider: ""
+  category: ""
+  status: gap
+- input: industry and market context
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

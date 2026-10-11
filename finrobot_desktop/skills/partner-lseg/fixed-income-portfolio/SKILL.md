@@ -12,8 +12,30 @@ triggers:
 - fixed
 - income
 - portfolio
-requires_data: []
-requires_tools: []
+requires_data:
+- input: government yield curves
+  provider: federal_reserve
+  category: risk_free_curve
+  status: ok
+- input: bond prices
+  provider: ""
+  category: ""
+  status: gap
+- input: bond reference data
+  provider: ""
+  category: ""
+  status: gap
+- input: bond cashflow schedules
+  provider: ""
+  category: ""
+  status: gap
+requires_tools:
+- bond_price
+- yieldbook_bond_reference
+- yieldbook_cashflow
+- yieldbook_scenario
+- interest_rate_curve
+- fixed_income_risk_analytics
 requires_skills: []
 compatible_models: []
 ---

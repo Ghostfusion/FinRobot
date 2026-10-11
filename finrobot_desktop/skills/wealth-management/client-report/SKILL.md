@@ -14,7 +14,23 @@ triggers:
 - quarterly report for [client]
 - generate reports
 - client statement
-requires_data: []
+requires_data:
+- input: current security prices for portfolio valuation
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: benchmark index returns
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: market news for quarterly commentary
+  provider: eodhd
+  category: news_data
+  status: ok
+- input: account holdings, transactions, fees, and dividends
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

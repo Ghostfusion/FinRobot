@@ -15,7 +15,23 @@ triggers:
 - who would buy this
 - strategic buyers
 - financial sponsors
-requires_data: []
+requires_data:
+- input: company financial statements
+  provider: tiingo
+  category: fundamental_data
+  status: ok
+- input: recent M&A activity
+  provider: ""
+  category: ""
+  status: gap
+- input: company profiles
+  provider: ""
+  category: ""
+  status: gap
+- input: private equity sponsor and fund data
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

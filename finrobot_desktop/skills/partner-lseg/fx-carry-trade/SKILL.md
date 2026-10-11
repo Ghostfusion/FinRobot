@@ -12,8 +12,34 @@ triggers:
 - fx
 - carry
 - trade
-requires_data: []
-requires_tools: []
+requires_data:
+- input: government yield curves
+  provider: federal_reserve
+  category: risk_free_curve
+  status: ok
+- input: FX spot rates
+  provider: ""
+  category: ""
+  status: gap
+- input: FX forward curves
+  provider: ""
+  category: ""
+  status: gap
+- input: FX implied vol surfaces
+  provider: ""
+  category: ""
+  status: gap
+- input: historical FX spot prices
+  provider: ""
+  category: ""
+  status: gap
+requires_tools:
+- fx_spot_price
+- fx_forward_price
+- fx_forward_curve
+- fx_vol_surface
+- tscc_historical_pricing_summaries
+- interest_rate_curve
 requires_skills: []
 compatible_models: []
 ---

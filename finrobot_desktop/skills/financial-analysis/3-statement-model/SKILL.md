@@ -11,7 +11,11 @@ description: Complete, populate and fill out 3-statement financial model templat
 triggers:
 - statement
 - model
-requires_data: []
+requires_data:
+- input: SEC filings (10-K, 10-Q)
+  provider: sec_edgar
+  category: sec_filings
+  status: ok
 requires_tools: []
 requires_skills: []
 compatible_models: []

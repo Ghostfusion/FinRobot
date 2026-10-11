@@ -11,8 +11,63 @@ triggers:
 - earnings
 - preview
 - single
-requires_data: []
-requires_tools: []
+requires_data:
+- input: stock prices and market capitalization
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: company financial statements
+  provider: tiingo
+  category: fundamental_data
+  status: ok
+- input: segment revenue
+  provider: moomoo
+  category: revenue_breakdown
+  status: gateway
+- input: consensus estimates
+  provider: ""
+  category: ""
+  status: gap
+- input: earnings transcripts
+  provider: ""
+  category: ""
+  status: gap
+- input: earnings calendar
+  provider: benzinga
+  category: earnings_calendar
+  status: ok
+- input: company news
+  provider: eodhd
+  category: news_data
+  status: ok
+- input: analyst ratings and price targets
+  provider: benzinga
+  category: analyst_ratings
+  status: ok
+- input: company profile
+  provider: ""
+  category: ""
+  status: gap
+- input: competitor lists
+  provider: ""
+  category: ""
+  status: gap
+requires_tools:
+- search
+- kfinance
+- get_next_earnings_from_identifiers
+- get_earnings_from_identifiers
+- get_financial_line_item_from_identifiers
+- get_consensus_estimates_from_identifiers
+- get_latest
+- get_info_from_identifiers
+- get_company_summary_from_identifiers
+- get_latest_earnings_from_identifiers
+- get_transcript_from_key_dev_id
+- get_competitors_from_identifiers
+- get_prices_from_identifiers
+- get_capitalization_from_identifiers
+- get_segments_from_identifiers
 requires_skills: []
 compatible_models: []
 ---

@@ -14,7 +14,31 @@ triggers:
 - pre-earnings
 - earnings setup
 - preview Q[X] for [company]
-requires_data: []
+requires_data:
+- input: consensus estimates
+  provider: ""
+  category: ""
+  status: gap
+- input: earnings date and reporting timing
+  provider: benzinga
+  category: earnings_calendar
+  status: ok
+- input: prior quarter earnings results
+  provider: tiingo
+  category: fundamental_data
+  status: ok
+- input: recent stock price performance
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: options-implied move
+  provider: moomoo
+  category: expected_move
+  status: gateway
+- input: historical earnings-day price reactions
+  provider: moomoo
+  category: earnings_surprise
+  status: gateway
 requires_tools: []
 requires_skills: []
 compatible_models: []

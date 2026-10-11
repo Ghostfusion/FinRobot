@@ -11,6 +11,11 @@ documents themselves are literature-derived, not tested on FinRobot's data. Per 
 agent change must be a defect fix, so every **build** row needs an explicit owner decision before code is
 written; the `defect` rows do not.
 
+**Not to be confused with the skill track.** This file is the *build* backlog for FinRobot's own
+code. The separate question — which of the 46 documents can become an agent skill, and their
+verdicts — is recorded in [`SKILLS_PLAN.md`](SKILLS_PLAN.md); 12 of the 46 are now shipped as
+skills without any row here.
+
 **Status key.** `ready` buildable in this repo today · `needs-dep` needs a new dependency ·
 `needs-data` needs a feed no provider serves · `needs-owner` feature, owner sign-off required ·
 `defect` fixable without new scope · `landed` already shipped · `blocked` depends on another row. Effort

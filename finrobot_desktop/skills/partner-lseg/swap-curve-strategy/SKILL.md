@@ -12,8 +12,29 @@ triggers:
 - swap
 - curve
 - strategy
-requires_data: []
-requires_tools: []
+requires_data:
+- input: government yield curves
+  provider: federal_reserve
+  category: risk_free_curve
+  status: ok
+- input: macroeconomic indicators
+  provider: fred
+  category: macro_data
+  status: ok
+- input: swap rates
+  provider: ""
+  category: ""
+  status: gap
+- input: inflation breakeven curves
+  provider: ""
+  category: ""
+  status: gap
+requires_tools:
+- ir_swap
+- interest_rate_curve
+- inflation_curve
+- tscc_historical_pricing_summaries
+- qa_macroeconomic
 requires_skills: []
 compatible_models: []
 ---

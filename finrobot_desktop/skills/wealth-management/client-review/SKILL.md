@@ -14,7 +14,23 @@ triggers:
 - quarterly review
 - prep for [client name]
 - client meeting
-requires_data: []
+requires_data:
+- input: current security prices and returns for performance attribution
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: benchmark index returns
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: macro indicators for market overview
+  provider: fred
+  category: macro_data
+  status: ok
+- input: account data, IPS, and prior meeting notes
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

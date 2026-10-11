@@ -15,7 +15,27 @@ triggers:
 - info memo
 - draft CIM
 - sell-side materials
-requires_data: []
+requires_data:
+- input: historical financial statements
+  provider: tiingo
+  category: fundamental_data
+  status: ok
+- input: management forecasts and budgets
+  provider: ""
+  category: ""
+  status: gap
+- input: industry market size data
+  provider: ""
+  category: ""
+  status: gap
+- input: customer and contract data
+  provider: ""
+  category: ""
+  status: gap
+- input: quality of earnings report
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

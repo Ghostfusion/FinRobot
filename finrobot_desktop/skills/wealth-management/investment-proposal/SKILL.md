@@ -14,7 +14,19 @@ triggers:
 - pitch new client
 - proposal for [client]
 - new client presentation
-requires_data: []
+requires_data:
+- input: market return data for growth projections and benchmark comparisons
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: prospect's existing holdings, AUM, and current fee schedule
+  provider: ""
+  category: ""
+  status: gap
+- input: firm advisory fee schedule and fund expense data
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

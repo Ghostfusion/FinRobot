@@ -15,7 +15,23 @@ triggers:
 - tax losses
 - unrealized losses
 - year-end tax planning
-requires_data: []
+requires_data:
+- input: current security prices for unrealized loss screening
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: dividend records for DRIP wash sale checks
+  provider: eodhd
+  category: corporate_actions
+  status: ok
+- input: taxable account positions, cost basis, and holding periods
+  provider: ""
+  category: ""
+  status: gap
+- input: realized gains/losses, carryforwards, and household purchase history
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

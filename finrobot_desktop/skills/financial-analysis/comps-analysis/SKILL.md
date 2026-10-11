@@ -10,7 +10,23 @@ description: Build institutional-grade comparable company analyses with operatin
 triggers:
 - comps
 - analysis
-requires_data: []
+requires_data:
+- input: peer financial statements
+  provider: tiingo
+  category: fundamental_data
+  status: ok
+- input: peer share prices and market capitalization
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: analyst consensus estimates
+  provider: ""
+  category: ""
+  status: gap
+- input: SEC filings (10-K, 10-Q)
+  provider: sec_edgar
+  category: sec_filings
+  status: ok
 requires_tools: []
 requires_skills: []
 compatible_models: []

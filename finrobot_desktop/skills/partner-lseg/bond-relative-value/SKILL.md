@@ -12,8 +12,30 @@ triggers:
 - bond
 - relative
 - value
-requires_data: []
-requires_tools: []
+requires_data:
+- input: government yield curves
+  provider: federal_reserve
+  category: risk_free_curve
+  status: ok
+- input: bond prices
+  provider: ""
+  category: ""
+  status: gap
+- input: credit spread curves
+  provider: ""
+  category: ""
+  status: gap
+- input: historical bond prices
+  provider: ""
+  category: ""
+  status: gap
+requires_tools:
+- bond_price
+- interest_rate_curve
+- credit_curve
+- yieldbook_scenario
+- tscc_historical_pricing_summaries
+- fixed_income_risk_analytics
 requires_skills: []
 compatible_models: []
 ---

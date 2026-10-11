@@ -14,7 +14,15 @@ triggers:
 - expert call questions
 - customer reference questions
 - meeting prep for [company]
-requires_data: []
+requires_data:
+- input: target company CIM, data room findings, and prior meeting notes
+  provider: ""
+  category: ""
+  status: gap
+- input: industry growth and margin benchmarks
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

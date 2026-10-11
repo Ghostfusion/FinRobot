@@ -38,12 +38,17 @@ The corpora overlap only lightly, so each contributes genuinely distinct ground:
    row that serves it — provider, category, probe status — or marks it **gap**.
 5. **Say what to do first.** §5 ranks a first implementation for FinRobot, and §4 states how to validate
    it — the pitfalls the papers themselves report.
+6. **Convert, when the inputs are served.** A document whose §3 table is mostly served converts to an
+   agent skill via `finrobot_desktop/scripts/convert_strategy_docs.py`; the verdict for every one of the
+   46 documents is in [`SKILLS_PLAN.md`](SKILLS_PLAN.md).
 
 ## Layout
 
 ```
 strategies/
   README.md            # this index
+  SKILLS_PLAN.md       # the 46 verdicts, and how a document converts to an agent skill
+  skill_meta/<id>.yaml # reviewed per-skill metadata (description, triggers, persona, output)
   endpoints.json       # live probe snapshot of every provider endpoint (shared)
   data-endpoints.md    # the same snapshot, readable
   TODO.md              # backlog derived from the reviews (qfin-tr trio, so far)

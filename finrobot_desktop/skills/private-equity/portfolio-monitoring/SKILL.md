@@ -14,7 +14,19 @@ triggers:
 - how is [company] performing
 - covenant check
 - portfolio update
-requires_data: []
+requires_data:
+- input: portfolio company monthly/quarterly financial package
+  provider: ""
+  category: ""
+  status: gap
+- input: company budget and plan
+  provider: ""
+  category: ""
+  status: gap
+- input: credit agreement and covenant terms
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

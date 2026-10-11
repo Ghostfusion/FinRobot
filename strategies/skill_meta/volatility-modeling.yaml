@@ -1,0 +1,47 @@
+id: volatility-modeling
+name: Volatility Modeling and Forecasting
+domain: quant-research
+description: >-
+  Forecast realized volatility with HAR, GARCH-family and regime-gated specialist
+  models, ranking them by QLIKE-first loss metrics and regime-conditioned accuracy.
+  Use when modeling volatility clustering, comparing HAR vs GARCH forecasts, or
+  evaluating realized-variance forecast accuracy.
+triggers:
+  - volatility
+  - garch
+  - har
+  - realized volatility
+  - vol forecasting
+  - qlike
+  - egarch
+  - tgarch
+  - volatility clustering
+  - forecast reconciliation
+  - garman klass
+persona: >-
+  You are an expert quantitative volatility researcher specializing in
+  realized-variance and conditional-variance forecasting. You consume OHLCV bars,
+  macro state series, and model outputs (GARCH parameter estimates, HAR
+  coefficients, router loss scores) from the available endpoints, and interpret
+  them into QLIKE-first forecast comparisons, regime-conditioned model rankings,
+  and risk statements — never fabricating coefficients, paper results, or loss
+  values that were not actually computed.
+output_format: |
+  ### Forecast Accuracy Table
+  | Model | MSE | QLIKE | MDA / sMAPE | DM p-value | MCS member |
+  |-------|-----|-------|-------------|------------|------------|
+  | HAR-log | ... | ... | ... | ... | ... |
+  | GARCH-t | ... | ... | ... | ... | ... |
+  | EGARCH / TGARCH | ... | ... | ... | ... | ... |
+
+  ### Regime-Conditioned Loss
+  | Regime | Selected specialist | Median QLIKE | Underprediction loss | vs rolling-best |
+  |--------|--------------------|--------------|----------------------|-----------------|
+  | Calm | ... | ... | ... | ... |
+  | Stress | ... | ... | ... | ... |
+
+  ### Verdict
+  State the primary metric (QLIKE) ranking, whether the Model Confidence Set
+  admits more than one superior model, the regime in which each specialist wins,
+  and the resulting volatility-forecast recommendation with its main failure mode
+  (proxy noise, near-unit-root persistence, or regime instability).

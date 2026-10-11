@@ -15,7 +15,19 @@ triggers:
 - EBITDA bridge
 - operating plan
 - value creation levers
-requires_data: []
+requires_data:
+- input: target baseline financials and operating metrics
+  provider: ""
+  category: ""
+  status: gap
+- input: organizational structure and management assessment
+  provider: ""
+  category: ""
+  status: gap
+- input: diligence-identified value creation opportunities
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

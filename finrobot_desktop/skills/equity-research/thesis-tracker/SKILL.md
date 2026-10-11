@@ -14,7 +14,23 @@ triggers:
 - thesis check
 - add data point to [company]
 - review my positions
-requires_data: []
+requires_data:
+- input: quarterly results and reported financial metrics
+  provider: tiingo
+  category: fundamental_data
+  status: ok
+- input: company news and corporate developments
+  provider: eodhd
+  category: news_data
+  status: ok
+- input: earnings and catalyst dates
+  provider: benzinga
+  category: earnings_calendar
+  status: ok
+- input: share price and market snapshot
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
 requires_tools: []
 requires_skills: []
 compatible_models: []

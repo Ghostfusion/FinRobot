@@ -12,8 +12,41 @@ triggers:
 - who are the competitors to X
 - benchmark X against peers
 - build a market map
-requires_data: []
-requires_tools: []
+requires_data:
+- input: competitor financial statements
+  provider: tiingo
+  category: fundamental_data
+  status: ok
+- input: market prices and market capitalization
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: annual reports and 10-K filings
+  provider: sec_edgar
+  category: sec_filings
+  status: ok
+- input: news for recent developments
+  provider: eodhd
+  category: news_data
+  status: ok
+- input: earnings calls and investor presentations
+  provider: ""
+  category: ""
+  status: gap
+- input: sell-side research and analyst estimates
+  provider: ""
+  category: ""
+  status: gap
+- input: industry reports and market sizing
+  provider: ""
+  category: ""
+  status: gap
+- input: M&A transactions
+  provider: ""
+  category: ""
+  status: gap
+requires_tools:
+- ask_user_question
 requires_skills: []
 compatible_models: []
 ---

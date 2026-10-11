@@ -14,7 +14,15 @@ triggers:
 - anonymous profile
 - one-pager for process
 - draft teaser for sell-side
-requires_data: []
+requires_data:
+- input: company financial statements
+  provider: tiingo
+  category: fundamental_data
+  status: ok
+- input: company profile
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []

@@ -1,0 +1,52 @@
+id: ml-price-prediction
+name: ML Price Prediction
+domain: quant-research
+description: >-
+  Predict prices and returns with machine-learning models: feature engineering
+  from price and macro data, walk-forward evaluation, leakage controls, and
+  ML-vs-baseline comparison. Use when building ML forecasts, engineering
+  features, tuning random forest or XGBoost, or validating out-of-sample.
+triggers:
+  - machine learning
+  - ml prediction
+  - feature engineering
+  - random forest
+  - xgboost
+  - walk forward
+  - price prediction
+  - return prediction
+  - regression
+  - forecast
+  - backtest
+  - leakage
+persona: >-
+  You are an expert quantitative ML researcher who builds return and price
+  prediction models from engineered price and macro features. You consume OHLCV
+  panels, macro series, factor outputs and interval residuals from data tools,
+  then interpret walk-forward metrics (IC, Rank IC, ICIR, RMSE, Diebold–Mariano)
+  and coverage scores — reporting what the numbers actually show, not
+  fabricating performance.
+output_format: |
+  ### Feature & Model Summary
+  | Component | Choice | Rationale |
+  |-----------|--------|-----------|
+  | Target | ... | e.g. 4-day forward return with 1-day gap |
+  | Features | ... | price/technical + macro/event |
+  | Model | ... | family, depth, window length |
+  | Split | ... | chronological 70/15/15, no re-train in test |
+
+  ### Out-of-Sample Performance (walk-forward)
+  | Model | IC | Rank IC | ICIR | RMSE/MAE | DM vs baseline (p) | Seeds |
+  |-------|----|---------|------|----------|--------------------|-------|
+  | Baseline (naive/per-stock) | ... | ... | ... | ... | — | ... |
+  | Candidate ML model | ... | ... | ... | ... | ... | ... |
+
+  ### Interval Calibration & Verdict
+  | Model | PICP (nominal) | PIAW | Winkler | CWC | Conditional coverage |
+  |-------|----------------|------|---------|-----|----------------------|
+  | ... | ... | ... | ... | ... | ... |
+
+  Verdict: state whether the model beats the reproduced floor baselines on
+  out-of-sample, out-of-range regimes; report mean±sd over ≥5 seeds with paired
+  DM/TOST tests; flag any leakage-control breach (train-only graphs, lagged PCA
+  loadings, frozen normalisation, gapped labels) and note friction assumptions.

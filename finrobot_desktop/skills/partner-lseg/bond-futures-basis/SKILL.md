@@ -12,8 +12,33 @@ triggers:
 - bond
 - futures
 - basis
-requires_data: []
-requires_tools: []
+requires_data:
+- input: government yield curves
+  provider: federal_reserve
+  category: risk_free_curve
+  status: ok
+- input: cash bond prices
+  provider: ""
+  category: ""
+  status: gap
+- input: bond futures prices
+  provider: ""
+  category: ""
+  status: gap
+- input: historical futures and bond prices
+  provider: ""
+  category: ""
+  status: gap
+- input: credit spread curves
+  provider: ""
+  category: ""
+  status: gap
+requires_tools:
+- bond_future_price
+- bond_price
+- interest_rate_curve
+- tscc_historical_pricing_summaries
+- credit_curve
 requires_skills: []
 compatible_models: []
 ---

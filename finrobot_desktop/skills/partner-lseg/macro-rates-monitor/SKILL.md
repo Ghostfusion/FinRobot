@@ -12,8 +12,29 @@ triggers:
 - macro
 - rates
 - monitor
-requires_data: []
-requires_tools: []
+requires_data:
+- input: macroeconomic indicators
+  provider: fred
+  category: macro_data
+  status: ok
+- input: government yield curves
+  provider: federal_reserve
+  category: risk_free_curve
+  status: ok
+- input: swap rates
+  provider: ""
+  category: ""
+  status: gap
+- input: inflation breakeven curves
+  provider: ""
+  category: ""
+  status: gap
+requires_tools:
+- qa_macroeconomic
+- interest_rate_curve
+- inflation_curve
+- ir_swap
+- tscc_historical_pricing_summaries
 requires_skills: []
 compatible_models: []
 ---

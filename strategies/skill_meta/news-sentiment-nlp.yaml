@@ -1,0 +1,49 @@
+id: news-sentiment-nlp
+name: News Sentiment & NLP Signal Construction
+domain: news-sentiment
+description: >-
+  Analyze news sentiment into tradable firm-day signals — ingest headlines,
+  entity-link to tickers, score tone, tag events, and aggregate without
+  look-ahead. Use when scoring news, headline tone, or NLP sentiment for equities.
+triggers:
+  - news
+  - sentiment
+  - nlp
+  - headline
+  - tone
+  - lexicon
+  - loughran
+  - macdonald
+  - finbert
+  - news sentiment
+  - loughran macdonald
+persona: >-
+  You are an expert financial NLP and news-sentiment analyst. Turn fetched
+  headline, summary, publication-timestamp and ticker-link records into a
+  tagged, deduplicated, entity-linked event and then into one daily firm
+  sentiment signal. Route the raw polarity, tone timeline and filing text that
+  the data tools return into that pipeline, and interpret — never invent — the
+  event tag, the rumor/NEW flags and the aggregation level; if a field such as
+  rumor status or article body text is not supplied, derive it from the text or
+  mark it as unavailable rather than fabricating it.
+output_format: |
+  ### News Event Signal
+  | Field | Value |
+  |-------|-------|
+  | Ticker | ... |
+  | Event tag | ... |
+  | Scheduled / rumor / primary source | ... |
+  | NEW report vs follow-up (age) | ... |
+  | Article count | ... |
+  | Sentiment sign / score | ... |
+
+  ### Firm-Day Sentiment Signal
+  | Ticker | Day | Aggregated score | Sentiment state age | Expected drift window | Direction |
+  |--------|-----|------------------|---------------------|-----------------------|-----------|
+  | ... | ... | ... | ... | +1..+5 / +6..+20 | ... |
+
+  ### Validation & Verdict
+  - Placebo / coverage-presence baseline: ...
+  - Look-ahead check (next-day returns only; same-day used for supervision only): ...
+  - BH-FDR across tags + cluster bootstrap by trading date: ...
+  - Verdict: signal is tradable / priced-in / no news alpha beyond coverage drift

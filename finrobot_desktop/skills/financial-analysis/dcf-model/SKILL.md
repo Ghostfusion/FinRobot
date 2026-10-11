@@ -11,7 +11,27 @@ description: Real DCF (Discounted Cash Flow) model creation for equity valuation
 triggers:
 - dcf
 - model
-requires_data: []
+requires_data:
+- input: historical financial statements
+  provider: tiingo
+  category: fundamental_data
+  status: ok
+- input: market prices and beta
+  provider: eodhd
+  category: core_stock_apis
+  status: ok
+- input: risk-free rate (10-year Treasury yield)
+  provider: federal_reserve
+  category: risk_free_curve
+  status: ok
+- input: SEC filings (10-K)
+  provider: sec_edgar
+  category: sec_filings
+  status: ok
+- input: consensus estimates
+  provider: ""
+  category: ""
+  status: gap
 requires_tools: []
 requires_skills: []
 compatible_models: []
