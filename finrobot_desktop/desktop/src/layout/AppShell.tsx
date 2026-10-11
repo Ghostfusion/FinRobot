@@ -14,6 +14,7 @@ import { AiOnboardingGate } from '../components/AiOnboardingGate'
 import { BootSplash } from '../components/BootSplash'
 import { AppFooter } from '../components/AppFooter'
 import { useHealth } from '../hooks/useHealth'
+import { useI18n } from '../i18n'
 import { useUiStore } from '../stores/uiStore'
 import { useUpdaterStore } from '../stores/updaterStore'
 import { pickDirectory, isTauri, DEFAULT_WORKSPACE_PATH } from '../lib/tauri'
@@ -24,6 +25,7 @@ const WELCOME_SHOWN_KEY = 'finrobot-welcome-shown'
 export function AppShell(): React.ReactElement {
   const workspacePath = useUiStore((s) => s.workspacePath)
   const setWorkspacePath = useUiStore((s) => s.setWorkspacePath)
+  const { t } = useI18n()
   const location = useLocation()
 
   // Sidecar boot gate: while the backend has never answered this session (and
@@ -96,6 +98,14 @@ export function AppShell(): React.ReactElement {
 
   return (
     <div className={`app-shell${onHome ? ' cockpit-bg cockpit-shell' : ''}`}>
+      {/* Keyboard escape from the title bar straight into the reading column.
+          Rendered first so it is the first focusable element; visually hidden
+          until focused (.skip-link in App.css). The report body is the largest
+          scroll surface in the app and the tab order otherwise walks the whole
+          title bar + chat rail before reaching it. */}
+      <a href="#main-scroll" className="skip-link">
+        {t('shell.skipToContent')}
+      </a>
       <TitleBar />
       <div className="app-body">
         <main id="main-scroll" className="main-content">

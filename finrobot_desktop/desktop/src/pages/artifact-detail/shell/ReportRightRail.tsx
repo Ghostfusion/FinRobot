@@ -82,18 +82,32 @@ function TimelineRow({
 }): React.ReactElement {
   const target = a.target_price
   const hasTarget = target !== null && target !== undefined
-  // Timeline summaries do not yet carry target_low/high, so a null target cannot
-  // render the range here. Still, it must not look like a missing calculation:
-  // in equity-research history a null point target means the point was withheld.
-  // Reason-aware (sibling of the chips + left-rail card): an IN-BAND withhold
-  // (price inside the fair-value band, a.fairly_valued) is a confident HOLD →
-  // "Fairly Valued"; a genuine withhold (M&A / single divergent method) keeps
-  // the neutral "WITHHELD" token.
-  const targetLabel = hasTarget
-    ? `$${target.toFixed(2)}`
-    : a.fairly_valued
-      ? t('targetRange.fairValueLabel')
-      : verdictLabel('WITHHELD', locale)
+  // The withheld-target state reads as a RANGE when the artifact carries the band
+  // (target_low/high, projected from valuation_synthesis): for an in-band withhold
+  // the band IS the conclusion, and a bare "WITHHELD" threw that away. Falls back
+  // to the word token when there is no band — it must never look like a missing
+  // calculation. Reason-aware (sibling of the chips + left-rail card): an IN-BAND
+  // withhold (price inside the fair-value band, a.fairly_valued) is a confident
+  // HOLD → "Fairly Valued"; a genuine withhold (M&A / single divergent method)
+  // keeps the neutral "WITHHELD" token.
+  const range =
+    a.target_low !== null &&
+    a.target_low !== undefined &&
+    a.target_high !== null &&
+    a.target_high !== undefined &&
+    a.target_low !== a.target_high
+      ? `$${a.target_low.toFixed(2)}–$${a.target_high.toFixed(2)}`
+      : null
+  const withdrawnLabel = a.fairly_valued
+    ? t('targetRange.fairValueLabel')
+    : verdictLabel('WITHHELD', locale)
+  const targetLabel = hasTarget ? `$${target.toFixed(2)}` : (range ?? withdrawnLabel)
+  // Hover explanation for the substitute — the row has no room for it inline.
+  const targetTitle = hasTarget
+    ? undefined
+    : range
+      ? `${withdrawnLabel} · ${t('report.timeline.withheldRange')}`
+      : undefined
   return (
     <button
       type="button"
@@ -168,6 +182,7 @@ function TimelineRow({
           }}
         >
           <span
+            title={targetTitle}
             style={{
               fontSize: 12.5,
               color: hasTarget ? 'var(--text-secondary)' : 'var(--text-dim)',

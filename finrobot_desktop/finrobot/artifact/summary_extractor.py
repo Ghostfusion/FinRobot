@@ -14,6 +14,11 @@ ArtifactMeta / ArtifactInputs are needed, the data is already there:
 - `target_date` is unset by every current pipeline, so we default to
   created_at + 365 days whenever a target_price is available. Pipelines can
   override later by writing `structured["thesis"]["target_date"]`.
+- `target_low` / `target_high` mirror the cross-method fair-value band
+  `structured["valuation_synthesis"]["target_low" | "target_high"]` — the band
+  the version-timeline row shows when the point target is withheld. Absent /
+  non-numeric / non-finite bounds extract as None; they are never derived from
+  any other field.
 
 Lookups are best-effort. Missing / malformed values return None so the
 summary still loads; old artifacts therefore appear with all four fields
@@ -22,6 +27,7 @@ None until the user re-runs the pipeline.
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -72,6 +78,25 @@ def extract_target_price(artifact: "Artifact") -> float | None:
             return v
 
     return None
+
+
+def extract_target_range(artifact: "Artifact") -> tuple[float | None, float | None]:
+    """Cross-method fair-value band ``(low, high)`` from the valuation synthesis.
+
+    Mirrors ``structured["valuation_synthesis"]["target_low" | "target_high"]`` —
+    the band the version-timeline row renders when the point target is withheld
+    (``valuation_withheld``). Each bound is coerced independently; an absent
+    ``valuation_synthesis`` block, a missing key, or a non-numeric / non-finite
+    value yields None for that bound. The bounds are never derived from any
+    other field.
+    """
+    synthesis = artifact.outputs.structured.get("valuation_synthesis")
+    if not isinstance(synthesis, dict):
+        return None, None
+    return (
+        _coerce_finite_float(synthesis.get("target_low")),
+        _coerce_finite_float(synthesis.get("target_high")),
+    )
 
 
 # Legacy-only neutral display token. Pre-Phase-2 artifacts stored
@@ -202,6 +227,19 @@ def _coerce_positive_float(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return f if f > 0 else None
+
+
+def _coerce_finite_float(value: Any) -> float | None:
+    """Positive finite float or None — the band bounds share target-price rules.
+
+    ``_coerce_positive_float`` already drops None / non-numeric / non-positive;
+    this adds the finite guard so ``inf`` (which is > 0) never leaks into the
+    projected band.
+    """
+    f = _coerce_positive_float(value)
+    if f is None or not math.isfinite(f):
+        return None
+    return f
 
 
 def extract_primary_provider(artifact: "Artifact") -> str | None:

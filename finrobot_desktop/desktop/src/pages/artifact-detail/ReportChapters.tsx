@@ -1,11 +1,19 @@
-// The report body — 13 chapters rendered from a single artifact. Shared by the
-// in-app detail page (ArtifactDetailPage) and the standalone HTML export viewer
-// (src/export/viewer.tsx) so both render byte-identical chapter content,
-// interactions included (Recharts tooltips, heatmap, football field).
+// The report body — 14 numbered chapters plus the auxiliary sections (audit
+// banner, engine summary, compute caveats) rendered from a single artifact.
+// Shared by the in-app detail page (ArtifactDetailPage) and the standalone HTML
+// export viewer (src/export/viewer.tsx) so both render byte-identical chapter
+// content, interactions included (Recharts tooltips, heatmap, football field).
 //
-// This is ONLY the <main> column. The surrounding chrome (toolbar, TOC,
-// right-rail, status bar) lives in ArtifactDetailPage and is intentionally NOT
-// part of the export — the deliverable is the research, not the workstation UI.
+// Render order = the section manifest (reportSections.ts), and
+// ReportChapters.sections.test.tsx asserts the rendered DOM against it.
+//
+// This is ONLY the reading column. The surrounding chrome (toolbar, TOC, version
+// rail) lives in ArtifactDetailPage and is intentionally NOT part of the export —
+// the deliverable is the research, not the workstation UI.
+//
+// NOTE (2026-10-11): the rail's "what changed vs the prior version" entry points
+// at VersionDiffBanner, which is chrome and therefore NOT rendered here — it is
+// mounted by ArtifactDetailPage above this body. The export has no such section.
 
 import type { ArtifactDetail } from '../../hooks/useV5Artifacts'
 import type { ArtifactSummaryV5 } from '../../types/v5'
@@ -13,8 +21,10 @@ import { useI18n } from '../../i18n'
 import { deriveReportData, parseSurfacedContractFindings, layerComputeWarnings } from './reportData'
 import { ComputeWarningsPanel } from './ComputeWarningsPanel'
 import {
+  ChapterAnalysisSummary,
   ChapterAuditBanner,
   ChapterCover,
+  ChapterFilings,
   ChapterThesis,
   ChapterCompanyOverview,
   ChapterFinancialAnalysis,
@@ -72,7 +82,12 @@ export function ReportChapters({
   const financialSector = d.valuationSynthesis?.financial_sector ?? false
 
   return (
-    <main style={{ minWidth: 0, padding: '12px 0 60px' }}>
+    // NOT <main>: the app shell already owns the document's single <main
+    // id="main-scroll"> (AppShell.tsx), and a nested <main> is invalid — a second
+    // landmark with the same role, which is exactly what a screen-reader user
+    // must not have to disambiguate. The standalone export supplies its own
+    // <main> (export/viewer.tsx), so the landmark is never lost.
+    <div style={{ minWidth: 0, padding: '12px 0 60px' }}>
       <ChapterAuditBanner audit={d.numericAudit} contractFindings={contractFindings} />
       {langMismatch && (
         <div
@@ -130,6 +145,11 @@ export function ReportChapters({
         // (beside the target it qualifies). null when the target sits in-band.
         streetContext={layered.streetContext}
       />
+      {/* The engine's own summary of the run — collapsed, content-gated, and
+          listed in the rail between the cover and the thesis (CFA front-matter →
+          summary → argument). The thesis below is the ARGUMENT; this is the
+          run's record. */}
+      <ChapterAnalysisSummary text={d.outputs.summary_text ?? null} />
       {/* Rating / target / conviction / band live ONCE on the cover above — the
           thesis chapter is the full ARGUMENT: narrative + takeaways → bull/bear
           case → valuation bridge (summary) → market-implied. Every number reads
@@ -203,6 +223,9 @@ export function ReportChapters({
         quoteCurrency={d.quoteCurrency}
         reportingCurrency={d.reportingCurrency}
       />
+      {/* Primary-source appendix: the filings + XBRL the numbers came from. Sits
+          with the data/ownership appendix material (data → filings → ownership). */}
+      <ChapterFilings filings={d.secFilings} xbrl={d.xbrlFacts} />
       <ChapterOwnershipGovernance ownership={d.ownership} reportingCurrency={d.reportingCurrency} />
       <ChapterDisclaimer
         artifactId={artifact.id}
@@ -211,10 +234,11 @@ export function ReportChapters({
       />
 
       <ComputeWarningsPanel
+        id="report-warnings"
         caveats={layered.caveats}
         methodologyNotes={layered.methodologyNotes}
         formulaWarnings={d.compute_version?.formula_warnings ?? []}
       />
-    </main>
+    </div>
   )
 }

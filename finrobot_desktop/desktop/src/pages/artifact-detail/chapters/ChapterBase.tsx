@@ -1,5 +1,5 @@
 // Shared structural primitives used by every chapter in the
-// 13-chapter investment-bank-grade long-scroll report.
+// 14-chapter investment-bank-grade long-scroll report.
 
 import type { CSSProperties, ReactNode } from 'react'
 import { useI18n } from '../../../i18n'
@@ -30,6 +30,11 @@ export function Chapter({
     <section
       id={id}
       data-testid={`chapter-${id}`}
+      // The section's accessible name is its own title — the title used to be a
+      // bare <span>, so the whole report had no document outline (no h1/h2 at
+      // all: a screen reader saw one undifferentiated run of text, and nothing
+      // could derive a two-level TOC). The title is now the chapter's <h2>.
+      aria-labelledby={`${id}-title`}
       style={{
         margin: '48px 0 0',
         scrollMarginTop: 84,
@@ -60,17 +65,21 @@ export function Chapter({
           >
             {num}
           </span>
-          <span
+          <h2
+            id={`${id}-title`}
             style={{
               fontFamily: 'var(--font-display)',
               fontSize: 25,
               fontWeight: 600,
               letterSpacing: '-0.3px',
               color: 'var(--text-primary)',
+              // <h2> default margins would break the flex baseline alignment
+              // with the mono number + the sub label.
+              margin: 0,
             }}
           >
             {title}
-          </span>
+          </h2>
         </div>
         {sub && (
           <span
@@ -144,19 +153,22 @@ export function SubChapter({
 }): React.ReactElement {
   return (
     <div style={{ margin: '22px 0' }}>
-      <h4
+      {/* h3 under the chapter's h2 (was h4 — a level skip with no h3 anywhere,
+          which broke the document outline and made the two-level TOC unable to
+          nest sub-sections under their chapter). */}
+      <h3
         style={{
           fontFamily: 'var(--font-mono)',
           fontSize: 13.5,
           fontWeight: 600,
           color: 'var(--text-primary)',
           letterSpacing: '0.04em',
-          marginBottom: 10,
+          margin: '0 0 10px',
           textTransform: 'uppercase',
         }}
       >
         {heading}
-      </h4>
+      </h3>
       {children}
     </div>
   )

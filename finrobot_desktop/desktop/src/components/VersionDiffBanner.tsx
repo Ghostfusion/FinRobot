@@ -22,6 +22,7 @@ import { fetchWithTimeout, HEAVY_API_TIMEOUT_MS } from '../api/fetch'
 import { useI18n } from '../i18n'
 import { formatCurrency, formatDate } from '../utils/format'
 import { FetchHttpError } from '../utils/errorMessage'
+import { priorVersions } from '../lib/artifactVersions'
 import type { ArtifactSummaryV5 } from '../types/v5'
 
 // ── SemanticDelta mirror (finrobot/artifact/semantic_diff.py) ───────────────
@@ -244,8 +245,7 @@ export function VersionDiffBanner({
   // Same-type prior/other versions, newest first.
   const candidates = useMemo(
     () =>
-      (timeline ?? [])
-        .filter((a) => a.type === reportType && a.id !== currentId)
+      priorVersions(timeline, reportType, currentId)
         .slice()
         // Sort by (created_at, id) so same-second ties are deterministic —
         // a bare created_at sort leaves the 'compare vs previous' base unstable
@@ -332,7 +332,7 @@ export function VersionDiffBanner({
     : ''
   if (!open) {
     return (
-      <div data-testid="version-diff-banner" className="version-diff-card">
+      <div id="report-version-diff" data-testid="version-diff-banner" className="version-diff-card">
         <button
           type="button"
           data-testid="version-diff-toggle"
@@ -351,7 +351,7 @@ export function VersionDiffBanner({
   }
 
   return (
-    <div data-testid="version-diff-banner" className="version-diff-card">
+    <div id="report-version-diff" data-testid="version-diff-banner" className="version-diff-card">
       {/* Header: heading + base selector */}
       <div className="version-diff-card__header">
         <span className="version-diff-card__eyebrow">{c.base}</span>

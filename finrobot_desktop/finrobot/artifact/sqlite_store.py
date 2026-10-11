@@ -17,6 +17,8 @@ Schema (single table ``artifacts``):
     entry_price    REAL NULL
     target_price   REAL NULL
     target_date    TEXT NULL
+    target_low     REAL NULL  (cross-method fair-value band low)
+    target_high    REAL NULL  (cross-method fair-value band high)
     source         TEXT NULL
     headline       TEXT NULL
     tagline        TEXT NULL
@@ -51,6 +53,7 @@ from finrobot.artifact.summary_extractor import (
     extract_tagline,
     extract_target_date,
     extract_target_price,
+    extract_target_range,
     extract_verdict,
 )
 from finrobot import paths as _paths
@@ -70,6 +73,8 @@ CREATE TABLE IF NOT EXISTS artifacts (
     entry_price    REAL,
     target_price   REAL,
     target_date    TEXT,
+    target_low     REAL,
+    target_high    REAL,
     source         TEXT,
     headline       TEXT,
     tagline        TEXT,
@@ -87,6 +92,8 @@ CREATE TABLE IF NOT EXISTS artifacts (
 _MIGRATED_COLUMNS: tuple[tuple[str, str], ...] = (
     ("primary_provider", "TEXT"),  # 门四溯源半, 2026-06-10
     ("fairly_valued", "INTEGER"),  # in-band point-target withhold, 2026-06-27
+    ("target_low", "REAL"),  # cross-method fair-value band low, 2026-10-11
+    ("target_high", "REAL"),  # cross-method fair-value band high, 2026-10-11
 )
 
 _CREATE_INDEXES = [
@@ -100,12 +107,13 @@ _CREATE_INDEXES = [
 
 _SUMMARY_COLUMNS = (
     "id, ticker, cross_tickers, type, verdict, created_at, archived, "
-    "entry_price, target_price, target_date, source, headline, tagline, "
-    "primary_provider, fairly_valued"
+    "entry_price, target_price, target_date, target_low, target_high, "
+    "source, headline, tagline, primary_provider, fairly_valued"
 )
 
 # Version of the mirror-column projection (the summary_extractor rules behind
-# verdict/entry_price/target_price/target_date/tagline/headline). Bump this by
+# verdict/entry_price/target_price/target_date/target_low/target_high/tagline/
+# headline). Bump this by
 # ONE whenever those extraction rules change so that the next startup re-runs
 # rebuild_summaries() over every already-stored row — otherwise old rows keep
 # the value the previous extractor produced forever, since the columns are only
@@ -130,7 +138,11 @@ _SUMMARY_COLUMNS = (
 # JSON (external-review defect). _headline_from_summary now skips the heading /
 # rule / blank scaffolding and previews the first prose line; bump so existing
 # rows re-project a clean headline instead of the leaked markdown facade.
-SUMMARY_PROJECTION_VERSION = 5
+# v6 — 2026-10-11: target_low / target_high columns added to the projection;
+# bump so existing rows backfill the cross-method fair-value band from their
+# stored payload's structured.valuation_synthesis (lets the version-timeline
+# row render a target RANGE when the point target is withheld).
+SUMMARY_PROJECTION_VERSION = 6
 
 
 def _now() -> datetime:
@@ -215,6 +227,8 @@ def _row_to_summary(row: tuple[Any, ...]) -> ArtifactSummary:
         entry_price,
         target_price,
         target_date,
+        target_low,
+        target_high,
         source,
         headline,
         tagline,
@@ -233,6 +247,8 @@ def _row_to_summary(row: tuple[Any, ...]) -> ArtifactSummary:
         entry_price=entry_price,
         target_price=target_price,
         target_date=_parse_dt(target_date),
+        target_low=target_low,
+        target_high=target_high,
         signal=None,
         verdict=verdict,
         tagline=tagline,
@@ -250,6 +266,7 @@ def summary_from_artifact(artifact: Artifact) -> ArtifactSummary:
     publish this function and downstream tests pull from it.
     """
     target_price = extract_target_price(artifact)
+    target_low, target_high = extract_target_range(artifact)
     return ArtifactSummary(
         id=artifact.id,
         ticker=artifact.ticker,
@@ -264,6 +281,8 @@ def summary_from_artifact(artifact: Artifact) -> ArtifactSummary:
         entry_price=extract_entry_price(artifact),
         target_price=target_price,
         target_date=extract_target_date(artifact, target_price),
+        target_low=target_low,
+        target_high=target_high,
         signal=None,
         verdict=extract_verdict(artifact),
         tagline=extract_tagline(artifact),
@@ -275,6 +294,7 @@ def summary_from_artifact(artifact: Artifact) -> ArtifactSummary:
 def _artifact_to_row(artifact: Artifact) -> tuple[Any, ...]:
     target_price = extract_target_price(artifact)
     target_date = extract_target_date(artifact, target_price)
+    target_low, target_high = extract_target_range(artifact)
     headline = (
         (_headline_from_summary(artifact.outputs.summary_text) or artifact.id)
         if artifact.outputs
@@ -292,6 +312,8 @@ def _artifact_to_row(artifact: Artifact) -> tuple[Any, ...]:
         extract_entry_price(artifact),
         target_price,
         target_date.isoformat() if target_date else None,
+        target_low,
+        target_high,
         artifact.meta.source,
         headline,
         extract_tagline(artifact),
@@ -356,9 +378,9 @@ class SqliteArtifactStore:
             INSERT INTO artifacts (
                 id, ticker, cross_tickers, type, verdict, created_at,
                 last_viewed_at, archived, entry_price, target_price,
-                target_date, source, headline, tagline, primary_provider,
-                fairly_valued, payload
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                target_date, target_low, target_high, source, headline,
+                tagline, primary_provider, fairly_valued, payload
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 ticker = excluded.ticker,
                 cross_tickers = excluded.cross_tickers,
@@ -370,6 +392,8 @@ class SqliteArtifactStore:
                 entry_price = excluded.entry_price,
                 target_price = excluded.target_price,
                 target_date = excluded.target_date,
+                target_low = excluded.target_low,
+                target_high = excluded.target_high,
                 source = excluded.source,
                 headline = excluded.headline,
                 tagline = excluded.tagline,
@@ -637,6 +661,7 @@ class SqliteArtifactStore:
                 continue
             target_price = extract_target_price(artifact)
             target_date = extract_target_date(artifact, target_price)
+            target_low, target_high = extract_target_range(artifact)
             headline = (
                 (_headline_from_summary(artifact.outputs.summary_text) or artifact.id)
                 if artifact.outputs
@@ -649,6 +674,8 @@ class SqliteArtifactStore:
                     entry_price = ?,
                     target_price = ?,
                     target_date = ?,
+                    target_low = ?,
+                    target_high = ?,
                     tagline = ?,
                     headline = ?,
                     primary_provider = ?,
@@ -660,6 +687,8 @@ class SqliteArtifactStore:
                     extract_entry_price(artifact),
                     target_price,
                     target_date.isoformat() if target_date else None,
+                    target_low,
+                    target_high,
                     extract_tagline(artifact),
                     headline,
                     extract_primary_provider(artifact),

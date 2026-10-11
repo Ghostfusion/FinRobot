@@ -1,17 +1,26 @@
 // ArtifactDetailPage — single artifact deep-dive route, mounted at
 // `/stocks/:ticker/runs/:artifactId`.
 //
-// Renders the artifact as a 13-chapter investment-bank-grade long-scroll
+// Renders the artifact as a 14-chapter investment-bank-grade long-scroll
 // research report in a two-column desktop layout:
-//   - sticky top toolbar  (price overlay · version switcher · diff · re-run)
+//   - sticky top toolbar  (back · snapshot quote · export HTML · print/PDF · re-run;
+//                          version switching lives in the rail's VERSIONS tab)
 //   - left sticky rail    (identity card + CONTENTS | VERSIONS tabs — scroll-spy
 //                          TOC and Version Timeline merged into one flank)
-//   - center scroll area  (chapters 01–13, each a structured Section)
+//   - center scroll area  (the section manifest: chapters 01–14 plus the
+//                          content-gated aux sections, each a structured Section)
 //
-// The 13 chapters are split into per-file components under
+// The chapters are split into per-file components under
 // pages/artifact-detail/chapters/. They consume artifact.outputs.structured
 // (thesis / financial_modeling / peer_analysis / catalyst_analysis) plus
 // inputs.raw_data for the audit dump.
+//
+// Two cross-cutting concerns live here rather than in a chapter:
+//   • section presence — the manifest (reportSections.ts) is built from the same
+//     predicates the sections render by, so the rail lists exactly what renders;
+//   • deep links — `#<section>` is validated against the manifest and re-resolved
+//     on hashchange, since React Router never re-enters the router for a
+//     same-document fragment click.
 
 import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
@@ -19,7 +28,7 @@ import { useArtifactDetail, useV5ArtifactTimeline } from '../hooks/useV5Artifact
 import { useNavMemoryStore } from '../stores/navMemoryStore'
 import { useToastStore } from '../stores/toastStore'
 import { VersionDiffBanner } from '../components/VersionDiffBanner'
-import { useI18n } from '../i18n'
+import { tSync, useI18n } from '../i18n'
 import { mapErrorToUserMessage } from '../utils/errorMessage'
 import { markArtifactViewed } from '../api/client'
 import { queryClient } from '../api/queryClient'
@@ -32,8 +41,15 @@ import { ReportToolbar } from './artifact-detail/shell/ReportToolbar'
 import { ReportLeftRail } from './artifact-detail/shell/ReportLeftRail'
 import { ReportChapters } from './artifact-detail/ReportChapters'
 import { CompactArtifactViewer } from './artifact-detail/CompactArtifactViewer'
-import { deriveReportData } from './artifact-detail/reportData'
-import { allChapterLabels } from './artifact-detail/chapters/labels'
+import {
+  deriveReportData,
+  layerComputeWarnings,
+  parseSurfacedContractFindings,
+} from './artifact-detail/reportData'
+import { isReportSectionId, reportSectionEntries } from './artifact-detail/reportSections'
+import { auditBannerContent } from './artifact-detail/chapters'
+import { hasComputeWarnings } from './artifact-detail/ComputeWarningsPanel'
+import { priorVersions } from '../lib/artifactVersions'
 
 export function ArtifactDetailPage(): React.ReactElement {
   const { ticker, artifactId } = useParams<{ ticker: string; artifactId: string }>()
@@ -69,22 +85,31 @@ export function ArtifactDetailPage(): React.ReactElement {
     navigate(`/stocks/${artifactSymbol}/runs/${artifactId}`, { replace: true })
   }, [artifactSymbol, urlSymbol, artifactId, navigate])
 
-  // React Router v6 doesn't auto-scroll to #hash on navigate; chapter
-  // mini-grid in AIZone links here with /stocks/X/runs/id#thesis etc.
-  // Manually scrollIntoView once the artifact resolves AND on subsequent
-  // hash changes. Wait one tick so the target <section id> has mounted.
+  // Deep links (/stocks/X/runs/<id>#<section>, e.g. the cover's link to the audit
+  // banner or the thesis chapter's link to the valuation). React Router v6 does
+  // not auto-scroll to a #hash on navigate, and a same-document fragment click or
+  // a Back to a hash URL never re-enters the router at all — so the listener is
+  // explicit. The id is validated against the report's section manifest: an
+  // unknown hash (typo / stale link) used to be a silent no-op, which read as a
+  // broken link. Wait one tick so the target <section id> has mounted.
   useEffect(() => {
-    if (!location.hash) return
     if (isLoading) return
-    const id = decodeURIComponent(location.hash.slice(1))
-    if (!id) return
-    requestAnimationFrame(() => {
-      const el = document.getElementById(id)
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const scrollToHash = (): void => {
+      const raw = window.location.hash.slice(1)
+      if (!raw) return
+      const id = decodeURIComponent(raw)
+      if (!isReportSectionId(id)) {
+        addToast({ type: 'info', title: tSync('report.load.sectionNotFound', { id }) })
+        return
       }
-    })
-  }, [location.hash, isLoading])
+      requestAnimationFrame(() => {
+        document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
+    }
+    scrollToHash()
+    window.addEventListener('hashchange', scrollToHash)
+    return () => window.removeEventListener('hashchange', scrollToHash)
+  }, [location.hash, isLoading, addToast])
 
   // Sidebar restores this deep path when the user clicks 个股 after
   // detouring through /settings — see useNavMemoryStore.
@@ -150,7 +175,8 @@ export function ArtifactDetailPage(): React.ReactElement {
   // price + version label, right-rail WACC, diff headline). deriveReportData is
   // the single source of truth shared with the standalone export viewer. For
   // non-research artifacts only `versionLabel`/`createdAt` are meaningful (the
-  // 13-chapter shapes resolve to null) — the body renders via CompactArtifactViewer.
+  // 14-chapter shapes resolve to null) — the body renders via CompactArtifactViewer.
+  const report = deriveReportData(data, timeline ?? [], locale)
   const {
     thesis,
     valuationSynthesis,
@@ -161,7 +187,7 @@ export function ArtifactDetailPage(): React.ReactElement {
     fairlyValued,
     quoteCurrency,
     inputs,
-  } = deriveReportData(data, timeline ?? [], locale)
+  } = report
 
   // Company name for the left-rail identity card. raw_data is loosely typed
   // (provider payload), so guard the field rather than asserting a shape.
@@ -188,7 +214,7 @@ export function ArtifactDetailPage(): React.ReactElement {
     try {
       const { buildInteractiveReportHtml, prepareReportExport } = await import('../export/bundle')
 
-      // Only the 13-chapter report pulls slow reference data (earnings calls)
+      // Only the 14-chapter report pulls slow reference data (earnings calls)
       // that must be prefetched into the offline cache for a deterministic file.
       // A compact artifact (dcf / ddm / lbo / comps / …) renders purely from its
       // own persisted fields — no prefetch, and no "fetching charts / earnings"
@@ -247,7 +273,7 @@ export function ArtifactDetailPage(): React.ReactElement {
   }
 
   // ── Non-research artifacts: compact single-column viewer ──────────────────
-  // No 13-chapter TOC, no Version Timeline rail, no
+  // No 14-chapter TOC, no Version Timeline rail, no
   // chapter scroll-spy status bar. Just the toolbar (type-aware) + the focused
   // compact body that shows the artifact's real inputs / result / audit trail.
   if (!isResearch) {
@@ -282,6 +308,23 @@ export function ArtifactDetailPage(): React.ReactElement {
       </div>
     )
   }
+
+  // The section manifest the rail, the report body and the hash validator all
+  // agree on (reportSections.ts). Presence comes from the SAME predicates the
+  // sections themselves render by, so the TOC can never list a section the body
+  // drops — nor hide one it renders.
+  const warnings = report.outputs.warnings ?? []
+  const layeredWarnings = layerComputeWarnings(warnings)
+  const sections = reportSectionEntries(locale, {
+    versionDiff: priorVersions(timeline, data.type, artifactId).length > 0,
+    audit: auditBannerContent(report.numericAudit, parseSurfacedContractFindings(warnings)).visible,
+    summary: (report.outputs.summary_text ?? '').trim().length > 0,
+    warnings: hasComputeWarnings(
+      layeredWarnings.caveats,
+      layeredWarnings.methodologyNotes,
+      report.compute_version?.formula_warnings ?? [],
+    ),
+  })
 
   return (
     <div
@@ -336,7 +379,7 @@ export function ArtifactDetailPage(): React.ReactElement {
           fairlyValued={fairlyValued}
           confidence={valuationSynthesis?.confidence ?? null}
           quoteCurrency={quoteCurrency}
-          entries={allChapterLabels(locale).map((c) => ({ id: c.id, num: c.num, title: c.title }))}
+          entries={sections}
           currentArtifactId={artifactId}
           timeline={timeline ?? []}
           reportType={data.type}

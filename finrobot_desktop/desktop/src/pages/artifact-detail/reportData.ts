@@ -1,5 +1,5 @@
 // Shared derivation: turn a raw artifact + version timeline into the typed
-// shapes the 13 chapters consume. Extracted from ArtifactDetailPage so the
+// shapes the 14 chapters consume. Extracted from ArtifactDetailPage so the
 // in-app report (ArtifactDetailPage) and the standalone HTML export (the viewer
 // bundle in src/export/) derive chapter data identically — one source of truth.
 
@@ -13,11 +13,13 @@ import type {
   ForwardEstimatesShape,
   OwnershipGovernanceShape,
   PeerCompsShape,
+  SecFilingsShape,
   TechnicalAnalysisShape,
   ThesisShape,
   ValuationSynthesisShape,
   SOTPBreakdownShape,
   SegmentOverviewShape,
+  XbrlFactsSnapshotShape,
 } from './chapters'
 import type { HistoricalMetrics } from '../../types/finance'
 import { formatDate } from '../../utils/format'
@@ -105,6 +107,12 @@ export interface DerivedReportData {
   fairlyValued: boolean
   // Numeric-audit gate verdict. null on legacy artifacts (pre-gate) → no banner.
   numericAudit: NumericAuditShape | null
+  // Primary-source appendix (ChapterFilings): the SEC filings the data step read
+  // and the XBRL concept snapshot the numbers were reconciled against. Persisted
+  // since the SEC wiring landed; null on legacy artifacts and for issuers with no
+  // EDGAR record → the chapter renders its gap note.
+  secFilings: SecFilingsShape | null
+  xbrlFacts: XbrlFactsSnapshotShape | null
   createdAt: string | null
   computeVersionStr: string | null
   reportLang: 'en' | 'zh'
@@ -325,6 +333,8 @@ export function deriveReportData(
     (structured.ownership_governance as OwnershipGovernanceShape | undefined) ?? null
   const numericAudit = (structured.numeric_audit as NumericAuditShape | undefined) ?? null
   const historicalMetrics = (structured.historical_metrics as HistoricalMetrics | undefined) ?? null
+  const secFilings = (structured.sec_filings as SecFilingsShape | undefined) ?? null
+  const xbrlFacts = (structured.xbrl_facts_snapshot as XbrlFactsSnapshotShape | undefined) ?? null
 
   // Frozen snapshot quote — the ONE price/beta/52w the whole report renders, so
   // no surface re-fetches live and contradicts the cover. raw_data.market is the
@@ -401,6 +411,8 @@ export function deriveReportData(
     technical,
     ownership,
     numericAudit,
+    secFilings,
+    xbrlFacts,
     historicalMetrics,
     snapshotPrice,
     snapshotBeta,

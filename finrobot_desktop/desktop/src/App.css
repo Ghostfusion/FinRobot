@@ -7857,3 +7857,145 @@ body.app-bg .cosmic-stars.cosmic-stars-fast {
     background-size: auto !important;
   }
 }
+
+/* ── Skip link ──────────────────────────────────────────────────────────
+   First focusable element in the shell (AppShell.tsx). Off-screen until
+   focused — the report is the app's largest scroll surface and the tab order
+   otherwise walks the whole title bar and the AI panel before reaching it.
+   Kept OUT of .app-shell's flex flow (position: fixed) so it can never shift
+   the cockpit layout. */
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 3000;
+  transform: translateY(-200%);
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--primary);
+  color: var(--text-on-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-decoration: none;
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/* ── Print / Save-as-PDF stylesheet ─────────────────────────────────────
+   Referenced by the report toolbar's "Print / PDF" action (window.print()).
+   Two jobs:
+     1. UN-CLIP the app's scroll model — the desktop shell fixes html/body and
+        scrolls inside #main-scroll, so without this the sheet would print one
+        viewport's worth of content.
+     2. STRIP the workstation chrome (title bar, toolbar, rails, AI panel) and
+        lift the dark theme to paper ink, so the sheet is the research.
+   The NEUTRAL tokens are re-pointed at paper values; the accents (violet /
+   cyan / success / danger) are deliberately left alone so charts, verdict
+   chips and the football field keep their meaning. The literal paper colours
+   here are intentional — this block IS the report's light theme, so it cannot
+   be expressed with the dark tokens it overrides. */
+@media print {
+  :root {
+    --bg-void: #ffffff;
+    --bg-deep: #ffffff;
+    --bg-0: #ffffff;
+    --bg-4: #ffffff;
+    --bg-card: #ffffff;
+    --bg-card-50: #ffffff;
+    --bg-card-faint: #ffffff;
+    --bg-card-overlay: #ffffff;
+    --bg-card-translucent: #ffffff;
+    --bg-card-deep: #ffffff;
+    --bg-elevated: #ffffff;
+    --bg-overlay: #ffffff;
+    --bg-input: #ffffff;
+    --bg-sticky-78: #ffffff;
+    --bg-sticky-88: #ffffff;
+    --bg-sticky-92: #ffffff;
+
+    /* Ink, not light-on-dark. Muted tiers stay readable on paper. */
+    --text-primary: #101014;
+    --text-secondary: #2a2a33;
+    --text-muted: #55555f;
+    --text-dim: #7d7d88;
+
+    --border-faint: rgba(16, 16, 20, 0.08);
+    --border-soft: rgba(16, 16, 20, 0.18);
+    --border-hairline: rgba(16, 16, 20, 0.08);
+    --border-grid: rgba(16, 16, 20, 0.1);
+    --border-glow: rgba(16, 16, 20, 0.24);
+    --wash-white-015: rgba(0, 0, 0, 0.02);
+    --wash-white-03: rgba(0, 0, 0, 0.03);
+    --wash-white-04: rgba(0, 0, 0, 0.04);
+
+    /* Tokenized for exactly this (see the :root comments). */
+    --table-surface: #ffffff;
+    --ff-label-bg: #ffffff;
+  }
+
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #ffffff !important;
+  }
+  body.app-bg {
+    background-image: none !important;
+  }
+
+  /* The shell is a fixed cockpit — block-ify every scroll layer so the
+     document (not a div) is what paginates. */
+  .app-shell,
+  .app-body,
+  .main-content,
+  #main-scroll {
+    display: block !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Workstation chrome: none of it is the deliverable. */
+  .titlebar,
+  .app-footer,
+  .cosmic-stars,
+  .skip-link,
+  [data-testid='right-chat-panel'],
+  [data-testid='report-toolbar'],
+  [data-testid='report-left-rail'],
+  [data-testid='version-diff-banner'],
+  [data-testid='report-lang-mismatch'] {
+    display: none !important;
+  }
+
+  /* The report's two-column grid collapses to a single reading column, full
+     page width (the 248px rail is gone, so its column must go with it). */
+  .report-doc > div {
+    display: block !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 0 !important;
+  }
+
+  /* Keep a row / self-contained card whole across a page break. NOT applied to
+     <section>: chapters are taller than a page, browsers ignore the hint there
+     and it can push a whole blank page. */
+  tr,
+  figure,
+  [data-testid='report-audit-banner'],
+  [data-testid='report-summary'],
+  [data-testid='report-warnings'] {
+    break-inside: avoid;
+  }
+
+  /* A collapsed <details> (engine summary, methodology notes) prints collapsed:
+     the reader's own choice of what to expose carries to paper rather than
+     being silently expanded behind their back. */
+
+  @page {
+    margin: 12mm;
+  }
+}

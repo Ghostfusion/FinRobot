@@ -261,6 +261,10 @@ msgid "report.timeline.versionCount"
 msgstr "{count} versions"
 
 #. js-lingui-explicit-id
+msgid "report.timeline.withheldRange"
+msgstr "point target withheld — showing the fair-value range"
+
+#. js-lingui-explicit-id
 msgid "signal.hit"
 msgstr "HIT"
 
@@ -275,6 +279,26 @@ msgstr "FAILED"
 #. js-lingui-explicit-id
 msgid "report.toc.heading"
 msgstr "REPORT NAV"
+
+#. js-lingui-explicit-id
+msgid "report.toc.tabsLabel"
+msgstr "Navigation views"
+
+#. js-lingui-explicit-id
+msgid "report.toc.navLabel"
+msgstr "Report sections"
+
+#. js-lingui-explicit-id
+msgid "report.toc.progressLabel"
+msgstr "Reading progress"
+
+#. js-lingui-explicit-id
+msgid "report.toc.backToTop"
+msgstr "Back to top"
+
+#. js-lingui-explicit-id
+msgid "report.leftRail.label"
+msgstr "Report navigation"
 
 #. js-lingui-explicit-id
 msgid "report.leftRail.targetLabel"
@@ -1385,6 +1409,10 @@ msgid "report.load.failedBody"
 msgstr "Could not load the report. Please try again later."
 
 #. js-lingui-explicit-id
+msgid "report.load.sectionNotFound"
+msgstr "This report has no section \"{id}\" — the link may be stale."
+
+#. js-lingui-explicit-id
 msgid "report.lang.mismatch"
 msgstr "This report was written in {lang}; its body does not follow the interface language."
 
@@ -1427,6 +1455,14 @@ msgstr "Export HTML"
 #. js-lingui-explicit-id
 msgid "report.toolbar.exportHtmlTitle"
 msgstr "Export an HTML report identical to the page (dark theme, charts, continuous scroll; open/share in any browser)"
+
+#. js-lingui-explicit-id
+msgid "report.toolbar.printPdf"
+msgstr "Print / PDF"
+
+#. js-lingui-explicit-id
+msgid "report.toolbar.printPdfTitle"
+msgstr "Print the report, or save it as a PDF, through the system print dialog (chrome, rails and dark background are stripped)"
 
 #. js-lingui-explicit-id
 msgid "report.toolbar.exportHtmlDone"
@@ -1691,6 +1727,10 @@ msgstr "501(c)(3) non-profit · open-source"
 #. js-lingui-explicit-id
 msgid "shell.about.starGithub"
 msgstr "Star on GitHub"
+
+#. js-lingui-explicit-id
+msgid "shell.skipToContent"
+msgstr "Skip to report content"
 
 #. js-lingui-explicit-id
 msgid "shell.footer.copyright"

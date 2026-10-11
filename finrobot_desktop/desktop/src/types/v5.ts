@@ -36,6 +36,16 @@ export interface ArtifactSummaryV5 {
   target_price?: number | null
   target_date?: string | null
   /**
+   * Fair-value band (low/high) that replaced the point target when it was
+   * withheld. Mirrors `outputs.structured.valuation_synthesis.{target_low,
+   * target_high}` at save time (extract_target_range); null/absent when the
+   * artifact carries no band, and on legacy rows until the projection rebuild
+   * backfills them. Lets the version-timeline row show the BAND instead of a bare
+   * "WITHHELD" — the range is the actual conclusion for an in-band withhold.
+   */
+  target_low?: number | null
+  target_high?: number | null
+  /**
    * Realised-vs-target outcome — hit / watching / failed. Lazy-computed by
    * the backend against a fresh quote. DO NOT use as the LLM verdict; that
    * lives in the `verdict` field below.

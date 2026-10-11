@@ -1,4 +1,4 @@
-// Sticky top toolbar for the 13-chapter research report view.
+// Sticky top toolbar for the 14-chapter research report view.
 //
 // Single-row, Finder-style (Spacedrive-inspired): one ← back arrow that returns
 // to wherever the user came from, the ticker label, a quote strip with the
@@ -138,6 +138,12 @@ export function ReportToolbar({
     }
   }
 
+  function handlePrint(): void {
+    // WebView2 (Windows), WKWebView (macOS) and every browser implement this; the
+    // print stylesheet does the layout work, so there is no renderer to own.
+    if (typeof window.print === 'function') window.print()
+  }
+
   return (
     <div
       data-testid="report-toolbar"
@@ -271,6 +277,14 @@ export function ReportToolbar({
           theme, charts, continuous scroll. The single export path. */}
       <ToolbarButton onClick={onExportHtml} title={t('report.toolbar.exportHtmlTitle')}>
         ⤓ {t('report.toolbar.exportHtml')}
+      </ToolbarButton>
+
+      {/* Print / Save as PDF — the SAME reading surface through the system print
+          dialog. App.css's @media print block strips the chrome and lifts the
+          dark theme, so this produces a paginated document (cover → chapters →
+          appendices) without a second renderer or a PDF dependency. */}
+      <ToolbarButton onClick={handlePrint} title={t('report.toolbar.printPdfTitle')}>
+        ⎙ {t('report.toolbar.printPdf')}
       </ToolbarButton>
 
       {/* Primary actions — Re-run is the focal CTA. Version comparison lives

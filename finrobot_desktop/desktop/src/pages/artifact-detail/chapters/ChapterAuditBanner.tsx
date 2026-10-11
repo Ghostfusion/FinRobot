@@ -71,19 +71,40 @@ function severityTone(severity: NumericAuditSeverity): string {
   return 'var(--text-muted)'
 }
 
-export function ChapterAuditBanner({
-  audit,
-  contractFindings = [],
-}: {
-  audit: NumericAuditShape | null
-  /** Output-contract evidence parsed from outputs.warnings (`[CONTRACT/Cn] …`).
-   * The contract can withhold on a CLEAN snapshot (MU $2172 — zero numeric
-   * findings), so these surface the reason the numeric audit never saw. */
-  contractFindings?: { clause: string; evidence: string }[]
-}): React.ReactElement | null {
-  const { t } = useI18n()
-  const status = audit?.artifact_status ?? 'publishable'
+export interface AuditBannerContent {
+  /** false → the banner renders NOTHING, so the TOC must not list it either. */
+  visible: boolean
+  /** Defect / data-quality findings — the prominent warning rows. */
+  issues: NumericAuditFinding[]
+  /** Expected-by-economics findings — the calm "Valuation Notes" rows. */
+  structural: NumericAuditFinding[]
+  /** Core data unresolvable → the whole report is suspect. */
+  isUnpublishable: boolean
+  /** The point target was withheld → render the note that says so. */
+  withheld: boolean
+  /** A real warning (not just structural notes) → alarm accent + expand by default. */
+  hasHardContent: boolean
+}
 
+/** The banner's content classification, derived from the payload alone.
+ *
+ *  CONTENT-GATE, not status-enum gate: render only when there is something
+ *  actionable to show — a numeric finding, a surfaced contract row, or a withheld
+ *  valuation. An empty banner is pure noise (it raises alarm with zero info) and
+ *  any withheld target is already explained on the cover. Gating on CONTENT is
+ *  robust to legacy / unknown statuses: a pre-2026-06-15 `review_only` artifact
+ *  with no findings used to slip past the old `caveated`-only guard and render an
+ *  empty "Data Caveat" box (the TSLA/MU regression). The one status-driven
+ *  exception is `unpublishable` — core data is unresolvable, so the analyst must
+ *  be told even with no itemised row.
+ *
+ *  Exported (rather than inlined in the component) so the section manifest
+ *  (reportSections.ts) lists/hides the audit nav entry by the SAME rule the
+ *  banner renders by. */
+export function auditBannerContent(
+  audit: NumericAuditShape | null,
+  contractFindings: { clause: string; evidence: string }[] = [],
+): AuditBannerContent {
   // Output-contract findings render as first-class rows beside the numeric-audit
   // ones — same Finding shape, distinguished by the OUTPUT-CONTRACT/ field-key.
   const allFindings: NumericAuditFinding[] = [
@@ -99,23 +120,37 @@ export function ChapterAuditBanner({
   // Split DEFECTS (prominent warning rows) from STRUCTURAL notes (demoted, humanised).
   const issues = allFindings.filter((f) => !STRUCTURAL_CHECKS.has(f.check))
   const structural = allFindings.filter((f) => STRUCTURAL_CHECKS.has(f.check))
-
-  // CONTENT-GATE, not status-enum gate. Render only when there is something
-  // actionable to show — a finding, a surfaced contract row, or a withheld
-  // valuation. An empty banner is pure noise: it raises alarm with zero info, and
-  // any withheld target is already explained on the cover (four cards + the
-  // priced-for-growth note). Gating on CONTENT (not on which status string is set)
-  // is robust to legacy / unknown statuses: a pre-2026-06-15 `review_only` artifact
-  // with no findings used to slip past the old `caveated`-only guard and render an
-  // empty "Data Caveat" box (the TSLA/MU regression). The only status-driven
-  // exception is `unpublishable` — core data is unresolvable, so the whole report
-  // is suspect and the analyst must be told even with no itemised row.
-  const isUnpublishable = status === 'unpublishable'
+  const isUnpublishable = (audit?.artifact_status ?? 'publishable') === 'unpublishable'
   const withheld = audit?.withhold_valuation === true
   // HARD content = a real warning. Structural notes alone are NOT hard content —
   // they get the calm treatment, never the alarm box.
   const hasHardContent = issues.length > 0 || withheld || isUnpublishable
-  if (!hasHardContent && structural.length === 0) return null
+
+  return {
+    visible: hasHardContent || structural.length > 0,
+    issues,
+    structural,
+    isUnpublishable,
+    withheld,
+    hasHardContent,
+  }
+}
+
+export function ChapterAuditBanner({
+  audit,
+  contractFindings = [],
+}: {
+  audit: NumericAuditShape | null
+  /** Output-contract evidence parsed from outputs.warnings (`[CONTRACT/Cn] …`).
+   * The contract can withhold on a CLEAN snapshot (MU $2172 — zero numeric
+   * findings), so these surface the reason the numeric audit never saw. */
+  contractFindings?: { clause: string; evidence: string }[]
+}): React.ReactElement | null {
+  const { t } = useI18n()
+  const status = audit?.artifact_status ?? 'publishable'
+  const { visible, issues, structural, isUnpublishable, withheld, hasHardContent } =
+    auditBannerContent(audit, contractFindings)
+  if (!visible) return null
 
   // Accent + header: alarm (amber/red) when there's a real warning; calm neutral
   // when the only content is expected structural notes.

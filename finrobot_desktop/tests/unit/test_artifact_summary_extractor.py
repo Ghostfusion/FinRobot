@@ -19,6 +19,7 @@ from finrobot.artifact.summary_extractor import (
     extract_tagline,
     extract_target_date,
     extract_target_price,
+    extract_target_range,
     extract_verdict,
 )
 
@@ -344,3 +345,65 @@ def test_summary_from_artifact_carries_fairly_valued() -> None:
     assert _summary_from_artifact(in_band).fairly_valued is True
     # Legacy / plain artifact (no withhold) projects False, not None.
     assert _summary_from_artifact(_artifact()).fairly_valued is False
+
+
+# ── target_low / target_high (cross-method fair-value band) ──────────────────
+
+
+def test_target_range_reads_valuation_synthesis_band() -> None:
+    art = _artifact(
+        structured={"valuation_synthesis": {"target_low": 217.18, "target_high": 361.96}}
+    )
+    assert extract_target_range(art) == (217.18, 361.96)
+
+
+def test_target_range_none_when_synthesis_block_absent() -> None:
+    # No valuation_synthesis at all (legacy / non-valuation artifacts).
+    assert extract_target_range(_artifact(structured={})) == (None, None)
+    assert extract_target_range(_artifact()) == (None, None)
+
+
+def test_target_range_none_when_bounds_withheld() -> None:
+    # A genuine withhold (M&A / single divergent method) carries no band.
+    art = _artifact(structured={"valuation_synthesis": {"target_low": None, "target_high": None}})
+    assert extract_target_range(art) == (None, None)
+
+
+def test_target_range_bound_independently_coerced() -> None:
+    # One bound present, the other absent → the absent one is None, not derived.
+    art = _artifact(structured={"valuation_synthesis": {"target_low": 180.0}})
+    assert extract_target_range(art) == (180.0, None)
+
+
+def test_target_range_none_for_non_numeric_bounds_without_raising() -> None:
+    art = _artifact(structured={"valuation_synthesis": {"target_low": "n/a", "target_high": "…"}})
+    assert extract_target_range(art) == (None, None)
+
+
+def test_target_range_none_for_non_finite_bounds() -> None:
+    art = _artifact(
+        structured={
+            "valuation_synthesis": {"target_low": float("inf"), "target_high": float("nan")}
+        }
+    )
+    assert extract_target_range(art) == (None, None)
+
+
+def test_target_range_none_when_synthesis_is_not_a_dict() -> None:
+    assert extract_target_range(_artifact(structured={"valuation_synthesis": "oops"})) == (
+        None,
+        None,
+    )
+
+
+def test_summary_from_artifact_carries_target_range() -> None:
+    art = _artifact(
+        structured={"valuation_synthesis": {"target_low": 217.18, "target_high": 361.96}}
+    )
+    s = _summary_from_artifact(art)
+    assert s.target_low == 217.18
+    assert s.target_high == 361.96
+    # Legacy / no-synthesis artifact projects None, not a derived value.
+    plain = _summary_from_artifact(_artifact())
+    assert plain.target_low is None
+    assert plain.target_high is None

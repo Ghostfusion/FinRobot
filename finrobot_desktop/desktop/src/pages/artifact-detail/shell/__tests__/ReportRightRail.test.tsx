@@ -78,6 +78,41 @@ describe('VersionTimelineList target/withhold label', () => {
     expect(screen.queryByText('Fairly Valued')).toBeNull()
   })
 
+  it('shows the fair-value BAND when a withheld row carries target_low/high', () => {
+    renderTimeline([
+      summary({
+        id: 'band',
+        target_price: null,
+        verdict: 'HOLD',
+        fairly_valued: true,
+        target_low: 206,
+        target_high: 248,
+      }),
+    ])
+    // The band is the conclusion for an in-band withhold — not a bare token.
+    expect(screen.getByText('$206.00–$248.00')).toBeInTheDocument()
+    expect(screen.queryByText('Fairly Valued')).toBeNull()
+  })
+
+  it('a published point target stays the headline even when a band exists', () => {
+    renderTimeline([summary({ id: 'point', target_price: 300, target_low: 206, target_high: 248 })])
+    expect(screen.getByText('$300.00')).toBeInTheDocument()
+    expect(screen.queryByText('$206.00–$248.00')).toBeNull()
+  })
+
+  it('a degenerate band (low === high, legacy projection) falls back to the token', () => {
+    renderTimeline([
+      summary({
+        id: 'flat',
+        target_price: null,
+        fairly_valued: true,
+        target_low: 100,
+        target_high: 100,
+      }),
+    ])
+    expect(screen.getByText('Fairly Valued')).toBeInTheDocument()
+  })
+
   it('mixed history renders exactly one "Fairly Valued" — only the in-band row', () => {
     renderTimeline([
       summary({ id: 'published', target_price: 300, fairly_valued: false }),

@@ -1,7 +1,7 @@
 // CompactArtifactViewer — the detail body for NON equity_research artifacts
 // (dcf / ddm / lbo / comps / earnings / ic_memo / peer_research / ad_hoc).
 //
-// These artifacts are single deterministic computations, not 13-chapter reports.
+// These artifacts are single deterministic computations, not 14-chapter reports.
 // The four valuation tools (dcf / ddm / lbo / comps) now render through the SAME
 // chapter primitives the full report uses — one visual language, no raw K-V dump:
 //   - dcf   → ValuationBody (DCF inputs + bridge) + DcfForecastTable (10y, full) +
@@ -354,7 +354,10 @@ export function CompactArtifactViewer({
       : (structuredInputs?.assumption_provenance as Record<string, string> | undefined)
 
   return (
-    <main data-testid="compact-artifact-viewer" style={{ minWidth: 0, padding: '12px 0 60px' }}>
+    // NOT <main> — the app shell owns the document's single <main
+    // id="main-scroll"> (a nested <main> is an invalid second landmark). The
+    // standalone export supplies its own <main> (export/viewer.tsx).
+    <div data-testid="compact-artifact-viewer" style={{ minWidth: 0, padding: '12px 0 60px' }}>
       <ChapterAuditBanner audit={numericAudit} contractFindings={contractFindings} />
 
       {/* Header: type + ticker + headline number */}
@@ -485,7 +488,7 @@ export function CompactArtifactViewer({
           ]}
         />
       </Section>
-    </main>
+    </div>
   )
 }
 

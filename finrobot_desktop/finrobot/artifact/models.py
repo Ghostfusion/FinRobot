@@ -184,6 +184,28 @@ class ArtifactSummary(BaseModel):
             "in the thesis step). None when target_price itself is None."
         ),
     )
+    target_low: float | None = Field(
+        default=None,
+        description=(
+            "Low end of the cross-method fair-value band (USD/share). Mirrors "
+            "outputs.structured.valuation_synthesis.target_low — the fair-value "
+            "band shown when the point target is withheld. Populated by "
+            "summary_extractor.extract_target_range; None when the artifact has "
+            "no valuation_synthesis block, the bound is absent, or it is "
+            "non-numeric / non-finite."
+        ),
+    )
+    target_high: float | None = Field(
+        default=None,
+        description=(
+            "High end of the cross-method fair-value band (USD/share). Mirrors "
+            "outputs.structured.valuation_synthesis.target_high — the fair-value "
+            "band shown when the point target is withheld. Populated by "
+            "summary_extractor.extract_target_range; None when the artifact has "
+            "no valuation_synthesis block, the bound is absent, or it is "
+            "non-numeric / non-finite."
+        ),
+    )
     signal: Signal | None = Field(
         default=None,
         description=(

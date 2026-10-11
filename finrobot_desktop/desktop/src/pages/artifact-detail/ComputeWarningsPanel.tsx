@@ -8,23 +8,39 @@
 
 import { useI18n } from '../../i18n'
 
+/** Whether the panel renders at all — the SAME gate the component applies, exported
+ *  so the section manifest (reportSections.ts) can list/hide the nav entry for the
+ *  panel without re-deriving the rule (a second copy would let the nav advertise a
+ *  section the body drops). */
+export function hasComputeWarnings(
+  caveats: string[],
+  methodologyNotes: string[],
+  formulaWarnings: string[] = [],
+): boolean {
+  return caveats.length + methodologyNotes.length + formulaWarnings.length > 0
+}
+
 export function ComputeWarningsPanel({
   caveats,
   methodologyNotes,
   formulaWarnings = [],
+  id,
 }: {
   caveats: string[]
   methodologyNotes: string[]
   /** Engine formula-level warnings (compute_version.formula_warnings) — a separate
    *  channel from outputs.warnings; genuine compute caveats, shown with the ⚠ set. */
   formulaWarnings?: string[]
+  /** DOM id so the left-rail TOC can link to this section. The compact viewer
+   *  omits it (no TOC there). */
+  id?: string
 }): React.ReactElement | null {
   const { t } = useI18n()
   const alerts = [...caveats, ...formulaWarnings]
-  if (alerts.length === 0 && methodologyNotes.length === 0) return null
+  if (!hasComputeWarnings(caveats, methodologyNotes, formulaWarnings)) return null
 
   return (
-    <section data-testid="report-warnings" style={{ margin: '32px 0' }}>
+    <section id={id} data-testid="report-warnings" style={{ margin: '32px 0' }}>
       {alerts.length > 0 && (
         <div
           data-testid="report-warnings-caveats"

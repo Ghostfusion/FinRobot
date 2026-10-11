@@ -6,15 +6,19 @@ describe('chapter labels — numbering', () => {
     expect(chapterNum('cover')).toBe('01')
   })
 
-  it('ownership sits at 12 — between data and disclaimer', () => {
-    expect(chapterNum('ownership')).toBe('12')
+  it('filings sits at 12 — the primary-source appendix after the raw data', () => {
+    expect(chapterNum('filings')).toBe('12')
   })
 
-  it('ends at 13 for the last chapter (disclaimer)', () => {
-    expect(chapterNum('disclaimer')).toBe('13')
+  it('ownership sits at 13 — between the filings appendix and disclaimer', () => {
+    expect(chapterNum('ownership')).toBe('13')
   })
 
-  it('CHAPTER_ORDER has all 13 chapters in spec order', () => {
+  it('ends at 14 for the last chapter (disclaimer)', () => {
+    expect(chapterNum('disclaimer')).toBe('14')
+  })
+
+  it('CHAPTER_ORDER has all 14 chapters in spec order', () => {
     expect(CHAPTER_ORDER).toEqual([
       'cover',
       'thesis',
@@ -27,12 +31,13 @@ describe('chapter labels — numbering', () => {
       'catalysts',
       'technical',
       'data',
+      'filings',
       'ownership',
       'disclaimer',
     ])
   })
 
-  it('every chapter has a 2-digit num between 01 and 13', () => {
+  it('every chapter has a 2-digit num between 01 and 14', () => {
     CHAPTER_ORDER.forEach((id, idx) => {
       const num = chapterNum(id)
       expect(num).toMatch(/^\d{2}$/)
@@ -54,6 +59,7 @@ describe('chapter labels — zh', () => {
     ['technical', '技术分析'],
     ['competitive', '竞争格局'],
     ['data', '财务数据'],
+    ['filings', '申报文件与 XBRL'],
     ['ownership', '股权与治理'],
     ['disclaimer', '免责声明'],
   ] as const)('zh chapter %s → %s', (id, title) => {
@@ -75,6 +81,7 @@ describe('chapter labels — en', () => {
     ['cover', 'Cover'],
     ['thesis', 'Investment Thesis'],
     ['overview', 'Company Overview'],
+    ['filings', 'Filings & XBRL'],
     ['ownership', 'Ownership & Governance'],
     ['disclaimer', 'Disclaimer'],
   ] as const)('en chapter %s → %s', (id, title) => {
@@ -83,23 +90,25 @@ describe('chapter labels — en', () => {
 })
 
 describe('allChapterLabels', () => {
-  it('returns 13 entries in CHAPTER_ORDER for zh', () => {
+  it('returns 14 entries in CHAPTER_ORDER for zh', () => {
     const zh = allChapterLabels('zh')
-    expect(zh).toHaveLength(13)
+    expect(zh).toHaveLength(14)
     expect(zh[0].id).toBe('cover')
     expect(zh[0].title).toBe('封面')
-    expect(zh[11].id).toBe('ownership')
-    expect(zh[11].title).toBe('股权与治理')
-    expect(zh[12].id).toBe('disclaimer')
-    expect(zh[12].title).toBe('免责声明')
+    expect(zh[11].id).toBe('filings')
+    expect(zh[12].id).toBe('ownership')
+    expect(zh[12].title).toBe('股权与治理')
+    expect(zh[13].id).toBe('disclaimer')
+    expect(zh[13].title).toBe('免责声明')
   })
 
-  it('returns 13 entries in CHAPTER_ORDER for en', () => {
+  it('returns 14 entries in CHAPTER_ORDER for en', () => {
     const en = allChapterLabels('en')
-    expect(en).toHaveLength(13)
+    expect(en).toHaveLength(14)
     expect(en[0].title).toBe('Cover')
-    expect(en[11].title).toBe('Ownership & Governance')
-    expect(en[12].title).toBe('Disclaimer')
+    expect(en[11].title).toBe('Filings & XBRL')
+    expect(en[12].title).toBe('Ownership & Governance')
+    expect(en[13].title).toBe('Disclaimer')
   })
 
   it('zh and en have same id set and same num set — only titles differ', () => {

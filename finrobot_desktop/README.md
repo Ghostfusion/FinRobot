@@ -2,7 +2,7 @@
 
 > **The production FinRobot.** Investment-bank-grade equity research in a desktop app: deterministic finance numbers plus LLM narrative, with every figure traceable back to a function call.
 
-FinRobot Desktop is an open-source equity research workstation for analysts, quantitative researchers, and active investors. A single `research` run produces a 13-chapter artifact — Cover, Investment Thesis, Company Overview, Financial Analysis, Valuation, Recent News, Sensitivity, Catalysts, Technical & Advanced, Competitive Landscape, Financial Data, Ownership & Governance, Disclaimer.
+FinRobot Desktop is an open-source equity research workstation for analysts, quantitative researchers, and active investors. A single `research` run produces a 14-chapter artifact — Cover, Investment Thesis, Company Overview, Financial Analysis, Valuation, Recent News, Sensitivity, Catalysts, Technical & Advanced, Competitive Landscape, Financial Data, Filings & XBRL, Ownership & Governance, Disclaimer. The report's left rail also lists the sections that carry no chapter number — the version-change banner, the data-audit findings, the engine's own analysis summary, and the caveats/methodology notes — only when they actually render.
 
 **The core bet: numbers are computed by code, judgment is supplied by the LLM.** The model never emits a figure that cannot be traced back to a call in `finrobot/engine/compute/`.
 
@@ -25,11 +25,11 @@ The other two generations serve different purposes: [`finrobot_equity/`](../finr
 <table>
 <tr>
 <td width="50%"><img src="../figs/desktop-workspace.png" alt="Stock workspace"/></td>
-<td width="50%"><img src="../figs/desktop-report.png" alt="13-chapter research report"/></td>
+<td width="50%"><img src="../figs/desktop-report.png" alt="14-chapter research report"/></td>
 </tr>
 <tr>
 <td><b>Stock workspace</b> — live market data pulled independently of any AI report, beside the research verdict and the valuation instruments.</td>
-<td><b>Research report</b> — 13 chapters, a 12-month target with its range, model confidence, and the caveats the audit operators raised.</td>
+<td><b>Research report</b> — 14 chapters, a 12-month target with its range, model confidence, and the caveats the audit operators raised.</td>
 </tr>
 </table>
 
@@ -75,7 +75,7 @@ Seven workflows in `finrobot/engine/pipelines/`, each a sequence of typed steps 
 
 | Pipeline | CLI | Output |
 |:---|:---|:---|
-| `equity_research.py` | `finrobot research` | Full 13-chapter research artifact |
+| `equity_research.py` | `finrobot research` | Full 14-chapter research artifact |
 | `dcf.py` | `finrobot dcf` | Discounted cash flow valuation |
 | `ddm.py` | `finrobot ddm` | Dividend discount model |
 | `lbo.py` | `finrobot lbo` | Leveraged buyout model |

@@ -323,7 +323,7 @@ describe('workspace dashboard contract (P3.2 — analyst dashboard)', () => {
     mockTimeline([])
     renderWorkspace()
     // 1 ticker = 1 run = 1 equity_research artifact carrying the full
-    // 13-chapter payload.
+    // 14-chapter payload.
     fireEvent.click(await screen.findByTestId('run-analysis-trigger'))
     expect(startRunMock).toHaveBeenCalledWith('research', 'NVDA')
     // No chevron / dropdown / alt-pipeline menu — single canonical entry.
@@ -380,7 +380,7 @@ describe('workspace dashboard contract (P3.2 — analyst dashboard)', () => {
     renderWorkspace()
     // Hot state surfaces (mock timeline returns 3 NVDA artifacts incl 1 equity_research).
     expect(await screen.findByTestId('ai-zone-latest')).toBeInTheDocument()
-    // The redesign's left verdict-emphasis block replaces the old 13-chapter grid
+    // The redesign's left verdict-emphasis block replaces the old 14-chapter grid
     // (chapter navigation now lives behind "open full report" → the detail page).
     expect(screen.getByTestId('ai-zone-verdict-block')).toBeInTheDocument()
     expect(screen.getByTestId('ai-zone-timeline')).toBeInTheDocument()

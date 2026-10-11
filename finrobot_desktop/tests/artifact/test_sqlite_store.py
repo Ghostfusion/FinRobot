@@ -633,6 +633,109 @@ async def test_legacy_db_without_fairly_valued_column_self_migrates(tmp_path: Pa
         await s.close()
 
 
+# ── target_low / target_high: cross-method fair-value band mirror columns ────
+
+
+@pytest.mark.asyncio
+async def test_summary_carries_target_range_roundtrip(store: SqliteArtifactStore) -> None:
+    """save() projects extract_target_range into the target_low / target_high
+    columns and list_by_ticker unpacks them back in the right tuple slots — so
+    the version-timeline row can render the fair-value band when the point
+    target is withheld, without reloading the payload."""
+    art = _make_artifact(id="art_band", type="equity_research")
+    art.outputs.structured = {
+        "valuation_withheld": True,
+        "valuation_synthesis": {"target_low": 217.18, "target_high": 361.96},
+    }
+    await store.save(art)
+
+    by_id = {s.id: s for s in await store.list_by_ticker(ticker="AAPL")}
+    assert by_id["art_band"].target_low == pytest.approx(217.18)
+    assert by_id["art_band"].target_high == pytest.approx(361.96)
+
+
+@pytest.mark.asyncio
+async def test_summary_target_range_none_when_absent(store: SqliteArtifactStore) -> None:
+    """A withheld / absent band projects None/None (never a derived value)."""
+    absent = _make_artifact(id="art_no_band", type="equity_research")
+    absent.outputs.structured = {"valuation_withheld": True, "valuation_synthesis": {}}
+    await store.save(absent)
+    await store.save(_make_artifact(id="art_plain"))  # default DCF, no synthesis block
+
+    by_id = {s.id: s for s in await store.list_by_ticker(ticker="AAPL")}
+    assert by_id["art_no_band"].target_low is None
+    assert by_id["art_no_band"].target_high is None
+    assert by_id["art_plain"].target_low is None
+    assert by_id["art_plain"].target_high is None
+
+
+@pytest.mark.asyncio
+async def test_summary_target_range_none_for_non_numeric(store: SqliteArtifactStore) -> None:
+    """A non-numeric bound must coerce to None without raising through save()."""
+    art = _make_artifact(id="art_bad_band", type="equity_research")
+    art.outputs.structured = {
+        "valuation_synthesis": {"target_low": "n/a", "target_high": "…"},
+    }
+    await store.save(art)
+
+    by_id = {s.id: s for s in await store.list_by_ticker(ticker="AAPL")}
+    assert by_id["art_bad_band"].target_low is None
+    assert by_id["art_bad_band"].target_high is None
+
+
+@pytest.mark.asyncio
+async def test_legacy_db_without_target_range_columns_self_migrates(tmp_path: Path) -> None:
+    """A pre-target-range artifacts.db (columns absent) must ALTER them in so a
+    legacy row reads back NULL→None without crashing, and the projection
+    rebuild backfills the band from the stored payload."""
+    db = tmp_path / "legacy_band.db"
+    conn = sqlite3.connect(db)
+    # Schema as of the fairly_valued migration (no target_low / target_high yet).
+    conn.execute(
+        """
+        CREATE TABLE artifacts (
+            id TEXT PRIMARY KEY, ticker TEXT, cross_tickers TEXT NOT NULL DEFAULT '[]',
+            type TEXT NOT NULL, verdict TEXT, created_at TEXT NOT NULL,
+            last_viewed_at TEXT, archived INTEGER NOT NULL DEFAULT 0,
+            entry_price REAL, target_price REAL, target_date TEXT,
+            source TEXT, headline TEXT, tagline TEXT, primary_provider TEXT,
+            fairly_valued INTEGER, payload TEXT NOT NULL
+        )
+        """
+    )
+    legacy = _make_artifact(id="art_legacy_band", type="equity_research")
+    legacy.outputs.structured = {
+        "valuation_withheld": True,
+        "valuation_synthesis": {"target_low": 217.18, "target_high": 361.96},
+    }
+    conn.execute(
+        "INSERT INTO artifacts (id, ticker, type, created_at, payload) VALUES (?, ?, ?, ?, ?)",
+        (
+            legacy.id,
+            legacy.ticker,
+            str(legacy.type),
+            legacy.meta.created_at.isoformat(),
+            legacy.model_dump_json(),
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    s = SqliteArtifactStore(db_path=db)
+    try:
+        # NULL columns on first read (just ALTER'd in) → None, no crash.
+        summaries = await s.list_by_ticker(ticker="AAPL")
+        assert summaries[0].target_low is None
+        assert summaries[0].target_high is None
+        # … and the projection rebuild backfills the band from the payload.
+        await s.rebuild_summaries()
+        summaries = await s.list_by_ticker(ticker="AAPL")
+        assert summaries[0].target_low == pytest.approx(217.18)
+        assert summaries[0].target_high == pytest.approx(361.96)
+    finally:
+        await s.close()
+
+
 @pytest.mark.asyncio
 async def test_get_hydrates_legacy_llm_narrative_from_thesis(
     store: SqliteArtifactStore,

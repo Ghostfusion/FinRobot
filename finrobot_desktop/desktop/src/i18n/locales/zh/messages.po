@@ -261,6 +261,10 @@ msgid "report.timeline.versionCount"
 msgstr "共 {count} 版"
 
 #. js-lingui-explicit-id
+msgid "report.timeline.withheldRange"
+msgstr "点目标价已隐藏，此处为目标区间"
+
+#. js-lingui-explicit-id
 msgid "signal.hit"
 msgstr "已达标"
 
@@ -275,6 +279,26 @@ msgstr "未达标"
 #. js-lingui-explicit-id
 msgid "report.toc.heading"
 msgstr "研报章节"
+
+#. js-lingui-explicit-id
+msgid "report.toc.tabsLabel"
+msgstr "导航视图"
+
+#. js-lingui-explicit-id
+msgid "report.toc.navLabel"
+msgstr "研报章节导航"
+
+#. js-lingui-explicit-id
+msgid "report.toc.progressLabel"
+msgstr "阅读进度"
+
+#. js-lingui-explicit-id
+msgid "report.toc.backToTop"
+msgstr "返回顶部"
+
+#. js-lingui-explicit-id
+msgid "report.leftRail.label"
+msgstr "研报导航"
 
 #. js-lingui-explicit-id
 msgid "report.leftRail.targetLabel"
@@ -1385,6 +1409,10 @@ msgid "report.load.failedBody"
 msgstr "无法加载研报，请稍后重试。"
 
 #. js-lingui-explicit-id
+msgid "report.load.sectionNotFound"
+msgstr "本报告没有「{id}」章节，链接可能已失效。"
+
+#. js-lingui-explicit-id
 msgid "report.lang.mismatch"
 msgstr "本报告正文以{lang}撰写，不随界面语言切换。"
 
@@ -1427,6 +1455,14 @@ msgstr "导出 HTML"
 #. js-lingui-explicit-id
 msgid "report.toolbar.exportHtmlTitle"
 msgstr "导出与页面完全一致的 HTML 研报（暗色主题、图表、连续滚动；可用任意浏览器打开/分享）"
+
+#. js-lingui-explicit-id
+msgid "report.toolbar.printPdf"
+msgstr "打印 / PDF"
+
+#. js-lingui-explicit-id
+msgid "report.toolbar.printPdfTitle"
+msgstr "通过系统打印对话框打印或另存为 PDF（自动去掉界面外壳、侧栏与暗色背景）"
 
 #. js-lingui-explicit-id
 msgid "report.toolbar.exportHtmlDone"
@@ -1691,6 +1727,10 @@ msgstr "501(c)(3) 非营利 · 开源"
 #. js-lingui-explicit-id
 msgid "shell.about.starGithub"
 msgstr "在 GitHub 点亮 Star"
+
+#. js-lingui-explicit-id
+msgid "shell.skipToContent"
+msgstr "跳到研报正文"
 
 #. js-lingui-explicit-id
 msgid "shell.footer.copyright"

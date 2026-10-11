@@ -1,4 +1,5 @@
-// Barrel export for the 13 chapters.
+// Barrel export for the report's chapter components (and the content classifiers
+// the section manifest shares with them).
 
 export { ChapterCover } from './ChapterCover'
 export { ChapterThesis } from './ChapterThesis'
@@ -45,8 +46,11 @@ export type {
   ScheduleThirteenAlertShape,
   FilingProvenanceShape,
   SecFilingsShape,
-  SecFilingShape,
+  SecTenKShape,
+  SecTenQShape,
   SecEvent8KShape,
+  SecFilingSectionShape,
+  XbrlFactShape,
   XbrlFactsSnapshotShape,
   NumericAuditShape,
   NumericAuditFinding,
@@ -54,4 +58,7 @@ export type {
   NumericAuditStatus,
 } from './types'
 
-export { ChapterAuditBanner } from './ChapterAuditBanner'
+export { ChapterAuditBanner, auditBannerContent } from './ChapterAuditBanner'
+export type { AuditBannerContent } from './ChapterAuditBanner'
+export { ChapterFilings } from './ChapterFilings'
+export { ChapterAnalysisSummary } from './ChapterAnalysisSummary'

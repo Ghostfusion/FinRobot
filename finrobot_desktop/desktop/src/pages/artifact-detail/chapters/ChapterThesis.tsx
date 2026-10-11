@@ -92,7 +92,7 @@ export function ChapterThesis({
           separate data panel. */}
       {thesis.momentum_divergence_note && (
         <>
-          <h4 style={heading}>{tr('市场逆向信号', 'What the Market Is Pricing In', locale)}</h4>
+          <h3 style={heading}>{tr('市场逆向信号', 'What the Market Is Pricing In', locale)}</h3>
           <Narrative>
             <MarkdownLite text={thesis.momentum_divergence_note} />
           </Narrative>
@@ -101,7 +101,7 @@ export function ChapterThesis({
 
       {takeaways.length > 0 && (
         <>
-          <h4 style={heading}>{t('chapter.thesis.keyTakeaways')}</h4>
+          <h3 style={heading}>{t('chapter.thesis.keyTakeaways')}</h3>
           <ul
             style={{
               display: 'flex',
@@ -149,7 +149,7 @@ export function ChapterThesis({
           the dated, structured events (different caliber, no double-booking). */}
       {(catalysts.length > 0 || risks.length > 0) && (
         <>
-          <h4 style={heading}>{tr('多空论证', 'Bull / Bear Case', locale)}</h4>
+          <h3 style={heading}>{tr('多空论证', 'Bull / Bear Case', locale)}</h3>
           <div
             style={{
               display: 'grid',
@@ -183,7 +183,7 @@ export function ChapterThesis({
           the full bridge. No per-method weight (the schema carries none). */}
       {methods.length > 0 && (
         <>
-          <h4 style={heading}>{tr('估值依据', 'Valuation Bridge', locale)}</h4>
+          <h3 style={heading}>{tr('估值依据', 'Valuation Bridge', locale)}</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {methods.map((m) => {
               const isAnchor = m.name === anchor
@@ -259,7 +259,7 @@ export function ChapterThesis({
           the component returns null when the data can't draw the contrast. */}
       {showMarketImplied && marketImplied && (
         <>
-          <h4 style={heading}>{tr('市场隐含', 'Market-Implied', locale)}</h4>
+          <h3 style={heading}>{tr('市场隐含', 'Market-Implied', locale)}</h3>
           <ReverseDcfHeadline
             marketImplied={marketImplied}
             dcfMethod={methods.find((m) => m.name === 'dcf') ?? null}

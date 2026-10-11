@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
-// Regression lock (2026-07-07): a running 13-chapter research run must NOT
+// Regression lock (2026-07-07): a running 14-chapter research run must NOT
 // unmount the bottom tools row. ValuationInstruments was designed to stay
 // visible and lock its own launch buttons during any run (lockOthers), but
 // AIZone once gated the whole row behind `!researchRunning`, so starting a

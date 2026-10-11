@@ -8,7 +8,7 @@
 import type { Locale } from '../../../i18n'
 
 export interface ChapterLabel {
-  /** Two-digit display number, e.g. "01". User-visible — must read 1-13, not 0-12. */
+  /** Two-digit display number, e.g. "01". User-visible — must read 1-14, not 0-13. */
   num: string
   title: string
   sub: string
@@ -20,11 +20,14 @@ export interface ChapterLabel {
 // (financial → valuation) and stress-tested immediately (sensitivity), then the
 // recent event record (news — itemized, sourced) and its aggregate signal read
 // (catalysts — net direction + category mix, no re-listing), the quant deep-dive
-// (technical), and finally the appendix (data → ownership → disclaimer).
+// (technical), and finally the appendix (data → filings → ownership → disclaimer).
 //
-// ⚠ This array drives ONLY the numbering (chapterNum) + left-rail nav order. The
-// actual VISUAL render order is the hardcoded JSX sequence in ReportChapters.tsx —
-// reorder BOTH in lockstep, or the chapter numbers/nav will disagree with the page.
+// ⚠ This array drives ONLY the numbering (chapterNum) + the chapter part of the
+// section manifest. The VISUAL render order is the JSX sequence in
+// ReportChapters.tsx, which reportSections.ts mirrors (chapters + the interleaved
+// auxiliary/non-chapter sections). Reorder in lockstep — the
+// ReportChapters.sections test asserts the rendered DOM order against that
+// manifest, so a silent mismatch now fails the suite instead of shipping.
 export const CHAPTER_ORDER = [
   'cover',
   'thesis',
@@ -37,6 +40,11 @@ export const CHAPTER_ORDER = [
   'catalysts',
   'technical',
   'data',
+  // Primary-source appendix (2026-10-11): the SEC 10-K/10-Q history + 8-K events
+  // and the XBRL concept snapshot the numbers were read from. Persisted since the
+  // SEC wiring landed but never rendered — the report cited "10-K" without ever
+  // showing the filing. Sits with the other appendix material (data → filings).
+  'filings',
   'ownership',
   'disclaimer',
 ] as const
@@ -57,6 +65,7 @@ const ZH: Record<ChapterId, Omit<ChapterLabel, 'num'>> = {
   technical: { title: '技术分析', sub: '蒙特卡洛 · 交易点位 · 价格走势' },
   competitive: { title: '竞争格局', sub: '同业三视图' },
   data: { title: '财务数据', sub: '原始数据 · 来源 · 审计轨迹' },
+  filings: { title: '申报文件与 XBRL', sub: '10-K / 10-Q · 8-K 事件 · XBRL 科目快照' },
   ownership: { title: '股权与治理', sub: '内部人交易 · 机构持仓 · 高管薪酬' },
   disclaimer: { title: '免责声明', sub: '投资建议提示' },
 }
@@ -73,13 +82,14 @@ const EN: Record<ChapterId, Omit<ChapterLabel, 'num'>> = {
   technical: { title: 'Technical Analysis', sub: 'Monte Carlo · Trade Levels · Price' },
   competitive: { title: 'Competitive Landscape', sub: 'Peers — 3 views' },
   data: { title: 'Financial Data', sub: 'Raw · Source · Audit Trail' },
+  filings: { title: 'Filings & XBRL', sub: '10-K / 10-Q · 8-K Events · XBRL Facts' },
   ownership: { title: 'Ownership & Governance', sub: 'Insiders · Institutions · Compensation' },
   disclaimer: { title: 'Disclaimer', sub: 'Investment Advice Notice' },
 }
 
 export function chapterNum(id: ChapterId): string {
   const idx = CHAPTER_ORDER.indexOf(id)
-  // Display 01-13 (1-indexed); 0-based is a developer convention not appropriate for users.
+  // Display 01-14 (1-indexed); 0-based is a developer convention not appropriate for users.
   return String(idx + 1).padStart(2, '0')
 }
 
@@ -88,7 +98,9 @@ export function chapterLabel(id: ChapterId, locale: Locale): ChapterLabel {
   return { num: chapterNum(id), ...table[id] }
 }
 
-/** All chapter labels for a given locale — used by ReportLeftRail. */
+/** All chapter labels for a given locale, in reading order. The rail consumes
+ *  reportSections() (which wraps these and interleaves the auxiliary sections);
+ *  this stays the chapter-only view. */
 export function allChapterLabels(locale: Locale): (ChapterLabel & { id: ChapterId })[] {
   return CHAPTER_ORDER.map((id) => ({ id, ...chapterLabel(id, locale) }))
 }

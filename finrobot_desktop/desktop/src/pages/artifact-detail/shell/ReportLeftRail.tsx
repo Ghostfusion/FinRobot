@@ -4,11 +4,22 @@
 // squeezed the reading column between two sidebars). Now one sticky rail holds:
 //   • an identity card (ticker · verdict · company · 12-mo target + spot · confidence)
 //   • a CONTENTS | VERSIONS tab switch
-//       - CONTENTS: the 13-chapter table of contents with scroll-spy highlight
+//       - CONTENTS: the report's section table of contents with scroll-spy
+//         highlight, the active section's sub-headings, a reading-progress bar
+//         and a back-to-top control
 //       - VERSIONS: the version-history timeline (was the right rail)
 // The report body reclaims the full width to the right.
+//
+// The TOC is the section manifest (reportSections.ts) — chapters AND the
+// auxiliary non-chapter sections (audit banner / version diff / analysis
+// summary / caveats). Accessibility notes: the <nav> is labelled, the active
+// entry carries aria-current="location", the two views are a real tablist
+// (roles + aria-selected + aria-controls), and the rail itself is a labelled
+// complementary landmark. The previous implementation rendered a bare <nav>
+// with a colour-only active state and no landmark — the report's own TitleBar
+// already did this correctly, the rail did not.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ArtifactSummaryV5 } from '../../../types/v5'
 import { useI18n } from '../../../i18n'
 import { formatCurrency } from '../../../utils/format'
@@ -19,13 +30,14 @@ import {
   type ConfidenceTier,
 } from '../../../utils/verdict'
 import { ConfidenceChip } from '../../../components/ConfidenceChip'
+import type { ReportSectionEntry } from '../reportSections'
 import { VersionTimelineList } from './ReportRightRail'
 
-export interface LeftRailTOCEntry {
-  id: string
-  num: string
-  title: string
-}
+/** The scroll container the report scrolls inside (`AppShell`). */
+const SCROLL_CONTAINER_ID = 'main-scroll'
+/** Where the reader's eye sits, as a fraction of the container height. A section
+ *  becomes "current" once its top crosses this line. */
+const EYE_LINE_RATIO = 0.3
 
 interface ReportLeftRailProps {
   ticker: string
@@ -37,10 +49,65 @@ interface ReportLeftRailProps {
   fairlyValued?: boolean
   confidence?: ConfidenceTier | string | null
   quoteCurrency?: string
-  entries: LeftRailTOCEntry[]
+  /** The section manifest, in page order (reportSections.reportSectionEntries). */
+  entries: ReportSectionEntry[]
   currentArtifactId: string
   timeline: ArtifactSummaryV5[]
   reportType: string
+}
+
+/** Which section the reader is currently in: the LAST section whose top has
+ *  passed the eye line. Deterministic — unlike the previous `isIntersecting`
+ *  watcher, which only ever SET the active id and therefore latched onto whichever
+ *  section happened to intersect last, never clearing it (so the highlight could
+ *  stick two sections behind, and a section shorter than the observation band —
+ *  the closing disclaimer — could never win at all).
+ *
+ *  `tops` must be in document order and contain only RENDERED sections. Returns
+ *  the first id when the reader is above every section (cover includes the top). */
+export function pickActiveSection(
+  tops: { id: string; top: number }[],
+  eyeLine: number,
+): string | null {
+  let active: string | null = null
+  for (const s of tops) {
+    if (s.top > eyeLine) break
+    active = s.id
+  }
+  return active ?? tops[0]?.id ?? null
+}
+
+/** Sub-headings of the section the reader is in — the report's second TOC level.
+ *  Derived from the rendered DOM (USWDS builds its in-page nav from the headings
+ *  inside main the same way) because the chapter bodies own their own
+ *  sub-headings: a static list would rot the moment a chapter stops rendering one
+ *  for a given ticker (KO has no DDM/LBO rows, banks have no FCFF-DCF panel).
+ *  Each heading is given a stable id on first read so the rail can link to it. */
+function useActiveChapterHeadings(
+  activeId: string | null,
+  contentKey: string,
+): { id: string; label: string }[] {
+  const [headings, setHeadings] = useState<{ id: string; label: string }[]>([])
+
+  useEffect(() => {
+    const section = activeId ? document.getElementById(activeId) : null
+    if (!section) {
+      setHeadings([])
+      return
+    }
+    const found: { id: string; label: string }[] = []
+    section.querySelectorAll('h3').forEach((h, i) => {
+      const label = (h.textContent ?? '').trim()
+      if (label.length === 0) return
+      if (!h.id) h.id = `${activeId}-sub-${i}`
+      found.push({ id: h.id, label })
+    })
+    setHeadings(found)
+    // contentKey (the artifact id) re-reads the headings when the report body is
+    // swapped under a mounted rail (version switch) with the same active section.
+  }, [activeId, contentKey])
+
+  return headings
 }
 
 export function ReportLeftRail({
@@ -59,6 +126,7 @@ export function ReportLeftRail({
   const { locale, t } = useI18n()
   const [tab, setTab] = useState<'contents' | 'versions'>('contents')
   const [activeId, setActiveId] = useState<string>(entries[0]?.id ?? '')
+  const [progress, setProgress] = useState(0)
 
   const sameTypeCount = timeline.filter((a) => a.type === reportType).length
   const verdictText = (verdict ?? '').toUpperCase()
@@ -73,30 +141,72 @@ export function ReportLeftRail({
   // is kept as a small labelled caption for context.
   const targetPrice = timeline.find((a) => a.id === currentArtifactId)?.target_price ?? null
 
-  // Scroll-spy: highlight the chapter currently under the reader. Root is the
-  // real scroll container (#main-scroll), same as the old TOC — the window
-  // never scrolls (body is overflow:hidden).
+  // Scroll-spy + reading progress. The spy is driven by measured offsets rather
+  // than IntersectionObserver: it is deterministic (see pickActiveSection), it
+  // reads only the manifest's own sections, and it can be exercised without a
+  // layout engine. The dependency is the manifest's id KEY, not the array — a
+  // fresh entries array on every parent render used to tear down and rebuild the
+  // observer on each render.
+  const entryIds = entries.map((e) => e.id)
+  const entryIdKey = entryIds.join('|')
+  const entriesRef = useRef(entries)
+  entriesRef.current = entries
+
   useEffect(() => {
-    if (entries.length === 0) return
-    const scrollEl = document.getElementById('main-scroll')
-    const observer = new IntersectionObserver(
-      (rows) => {
-        rows.forEach((row) => {
-          if (row.isIntersecting) setActiveId(row.target.id)
-        })
-      },
-      { root: scrollEl ?? null, rootMargin: '-30% 0px -60% 0px' },
-    )
-    entries.forEach((e) => {
-      const el = document.getElementById(e.id)
-      if (el) observer.observe(el)
-    })
-    return () => observer.disconnect()
-  }, [entries])
+    const container = document.getElementById(SCROLL_CONTAINER_ID)
+    if (!container) return
+    let frame = 0
+
+    const measure = (): void => {
+      frame = 0
+      const ids = entriesRef.current.map((e) => e.id)
+      const containerRect = container.getBoundingClientRect()
+      // Sections that render nothing (content-gated aux entries) are simply not
+      // in the DOM; they drop out of the measurement instead of pinning a stale
+      // highlight.
+      const tops: { id: string; top: number }[] = []
+      for (const id of ids) {
+        const el = document.getElementById(id)
+        if (el) tops.push({ id, top: el.getBoundingClientRect().top - containerRect.top })
+      }
+      const scrollable = container.scrollHeight - container.clientHeight
+      // Genuinely scrolled to the bottom (and the content was long enough to
+      // scroll at all — otherwise "at the bottom" is trivially true for a report
+      // shorter than the viewport and the spy would jump to the LAST section on
+      // arrival). At the bottom the last rendered section is current even though
+      // its top can never reach the eye line (the short closing disclaimer).
+      const scrolledToEnd = scrollable > 2 && container.scrollTop >= scrollable - 2
+      const next = scrolledToEnd
+        ? (tops[tops.length - 1]?.id ?? null)
+        : pickActiveSection(tops, container.clientHeight * EYE_LINE_RATIO)
+      if (next) setActiveId(next)
+
+      setProgress(scrollable > 0 ? Math.min(1, Math.max(0, container.scrollTop / scrollable)) : 0)
+    }
+    const schedule = (): void => {
+      if (frame === 0) frame = requestAnimationFrame(measure)
+    }
+
+    measure()
+    container.addEventListener('scroll', schedule, { passive: true })
+    window.addEventListener('resize', schedule)
+    return () => {
+      if (frame !== 0) cancelAnimationFrame(frame)
+      container.removeEventListener('scroll', schedule)
+      window.removeEventListener('resize', schedule)
+    }
+  }, [entryIdKey])
+
+  const subHeadings = useActiveChapterHeadings(activeId || null, currentArtifactId)
+
+  const backToTop = (): void => {
+    document.getElementById(SCROLL_CONTAINER_ID)?.scrollTo?.({ top: 0, behavior: 'smooth' })
+  }
 
   return (
     <aside
       data-testid="report-left-rail"
+      aria-label={t('report.leftRail.label')}
       style={{
         position: 'sticky',
         top: 64,
@@ -225,6 +335,8 @@ export function ReportLeftRail({
 
       {/* tab switch */}
       <div
+        role="tablist"
+        aria-label={t('report.toc.tabsLabel')}
         style={{
           display: 'flex',
           gap: 20,
@@ -232,81 +344,207 @@ export function ReportLeftRail({
           marginBottom: 12,
         }}
       >
-        <RailTab active={tab === 'contents'} onClick={() => setTab('contents')}>
+        <RailTab
+          id="rail-tab-contents"
+          panelId="rail-panel-contents"
+          active={tab === 'contents'}
+          onClick={() => setTab('contents')}
+          onArrow={() => setTab('versions')}
+        >
           {t('report.toc.heading')}
         </RailTab>
-        <RailTab active={tab === 'versions'} onClick={() => setTab('versions')}>
+        <RailTab
+          id="rail-tab-versions"
+          panelId="rail-panel-versions"
+          active={tab === 'versions'}
+          onClick={() => setTab('versions')}
+          onArrow={() => setTab('contents')}
+        >
           {t('report.timeline.versionCount', { count: sameTypeCount })}
         </RailTab>
       </div>
 
       {/* tab body — scrolls within the sticky rail */}
       <div style={{ overflowY: 'auto', minHeight: 0, paddingRight: 4, paddingBottom: 12 }}>
-        {tab === 'contents' ? (
-          <nav>
+        <div
+          id="rail-panel-contents"
+          role="tabpanel"
+          aria-labelledby="rail-tab-contents"
+          hidden={tab !== 'contents'}
+        >
+          {/* Reading progress: the rail is the only persistent chrome on a long
+              scroll, so it carries the "how much is left" signal. */}
+          <div
+            role="progressbar"
+            aria-label={t('report.toc.progressLabel')}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(progress * 100)}
+            data-testid="report-read-progress"
+            style={{
+              height: 2,
+              background: 'var(--border-soft)',
+              borderRadius: 2,
+              marginBottom: 10,
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.round(progress * 100)}%`,
+                height: '100%',
+                background: 'var(--secondary)',
+                transition: 'width 0.12s linear',
+              }}
+            />
+          </div>
+
+          <nav aria-label={t('report.toc.navLabel')}>
             {entries.map((entry) => {
               const isActive = entry.id === activeId
               return (
-                <a
-                  key={entry.id}
-                  href={`#${entry.id}`}
-                  data-testid={`toc-${entry.id}`}
-                  data-active={isActive ? 'true' : 'false'}
-                  style={{
-                    display: 'flex',
-                    gap: 9,
-                    alignItems: 'baseline',
-                    padding: '6px 0',
-                    textDecoration: 'none',
-                    fontFamily: 'var(--font-body)',
-                    fontSize: 12,
-                    lineHeight: 1.3,
-                    color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
-                    transition: 'color 0.16s',
-                  }}
-                >
-                  <span
+                <div key={entry.id}>
+                  <a
+                    href={`#${entry.id}`}
+                    data-testid={`toc-${entry.id}`}
+                    data-active={isActive ? 'true' : 'false'}
+                    // aria-current="location" = "current position within a
+                    // document", which is exactly what a TOC entry is. The colour
+                    // change alone was invisible to assistive tech.
+                    aria-current={isActive ? 'location' : undefined}
                     style={{
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: 10,
-                      color: isActive ? 'var(--secondary)' : 'var(--text-dim)',
-                      width: 16,
-                      flexShrink: 0,
+                      display: 'flex',
+                      gap: 9,
+                      alignItems: 'baseline',
+                      padding: '6px 0',
+                      textDecoration: 'none',
+                      fontFamily: 'var(--font-body)',
+                      fontSize: 12,
+                      lineHeight: 1.3,
+                      color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
+                      transition: 'color 0.16s',
                     }}
                   >
-                    {entry.num}
-                  </span>
-                  {entry.title}
-                </a>
+                    <span
+                      aria-hidden
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: entry.kind === 'aux' ? 9 : 10,
+                        color: isActive ? 'var(--secondary)' : 'var(--text-dim)',
+                        width: 16,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {/* Auxiliary sections carry no chapter number — a marker
+                          keeps the numbered spine visually distinct. */}
+                      {entry.kind === 'aux' ? '§' : entry.num}
+                    </span>
+                    {entry.title}
+                  </a>
+                  {/* Second level: the active section's own sub-headings. Only the
+                      active one expands, so the rail stays scannable. */}
+                  {isActive && subHeadings.length > 0 && (
+                    <div data-testid={`toc-sub-${entry.id}`} style={{ marginBottom: 4 }}>
+                      {subHeadings.map((sub) => (
+                        <a
+                          key={sub.id}
+                          href={`#${sub.id}`}
+                          style={{
+                            display: 'block',
+                            padding: '3px 0 3px 25px',
+                            textDecoration: 'none',
+                            fontFamily: 'var(--font-body)',
+                            fontSize: 11,
+                            lineHeight: 1.3,
+                            color: 'var(--text-dim)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {sub.label}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )
             })}
           </nav>
-        ) : (
+
+          {/* Back-to-top: the report runs 14 chapters + appendices, so returning
+              to the cover should not require a long reverse scroll. */}
+          <button
+            type="button"
+            onClick={backToTop}
+            data-testid="report-back-to-top"
+            style={{
+              marginTop: 12,
+              padding: '5px 0',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase',
+              color: 'var(--text-muted)',
+              background: 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            ↑ {t('report.toc.backToTop')}
+          </button>
+        </div>
+
+        <div
+          id="rail-panel-versions"
+          role="tabpanel"
+          aria-labelledby="rail-tab-versions"
+          hidden={tab !== 'versions'}
+        >
           <VersionTimelineList
             ticker={ticker}
             currentArtifactId={currentArtifactId}
             timeline={timeline}
             reportType={reportType}
           />
-        )}
+        </div>
       </div>
     </aside>
   )
 }
 
 function RailTab({
+  id,
+  panelId,
   active,
   onClick,
+  onArrow,
   children,
 }: {
+  id: string
+  panelId: string
   active: boolean
   onClick: () => void
+  /** Move focus/selection to the sibling tab (APG: arrow keys move between tabs). */
+  onArrow: () => void
   children: React.ReactNode
 }): React.ReactElement {
   return (
     <button
       type="button"
+      id={id}
+      role="tab"
+      aria-selected={active}
+      aria-controls={panelId}
+      // Roving tabindex: only the selected tab is in the tab order.
+      tabIndex={active ? 0 : -1}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+          e.preventDefault()
+          onArrow()
+        }
+      }}
       style={{
         fontFamily: 'var(--font-mono)',
         fontSize: 10,

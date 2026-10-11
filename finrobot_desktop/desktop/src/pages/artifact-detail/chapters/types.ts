@@ -463,49 +463,84 @@ export interface OwnershipGovernanceShape {
   // UI maps reason → i18n key for accurate messaging instead of one-size-fits-all.
 }
 
-// SEC filings + XBRL — read by other chapters (e.g. ChapterFinancialData
-// shows 10-K section linkbacks) but typed here so the artifact contract
-// lives in one place.
+// SEC filings + XBRL — the ChapterFilings appendix (the primary-source layer the
+// numbers were read from). Shapes mirror the ACTUAL provider payloads in
+// engine/data/providers/edgar_provider.py (_fetch_10k / _fetch_10q / _fetch_8k)
+// and the persisted `structured.sec_filings` / `structured.xbrl_facts_snapshot`
+// keys. The earlier draft of this block described a 10-K with `filing_date` /
+// `accession_no` fields that the provider has never emitted (`latest_10k_date` /
+// `latest_10k_accession`) — a type that lies is worse than none, so it is
+// rewritten to the real keys.
 
 export interface SecFilingSectionShape {
-  title: string
+  /** Canonical Item id, e.g. "item_1a_risk_factors". */
   canonical_id: string
+  /** Display title, e.g. "Item 1A — Risk Factors". */
+  title: string
+  /** Extracted section text (may be large — the chapter renders counts, not text). */
   text: string
   char_count: number
-  extracted_via?: 'edgartools_attribute' | 'filing_text_fallback' | string
+  /** 'edgartools_attribute' | 'filing_text_fallback' (BM25 full-text fallback). */
+  extracted_via?: string
 }
 
-export interface SecFilingShape {
+/** Latest 10-K payload (`_fetch_10k`). `has_10k: false` when the issuer files no
+ *  10-K (non-US issuer / ETF) — the chapter then shows the gap honestly. */
+export interface SecTenKShape {
+  has_10k: boolean
+  form?: string | null
+  latest_10k_date?: string | null
+  latest_10k_accession?: string | null
+  is_amended?: boolean
+  /** 'ok' | 'amended_redirected' | 'fallback_to_full_text'. */
+  sections_extraction_quality?: string
+  sections?: SecFilingSectionShape[]
+  source_url?: string | null
+  company_name?: string | null
+  cik?: string | null
+}
+
+/** One 10-Q row (`_fetch_10q`). */
+export interface SecTenQShape {
   form: string
   filing_date: string
   period_of_report?: string | null
   accession_no: string
+  mdna_chars?: number
   source_url?: string | null
-  sections?: SecFilingSectionShape[]
-  full_text_char_count?: number
-  is_amended?: boolean
-  sections_extraction_quality?: 'ok' | 'fallback_to_full_text' | 'amended_redirected' | string
 }
 
+/** One 8-K event (`_fetch_8k`). `items` are raw Item codes ("1.01", "8.01"…);
+ *  the CATALYST chapter renders the material ones with plain-language labels —
+ *  this chapter is the filing index (dates, codes, links), never a second copy. */
 export interface SecEvent8KShape {
   filing_date: string
   period_of_report?: string | null
   accession_no: string
   items?: string[]
-  items_with_description?: string[]
   text?: string
   source_url?: string | null
 }
 
 export interface SecFilingsShape {
-  '10k'?: SecFilingShape | null
-  '10q_history'?: SecFilingShape[]
+  '10k'?: SecTenKShape | null
+  '10q_history'?: SecTenQShape[]
   '8k_events'?: SecEvent8KShape[]
 }
 
-// XBRL is a sparse bag keyed by us-gaap concept; chapters that need a
-// specific tag dig in by name.
-export type XbrlFactsSnapshotShape = Record<string, unknown>
+/** One XBRL fact record (xbrl_concept_snapshot): the real matched us-gaap concept
+ *  plus its value. `matched_concept` preserves the provider concept on the
+ *  disambiguated NetIncomeLoss keys. */
+export interface XbrlFactShape {
+  concept: string
+  value: number
+  period_end?: string | null
+  units?: string | null
+  matched_concept?: string | null
+}
+
+/** Sparse bag keyed by us-gaap concept (each key owns its fact list). */
+export type XbrlFactsSnapshotShape = Record<string, XbrlFactShape[]>
 
 // Two currency tags carried by the equity_research structured payload (BUG-030).
 // quote_currency labels per-share & market-cap fields (price, 52w hi/lo, DCF
