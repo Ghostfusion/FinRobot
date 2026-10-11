@@ -91,18 +91,22 @@ def _as_matrix(values: np.ndarray, *, name: str) -> np.ndarray:
     return matrix
 
 
-def _sharpe_columns(matrix: np.ndarray) -> np.ndarray:
-    """Per-column (per-trial) Sharpe ratio, ``ddof=1``, no annualization."""
-    # Both locals are annotated because reductions on a bare ``np.ndarray``
-    # annotation infer ``Any``, which mypy then rejects on the way out
-    # (no-any-return) — silently losing the return type of every caller.
+def _defined_sharpe_columns(matrix: np.ndarray) -> tuple[list[int], np.ndarray]:
+    """Per-column Sharpes for the columns that have one on these rows.
+
+    A column with zero dispersion here — a trial that took no position during
+    those bars — has no Sharpe on this subset. Returning only the defined columns
+    lets a split rank the trials it can instead of refusing the whole estimate:
+    an indicator warm-up is flat for *every* trial, so on real data a block that
+    spans it makes PBO uncomputable, and a gate that cannot score a real search is
+    not a gate. The 50-bar warm-up case was found by running the app's own ledger
+    through this module, not by a synthetic test.
+    """
     spread: np.ndarray = matrix.std(axis=0, ddof=1)
-    if np.any(spread == 0.0):
-        flat = np.flatnonzero(spread == 0.0).tolist()
-        raise ValueError(f"trial columns {flat} have zero variance; their Sharpe is undefined")
-    column_means: np.ndarray = matrix.mean(axis=0)
-    ratios: np.ndarray = column_means / spread
-    return ratios
+    keep = np.flatnonzero(spread > 0.0)
+    means: np.ndarray = matrix[:, keep].mean(axis=0)
+    ratios: np.ndarray = means / spread[keep]
+    return [int(index) for index in keep], ratios
 
 
 def _mid_rank(values: np.ndarray, target: float) -> float:
@@ -216,16 +220,47 @@ def pbo_cscv(returns_matrix: np.ndarray, *, n_blocks: int = 10) -> PBOResult:
     bounds = _block_bounds(n_rows, n_blocks)
     half = n_blocks // 2
     logits: list[float] = []
+    skipped_in_sample = 0
+    skipped_winner = 0
+    n_combos = 0
     for combo in itertools.combinations(range(n_blocks), half):
+        n_combos += 1
         in_sample_rows = np.concatenate([np.arange(*bounds[b]) for b in combo])
         out_rows = np.concatenate(
             [np.arange(*bounds[b]) for b in range(n_blocks) if b not in set(combo)]
         )
-        in_sample = _sharpe_columns(matrix[in_sample_rows])
-        out_sample = _sharpe_columns(matrix[out_rows])
-        winner = int(np.argmax(in_sample))
-        omega = _mid_rank(out_sample, float(out_sample[winner])) / (n_trials + 1)
+        # Only the trials with a defined Sharpe on each side can take part. A split
+        # needs at least two candidates to rank, and the winner has to be
+        # rankable out-of-sample for the logit to mean anything.
+        in_columns, in_sample = _defined_sharpe_columns(matrix[in_sample_rows])
+        if len(in_columns) < 2:
+            skipped_in_sample += 1
+            continue
+        out_columns, out_sample = _defined_sharpe_columns(matrix[out_rows])
+        winner_column = in_columns[int(np.argmax(in_sample))]
+        if winner_column not in out_columns:
+            skipped_winner += 1
+            continue
+        winner_sharpe = float(out_sample[out_columns.index(winner_column)])
+        omega = _mid_rank(out_sample, winner_sharpe) / (len(out_columns) + 1)
         logits.append(math.log(clamp(omega, EPS, 1.0 - EPS) / (1.0 - clamp(omega, EPS, 1.0 - EPS))))
+
+    n_skipped = skipped_in_sample + skipped_winner
+    if n_skipped:
+        warnings.append(
+            f"skipped {n_skipped} of {n_combos} splits ({skipped_in_sample} without two trials "
+            f"holding a defined in-sample Sharpe, {skipped_winner} whose in-sample winner had no "
+            f"defined out-of-sample Sharpe); the estimate is over the remaining "
+            f"{len(logits)} split(s). Fewer, wider blocks — a lower n_blocks — reduce this by "
+            f"giving each block more trading activity"
+        )
+    if not logits:
+        raise ValueError(
+            f"every one of {n_combos} CSCV splits was degenerate: no split had two trials with a "
+            f"defined Sharpe in-sample whose winner was also rankable out-of-sample. The trials "
+            f"trade too rarely for {n_blocks} blocks of {n_rows // n_blocks} bars; use a coarser "
+            f"split (a lower n_blocks), or a strategy that holds positions more often"
+        )
 
     values = np.asarray(logits, dtype=np.float64)
     dispersion = float(values.std(ddof=1)) if values.size > 1 else 0.0

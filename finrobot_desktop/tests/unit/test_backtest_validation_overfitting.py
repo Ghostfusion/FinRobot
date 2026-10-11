@@ -373,6 +373,48 @@ class TestAgentAcceptance:
         assert any("proxy" in warning for warning in result.warnings)
 
 
+class TestPBOHandlesUndefinedSplitSharpes:
+    """A real ledger found this: PBO raised on the indicator warm-up.
+
+    The app's own search produced a 351-bar history whose first block is flat for
+    every trial (the SMA slow period has not warmed up) and a trial that trades
+    only on 55 bars. The old implementation computed each split's Sharpes with a
+    helper that raised on any zero-dispersion column, so the gate could not score
+    *any* real search — only synthetic ones in which every trial moved on every
+    bar. Undefined-in-this-subset trials are now left out of that split's ranking
+    and the skips are reported.
+    """
+
+    @staticmethod
+    def _matrix(seed: int = 5) -> np.ndarray:
+        """400 bars, 10 blocks of 40: a trial flat for the first half, then strong."""
+        rng = np.random.default_rng(seed)
+        dormant_then_strong = np.concatenate([np.zeros(200), rng.normal(0.005, 0.001, size=200)])
+        always_live = [rng.normal(0.0, 0.01, size=400) for _ in range(2)]
+        return np.column_stack([dormant_then_strong, *always_live])
+
+    def test_evaluates_the_splits_it_can_instead_of_refusing_the_whole_estimate(self) -> None:
+        result = pbo_cscv(self._matrix(), n_blocks=10)
+        assert result.n_splits > 0
+        assert 0.0 <= result.pbo <= 1.0
+        # The splits it could not use are named rather than silently dropped.
+        assert any("skipped" in warning for warning in result.warnings)
+        assert any("out-of-sample Sharpe" in warning for warning in result.warnings)
+
+    def test_a_trial_flat_everywhere_is_dropped_not_ranked(self) -> None:
+        live = self._matrix()
+        matrix = np.column_stack([np.zeros(400), live[:, 1], live[:, 2]])
+        result = pbo_cscv(matrix, n_blocks=10)
+        assert result.dropped_trials == [0]
+        assert any("zero-variance trial" in warning for warning in result.warnings)
+
+    def test_a_fully_degenerate_grid_says_what_to_change(self) -> None:
+        """When nothing can be ranked, the error has to be actionable."""
+        flat = np.zeros((400, 3))
+        with pytest.raises(ValueError, match="fewer than 2 trials with non-zero variance"):
+            pbo_cscv(flat, n_blocks=10)
+
+
 class TestDieboldMariano:
     """Is forecast A more accurate than forecast B, on paired observations?"""
 
