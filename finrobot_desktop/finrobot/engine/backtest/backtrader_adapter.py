@@ -3,8 +3,9 @@
 What this code does that raw LLM cannot: wraps BackTrader's synchronous,
 callback-heavy API into a clean async interface with typed config/result.
 Handles SMA crossover strategy (built-in), dynamic strategy loading via
-module:ClassName, 4 analyzers (Sharpe, DrawDown, Returns, TradeAnalyzer),
-and equity curve PNG generation — all deterministic computation.
+module:ClassName, 5 analyzers (Sharpe, DrawDown, Returns, TradeAnalyzer, and a
+daily TimeReturn series that gates the Sharpe), and equity curve PNG generation
+— all deterministic computation.
 
 The SharpeRatio analyzer is configured for DAILY bars (timeframe=Days,
 annualize=True, factor=252). backtrader's default timeframe=Years resamples
@@ -21,6 +22,7 @@ import functools
 import importlib
 import io
 import logging
+import statistics
 from typing import TYPE_CHECKING, Any
 
 from finrobot.engine.backtest.engine import (
@@ -46,6 +48,21 @@ try:
     matplotlib.use("Agg", force=True)
 except ImportError:
     pass
+
+
+#: Floor on the dispersion of the daily equity-curve returns (population
+#: standard deviation) below which an annualised Sharpe is not reported at all.
+#:
+#: An annualised Sharpe is the ratio of two moments of the same return series;
+#: when the account barely moves, both are ~1e-7 and the ratio is an arbitrary
+#: number rather than a measurement. This is not hypothetical: the built-in SMA
+#: crossover strategy carries backtrader's default one-share sizer, so on a
+#: $100,000 account it holds ~0.2% exposure and the equity curve is nearly flat
+#: — a real 9-month AAPL run with 2 trades printed "Sharpe Ratio: -116.571".
+#: 0.01%/day (~0.16% annualised) sits far below any real strategy's dispersion
+#: and far above the degenerate case (measured: ~1e-5 with the one-share sizer
+#: against ~1e-2 for a fully invested position), so legitimate runs are kept.
+MIN_DAILY_RETURN_STD = 1e-4
 
 
 def _reject_non_us_equity(ticker: str) -> None:
@@ -166,6 +183,14 @@ class BackTraderAdapter(BacktestEngine):
         cerebro.addanalyzer(bt.analyzers.DrawDown, _name="drawdown")
         cerebro.addanalyzer(bt.analyzers.Returns, _name="returns")
         cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name="trades")
+        # Per-bar returns, used to check that the Sharpe estimate is identified
+        # at all before it is reported (see MIN_ACTIVE_RETURN_DAYS).
+        cerebro.addanalyzer(
+            bt.analyzers.TimeReturn,
+            _name="daily_returns",
+            timeframe=bt.TimeFrame.Days,
+            compression=1,
+        )
 
         # Run
         initial_value = cerebro.broker.getvalue()
@@ -331,7 +356,41 @@ class BackTraderAdapter(BacktestEngine):
             warnings.append(
                 "Sharpe ratio unavailable: too few daily bars or zero-variance returns."
             )
+            return None
+        dispersion = self._daily_return_std(strat)
+        if dispersion is not None and dispersion < MIN_DAILY_RETURN_STD:
+            # The analyzer produced a finite ratio, but from a curve that barely
+            # moved: annualising the ratio of two near-zero moments is noise,
+            # not a metric. Refuse it rather than print a number the reader
+            # would take at face value.
+            warnings.append(
+                f"Sharpe ratio unavailable: daily returns have a standard deviation of "
+                f"{dispersion:.2e}, below the {MIN_DAILY_RETURN_STD:.0e} floor — the equity curve "
+                f"is nearly flat (is the position size negligible against the account?), so the "
+                f"annualised ratio would be an artifact."
+            )
+            return None
         return ratio
+
+    @staticmethod
+    def _daily_return_std(strat: Any) -> float | None:
+        """Population standard deviation of the daily equity-curve returns.
+
+        Uses the daily ``TimeReturn`` series registered alongside the other
+        analyzers. ``None`` means the series is unavailable (a stub strategy in a
+        unit test, or a caller that built its own cerebro), in which case the
+        caller skips the guard instead of failing.
+        """
+        analyzer = getattr(strat.analyzers, "daily_returns", None)
+        if analyzer is None:
+            return None
+        analysis = analyzer.get_analysis()
+        if not isinstance(analysis, dict):
+            return None
+        values = [value for value in analysis.values() if isinstance(value, float)]
+        if not values:
+            return None
+        return statistics.pstdev(values)
 
     def _extract_drawdown(self, strat: Any, warnings: list[str]) -> float | None:
         analysis = strat.analyzers.drawdown.get_analysis()

@@ -13,25 +13,25 @@ written; the `defect` rows do not.
 
 **Status key.** `ready` buildable in this repo today · `needs-dep` needs a new dependency ·
 `needs-data` needs a feed no provider serves · `needs-owner` feature, owner sign-off required ·
-`defect` fixable without new scope · `blocked` depends on another row. Effort letters (S/M/L) are the
-source documents' own estimates unless marked *review*.
+`defect` fixable without new scope · `landed` already shipped · `blocked` depends on another row. Effort
+letters (S/M/L) are the source documents' own estimates unless marked *review*.
 
-**Start here** — three defect-sized rows that need no new dependency and no new data: `F1` (two §3 rows
-that do not exist in the endpoint inventory), `A4` (the Sharpe artifact), `A3` (`--auto` writes no ledger,
-so the validation gate cannot score the app's own output). Then `E2` (stylized-facts harness: numpy only,
-no data) and `A5` (event-time gate: no model needed).
+**Start here.** Already landed: `A4`, the Sharpe guard (§F4). Next smallest, needing no new dependency and
+no new data: `A3` (`--auto` persists no ledger, so the shipped validation gate cannot score the app's own
+output), then `E2` (stylized-facts harness: numpy only, no data) and `A5` (event-time gate: no model
+needed). A first pass of this review also reported `F1`; that finding was wrong and is retracted (§F1).
 
 ## A. Shared infrastructure
 
 | # | Item | Source | Prereq | Acceptance | Status |
 |---|---|---|---|---|---|
-| A1 | Complete the statistical-inference block: Diebold–Mariano test, White reality check, and a standalone block-bootstrap Sharpe CI. The gate already ships SPA, deflated Sharpe, PBO, minTRL and regime stability — i.e. 3 of the 5 tests the LLM document asks of every strategy return series; the block bootstrap exists but only inside `spa_test`, not as a reusable CI | llm §5.4; rl §5.1 | — | DM and White return known-answer results on synthetic return pairs; CI coverage within 1% of nominal on a simulated AR process | needs-owner · S |
+| A1 | Complete the statistical-inference block: Diebold–Mariano test and a standalone block-bootstrap Sharpe CI. Everything else the document asks for already ships — notably `spa_test` **is** White's reality check (a studentized max over a moving-block bootstrap) with Hansen's trimming — so DM and a reusable CI are the only genuine gaps | llm §5.4; rl §5.1 | — | DM returns known-answer results on synthetic return pairs; CI coverage within 1% of nominal on a simulated AR process | needs-owner · S |
 | A2 | Cost-grid runner: report every run at 0/1/2/5/10 bps with a turnover term instead of one frictionless number. `finrobot backtest` currently has no cost flag and only appends "assumes zero commission and zero slippage" (observed on a live run) | llm §4 §5.2; rl §4 | A3 for the per-trial return series | a weak signal dies by 4–5 bps and a strong one survives, on the same ledger; the CLI stops printing a single frictionless result | needs-owner · S |
 | A3 | `--auto` persists a trial ledger, so `finrobot validate` can score the app's own search. `TrialLedger` and `build_ledger_from_search` already exist and are tested; `run_strategy_selection` never writes one | rl §5.1 ("no result without a baseline on the same split and clock"); this review | — | `finrobot backtest TICKER --auto` followed by `finrobot validate <ledger>` runs end to end on the app's own output | needs-owner · S |
-| A4 | Sharpe reporting guard. `_extract_sharpe` guards only the `None` case, so a near-flat curve annualises a tiny variance into a plausible-looking number: a live 2-trade AAPL window printed `Sharpe Ratio: -116.571`, while `test_backtrader_adapter.py:391` bounds \|Sharpe\| < 5 for a one-year window only | this review | — | a low-trade window returns `sharpe_ratio=None` with an explicit "too few trades" warning; regression test beside line 391 | **defect** · S |
+| A4 | **LANDED.** The annualised Sharpe is withheld when the equity curve's daily-return dispersion falls below `MIN_DAILY_RETURN_STD` (1e-4), with the reason stated in the warnings. Cause: the built-in `sma_crossover` carries backtrader's default one-share sizer, so a $100k account holds ~0.2% exposure and the curve barely moves. Measured — dispersion 1.4e-5 and a raw ratio of **-177.75** for that configuration (the live -116.571 is the same mechanism); a fully invested position gives 1.1e-2 and keeps its 2.566 | this review | — | near-flat curve → `sharpe_ratio=None` + warning; `abs(Sharpe) < 5` still holds on the invested one-year case; 3 unit tests + 1 end-to-end regression | **landed** |
 | A5 | Event-time observability gate + contamination metadata: pre-open / intraday / after-close / weekend execution timing, a per-article field carrying the source model's release date and pretraining cutoff, and the delay-every-signal-one-day robustness arm | llm §5.3 | — | reported Sharpe on a pre-2023 window is materially *higher* than on a post-cutoff window — the expected overstatement, which is how the gate is shown to work | ready · S |
 | A6 | Look-ahead audit gate in any training loop: recompute the policy gradient with future information removed and reject a run whose contamination is not zero within bootstrap error | rl §5.2; llm §4 | C1 | the audit runs on the implemented objective and flags a deliberately leaky arm | blocked on C1 · M |
-| A7 | Probe coverage. `PRIORITY` references 17 provider ids; `endpoints.json` carries 49 rows over 14 providers. `fmp`, `finnhub` and `sec_edgar` are HTTP/keyed chain providers with **no probe row** — `sec_filings` → `sec_edgar` is already recorded as an inventory gap at `qfin-st/news-sentiment-nlp.md:260`. The inverse also holds: `massive` probes `ok` but appears in no `PRIORITY` tuple, so no category routes to it, yet all three reviewed documents cite it as available | this review; llm §3 | — | the probe emits rows for `fmp`, `finnhub` and `sec_edgar`; every §3 status cell re-checked against the new snapshot | needs-owner · M |
+| A7 | Probe coverage. Only 14 of the 18 registry providers declare a module-level `ENDPOINTS`, and `probe_all` iterates the catalogue's keys — so `fmp`, `finnhub`, `sec_edgar` and `yfinance`, all of which `PRIORITY` routes to, are invisible to the probe. That includes `fmp`, the **first** choice for `core_stock_apis`, and `sec_edgar`, the only provider for `SEC_FILINGS` (already recorded as an inventory gap at `qfin-st/news-sentiment-nlp.md:260`). The inverse also holds: `massive` declares a catalogue and probes `ok`, but appears in no `PRIORITY` tuple, so no category routes to it, yet all three reviewed documents cite it as available | this review; llm §3 | — | the probe emits rows for those four; every §3 status cell re-checked against the new snapshot | needs-owner · M |
 
 ## B. LLM trading systems — the one reviewed category whose data layer is nearly satisfied
 
@@ -80,18 +80,20 @@ no data) and `A5` (event-time gate: no model needed).
 
 ## F. Defects and inconsistencies found in this review
 
-1. **`llm-trading-systems.md` §3 — two rows cite endpoints that do not exist as inventory tuples.**
-   `https://www.alphavantage.co/query` is listed under `news_data` and under `news_sentiment`, but the only
-   row that URL has in `endpoints.json` is `technical_indicators`. Alpha Vantage serves many functions from
-   one URL, so either the rows break the "exact `url`/`category`/`provider`/`code` tuple" convention or the
-   catalogue needs distinct probe rows for that provider's `NEWS_SENTIMENT` function. Audit of all three
-   documents: 66 §3 rows, ABM 18/18 and RL 20/20 clean, LLM 26/28 — these two.
+1. **RETRACTED — the two `alpha_vantage` rows are correct.** The first audit compared rows by URL alone, and
+   Alpha Vantage serves four categories from one URL (`news_data`, `news_sentiment`, `fundamental_data`,
+   `technical_indicators`), so the four inventory rows collapsed to whichever came last. Keyed on
+   `(url, category)` they all match. All **66 §3 rows in the three documents are correct**, and a repeat of
+   the audit across all 46 documents (724 non-gap rows) found no inventory mismatch either; the only
+   differences are presentational — three older documents write enum names in uppercase (`CORE_STOCK_APIS`),
+   `derivatives-options.md` writes `ok=true`/`ok=false`, several use prose statuses ("fail — HTTP 429"). No
+   document edit is needed.
 2. **`sec_edgar` has no probe row** — see A7. Effect: the SEC full-text path (`D2`) is unverified in the
    inventory while the documents cite it as available.
 3. **`massive` is cited in all three §3 tables as `ok` but is in no category priority** — accurate about the
    probe, misleading about reachability. A finding to state in the documents, not a code defect: the registry
    documents unlisted keyed providers as deliberate.
-4. **The Sharpe artifact** — a finite, meaningless metric reaches the user (A4).
+4. **The Sharpe artifact** — a finite, meaningless metric reached the user; **fixed** (A4).
 5. **`--auto` writes no ledger** — the app's own search output cannot be validated (A3).
 
 ## G. Explicitly not now
@@ -105,9 +107,16 @@ no data) and `A5` (event-time gate: no model needed).
 
 ## Provenance of this review
 
-- **Endpoint audit.** All 66 §3 table rows across the three documents re-parsed and compared cell-by-cell
-  against `strategies/endpoints.json` (49 rows / 14 providers). Provider rows are exact matches including
-  backticks; 2 category mismatches found (§F1).
+- **Endpoint audit — and a correction to this document's first pass.** All 66 §3 rows in the three documents,
+  then all 724 non-gap rows across the 46 documents, re-parsed and compared cell-by-cell against
+  `strategies/endpoints.json` (49 rows / 14 providers). The first pass keyed rows by URL and reported two
+  `alpha_vantage` mismatches; that was the audit's bug, not the documents' (§F1). Keyed on `(url, category)`
+  there are none.
+- **A second correction.** This backlog first listed White's reality check as missing from the gate. It is
+  not — `spa_test` is the studentized-max reality check over a moving-block bootstrap, with Hansen's
+  trimming. Only Diebold–Mariano and a reusable bootstrap CI are genuinely absent (A1).
+- **Fix shipped with this document.** A4's Sharpe guard landed in the same change, verified against the
+  measured separation (degenerate 1.4e-5 dispersion / raw -177.75 refused; invested 1.1e-2 / 2.566 kept).
 - **Dependency audit** of `finrobot_desktop/.venv` (Python 3.14.0): `numpy`, `pandas`, `backtrader` present;
   `torch`, `stable-baselines3`, `gymnasium`, `transformers`, `scikit-learn`, `scipy` absent. This is what
   turns the RL document's "items 1–5 are buildable now" into C1: they are buildable in *principle*, on daily

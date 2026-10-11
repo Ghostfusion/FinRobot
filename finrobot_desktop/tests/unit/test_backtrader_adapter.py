@@ -175,6 +175,44 @@ class TestExtractAnalyzers:
         assert adapter._extract_sharpe(strat, warnings) is None
         assert len(warnings) == 1
 
+    def test_extract_sharpe_withheld_on_flat_curve(self) -> None:
+        """A finite ratio from a nearly flat curve is refused, not printed.
+
+        The built-in SMA strategy carries backtrader's default one-share sizer,
+        so a $100k account barely moves; dividing a near-zero mean by a near-zero
+        deviation yields an arbitrary number. The guard keys on the dispersion of
+        the daily equity-curve returns, not on the ratio it is vetting.
+        """
+        adapter = BackTraderAdapter(MagicMock())
+        strat = MagicMock()
+        strat.analyzers.sharpe.get_analysis.return_value = {"sharperatio": -177.75}
+        # A year of flat days with two 1e-6 blips: dispersion ≈ 1.2e-7.
+        strat.analyzers.daily_returns.get_analysis.return_value = {
+            i: (1e-6 if i in (10, 200) else 0.0) for i in range(261)
+        }
+        warnings: list[str] = []
+        assert adapter._extract_sharpe(strat, warnings) is None
+        assert len(warnings) == 1
+        assert "artifact" in warnings[0]
+
+    def test_extract_sharpe_reported_when_curve_is_alive(self) -> None:
+        """The guard must not fire on a curve that genuinely moves."""
+        adapter = BackTraderAdapter(MagicMock())
+        strat = MagicMock()
+        strat.analyzers.sharpe.get_analysis.return_value = {"sharperatio": 1.5}
+        strat.analyzers.daily_returns.get_analysis.return_value = {
+            i: (0.01 if i % 2 else -0.01) for i in range(261)
+        }
+        warnings: list[str] = []
+        assert adapter._extract_sharpe(strat, warnings) == 1.5
+        assert not warnings
+
+    def test_daily_return_std_none_without_series(self) -> None:
+        """No TimeReturn analyzer (stub strategy) → skip the guard, never raise."""
+        strat = MagicMock()
+        strat.analyzers.daily_returns = None
+        assert BackTraderAdapter._daily_return_std(strat) is None
+
     def test_extract_drawdown(self) -> None:
         adapter = BackTraderAdapter(MagicMock())
         strat = MagicMock()
@@ -432,6 +470,36 @@ class TestSharpeOnDailyBars:
         # annualized return is surfaced alongside the cumulative total_return.
         assert result.annualized_return is not None
         assert math.isfinite(result.annualized_return)
+
+    def test_sharpe_withheld_on_builtin_sma_with_default_sizer(self) -> None:
+        """The reported defect: the built-in strategy's default one-share sizer.
+
+        ``finrobot backtest AAPL --strategy sma_crossover`` on a $100k account
+        holds ~0.2% exposure, so the equity curve is nearly flat and the
+        annualised ratio of two near-zero moments is an arbitrary number — a real
+        9-month run printed "Sharpe Ratio: -116.571" over 2 trades. The same
+        configuration on this fixture measured -177.75 before the guard, against
+        a daily-return dispersion of 1.4e-5. It is withheld now, with the reason
+        stated, instead of being printed as a metric.
+        """
+        bars = _one_year_daily_bars(seed=42)
+        data_layer = MagicMock()
+        data_layer.fetch_price_range = AsyncMock(return_value=bars)
+        adapter = BackTraderAdapter(data_layer)
+        adapter._render_chart = lambda *a, **k: None  # type: ignore[method-assign]
+        config = BacktestConfig(
+            ticker="SYNTH",
+            start_date="2023-01-02",
+            end_date="2024-01-02",
+            strategy="sma_crossover",
+        )
+
+        result = adapter._run_sync(config)
+
+        # It really did trade — the flat curve, not the trade count, is the problem.
+        assert result.total_trades >= 1
+        assert result.sharpe_ratio is None
+        assert any("nearly flat" in w for w in result.warnings)
 
 
 @pytest.mark.skipif(FullyInvestedStrategy is None, reason="backtrader not installed")
