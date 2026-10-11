@@ -188,14 +188,14 @@ Probe status is the live-probe field from `strategies/endpoints.json`. `gateway`
 | Cross-sectional return panel (mean correlation C̄, correlation networks) | `https://eodhd.com/api/eod/AAPL` (bulk) + `https://eodhd.com/api/exchange-symbol-list/US` | core_stock_apis / exchange_symbols | eodhd | ok / ok |
 | VIX level (Macro_Stress_Index VIX_Z term) | `https://api.stlouisfed.org/fred/series/observations` (series VIXCLS) | macro_data | fred | ok |
 | US 10Y yield (Macro_Stress_Index Yield_Z term) | `https://api.stlouisfed.org/fred/series/observations` (series DGS10) | macro_data | fred | ok |
-| Risk-free rate (excess growth rate G) | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | risk_free_curve | federal_reserve | **failed** (connect/ReadTimeout) — substitute `macro_data`/fred (DGS3MO) |
+| Risk-free rate (excess growth rate G) | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | risk_free_curve | federal_reserve | ok (FRED `DGS3MO` is an equivalent alternative) |
 | Realised variance / bipower variation (Vol_Spike, Jump_Ratio) | derived from intraday bars via `https://api.twelvedata.com/time_series` | core_stock_apis | twelvedata | ok (derived); needs intraday granularity |
 | News sentiment as TVTP exogenous driver | `https://eodhd.com/api/sentiments` | news_sentiment | eodhd | ok |
 | News sentiment (alt driver) | `https://www.alphavantage.co/query` | news_sentiment | alpha_vantage | ok |
 | GDELT tone (alt driver) | `https://api.gdeltproject.org/api/v2/doc/doc` | news_sentiment | gdelt | rate_limited (HTTP 429) |
 | Event probabilities (forward-looking regime triggers) | `https://gamma-api.polymarket.com/markets` | prediction_markets | polymarket | ok |
 | Economic calendar (dates to validate detected change-points) | `moomoo://get_economic_calendar` | economic_calendar | moomoo | gateway |
-| Options-implied vol / surface (stress driver) | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | options_surface | cboe | **failed** (HTTP 307) |
+| Options-implied vol / surface (stress driver) | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | options_surface | cboe | ok |
 | Options chain IV (alt stress driver) | `moomoo://get_option_chain` | options_data | moomoo | gateway |
 | Expected move (alt stress driver) | `moomoo://get_option_underlying_overview` | expected_move | moomoo | gateway |
 | Short interest (smart-money stress driver) | `moomoo://get_short_interest` | short_interest | moomoo | gateway |
@@ -206,7 +206,7 @@ Probe status is the live-probe field from `strategies/endpoints.json`. `gateway`
 | **Intraday FX (EUR/USD 1-min, the MS-GARCH paper's exact setting)** | — | — | — | **gap** — no FX provider in the inventory (twelvedata *may* serve FX intraday but is not probed for it) |
 | **Ground-truth regime / change-point labels** | — | — | — | **gap** — none available; must be inferred or hand-dated from the economic calendar |
 
-Notes: the moomoo rows are all `gateway` (local OpenD SDK), so they are only usable when the desktop gateway is running; treat them as degraded/conditional. The single-vendor `risk_free_curve` (federal_reserve) and `options_surface` (cboe) endpoints failed the live probe, so any design that depends on them must fall back to FRED (`macro_data`) or a provider in `core_stock_apis`. Required env-var names (do not hard-code values): `EODHD_API_KEY`, `TIINGO_API_KEY`, `TWELVEDATA_API_KEY`, `MASSIVE_API_KEY`, `FRED_API_KEY`, `ALPHAVANTAGE_API_KEY`.
+Notes: the moomoo rows are all `gateway` (local OpenD SDK), so they are only usable when the desktop gateway is running; treat them as conditional. The single-vendor `risk_free_curve` (federal_reserve) and `options_surface` (cboe) endpoints both probe `ok`; an earlier snapshot showed them failing, which was a probe bug (a 15 s timeout against a ~17 s Treasury CSV, and a redirect the probe did not follow), fixed and re-probed on 2026-10-10. Each still has exactly one provider, so keep FRED (`macro_data`) as a fallback for rates. Required env-var names (do not hard-code values): `EODHD_API_KEY`, `TIINGO_API_KEY`, `TWELVEDATA_API_KEY`, `MASSIVE_API_KEY`, `FRED_API_KEY`, `ALPHAVANTAGE_API_KEY`.
 
 ---
 
@@ -249,7 +249,7 @@ Notes: the moomoo rows are all `gateway` (local OpenD SDK), so they are only usa
 5. **Mean-market-correlation change-point monitor** (offline + rolling on-line) over the `CORE_STOCK_APIS` cross-section: rolling 42-day correlation matrix, C̄ stamped at the 21st window date, thinned, Bayesian piecewise-linear CP over m∈{1..4}. Use it as a market-stress dashboard, not a signal. **Data:** cross-sectional daily returns (eodhd bulk). **Expected value:** medium (crisis dating / situational awareness). **Risk:** low-medium (ex-post by nature). **Effort: M.**
 6. **Regime-aware risk gate**: normalised Shannon entropy of filtered state probabilities; suppress new exposure when H̃_t > 0.85, and expose a cross-scale/cross-asset Disagreement feature. **Data:** outputs of items 1/4. **Expected value:** medium (cheap de-risking overlay). **Risk:** low. **Effort: S.**
 7. **(Optional, only if intraday is added)** multi-scale MS-GARCH with three timescales via twelvedata intraday bars + FRED macro index; treat as a research spike because the paper's exact 1-min FX setting has no provider here. **Data:** twelvedata intraday (ok) + fred macro (ok); FX 1-min is a **gap**. **Expected value:** medium. **Risk:** high (residual ARCH, cost). **Effort: L.**
-8. **Do not build** on the failed/degraded rows without a fallback: `risk_free_curve`/federal_reserve (ReadTimeout) and `options_surface`/cboe (HTTP 307) failed the probe — use FRED for rates and defer options-implied stress drivers until a working options source exists (moomoo options rows need the local gateway). **Effort: S.**
+8. **Single-vendor rows need a fallback, not avoidance**: `risk_free_curve`/federal_reserve and `options_surface`/cboe both probe `ok` (re-probed 2026-10-10), but each has exactly one provider — keep FRED for rates and the moomoo gateway rows (option chain, expected move) as alternates for options-implied stress drivers. **Effort:** S.
 
 ---
 

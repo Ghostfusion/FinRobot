@@ -267,7 +267,7 @@ Every row cites a real endpoint from `strategies/endpoints.json`.
 | Adjusted prices — splits/dividends | `https://eodhd.com/api/div/AAPL` | corporate_actions | eodhd | ok |
 | Benchmark / buy-and-hold series (e.g. SPY) | `https://eodhd.com/api/eod/AAPL` | core_stock_apis | eodhd | ok |
 | Risk-free rate for Sharpe / DSR | FRED series observations (e.g. DGS1MO) — `https://api.stlouisfed.org/fred/series/observations` | macro_data | fred | ok |
-| Treasury curve (term-structure benchmark) | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | risk_free_curve | federal_reserve | **fail** (connect ReadTimeout) |
+| Treasury curve (term-structure benchmark) | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | risk_free_curve | federal_reserve | ok |
 | Intraday bars for RL/ML backtests | `moomoo://get_cur_kline` | technical_indicators | moomoo | gateway (ok=false, local OpenD SDK) |
 | Equity market snapshot for agent envs | `moomoo://get_market_snapshot` | core_stock_apis | moomoo | gateway (ok=false) |
 | Prediction-market contracts (binary YES/NO) | `https://gamma-api.polymarket.com/markets` | prediction_markets | polymarket | ok |

@@ -1,4 +1,4 @@
-# Risk management & tails — learnings from the q-fin.ST corpus
+# Risk Management & Tails — learnings from the q-fin.ST corpus
 `426` of 4372 corpus papers matched this category (426 with PDFs); this doc is based on a close reading of `6`.
 
 ## 1. What the corpus actually offers
@@ -121,8 +121,8 @@ Endpoint rows are the live-probed rows in `strategies/endpoints.json`; `gateway`
 | Daily prices (fallback) | `https://api.massive.com/v2/aggs/ticker/AAPL/prev` | `CORE_STOCK_APIS` | massive | ok |
 | Intraday / kline (realized vol, EVT on intrada) | `moomoo://get_cur_kline` | `TECHNICAL_INDICATORS` | moomoo | gateway |
 | Option chains (implied vol, expected move, tail-hedge cost) | `moomoo://get_option_chain` | `OPTIONS_DATA` | moomoo | gateway |
-| SPX option surface (risk-neutral tails) | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | `OPTIONS_SURFACE` | cboe | HTTP 307 (failing) |
-| Risk-free curve (excess/discounted returns) | daily treasury CSV | `RISK_FREE_CURVE` | federal_reserve | ReadTimeout |
+| SPX option surface (risk-neutral tails) | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | `OPTIONS_SURFACE` | cboe | ok |
+| Risk-free curve (excess/discounted returns) | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | `RISK_FREE_CURVE` | federal_reserve | ok |
 | Macro series (rates, CPI — MSVAR regime inputs) | `https://api.stlouisfed.org/fred/series/observations` | `MACRO_DATA` | fred | ok |
 | Firm fundamentals (equity, revenue, costs, current assets/liabilities — default indicators) | `https://api.tiingo.com/tiingo/fundamentals/AAPL/statements` | `FUNDAMENTAL_DATA` | tiingo | ok |
 | Firm fundamentals (fallback) | `https://www.alphavantage.co/query` | `FUNDAMENTAL_DATA` | alpha_vantage | ok |

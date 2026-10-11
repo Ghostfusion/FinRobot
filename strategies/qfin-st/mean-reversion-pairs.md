@@ -120,8 +120,8 @@ $$\mathbb E_P[(\Delta\cdot S)_n-C_n(\Delta)\mid G]\ge0\ \ P\text{-a.s. for all }
 | Earnings dates (avoid holding over earnings) | `https://api.benzinga.com/api/v2.1/calendar/earnings` | EARNINGS_CALENDAR | benzinga | ok |
 | Analyst ratings (crowding) | `https://api.benzinga.com/api/v2.1/calendar/ratings` | ANALYST_RATINGS | benzinga | ok |
 | Macro series (regime overlay) | `https://api.stlouisfed.org/fred/series/observations` | MACRO_DATA | fred | ok |
-| Risk-free curve (Sharpe annualisation) | `https://home.treasury.gov/.../daily-treasury-rates.csv/2026/all` | RISK_FREE_CURVE | federal_reserve | connect (ReadTimeout) — **degraded** |
-| Options surface (IV overlay) | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | OPTIONS_SURFACE | cboe | http 307 — **gap** |
+| Risk-free curve (Sharpe annualisation) | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | RISK_FREE_CURVE | federal_reserve | ok |
+| Options surface (IV overlay) | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | OPTIONS_SURFACE | cboe | ok |
 | **Continuous futures (MNQ/MGC) 5-min bars** | — | — | — | **gap** |
 | **Tick / sub-bar data** | — | — | — | **gap** |
 | **GICS sector/industry mapping for pair grouping** | — | — | — | **gap** |

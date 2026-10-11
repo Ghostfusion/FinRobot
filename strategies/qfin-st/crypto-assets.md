@@ -1,4 +1,4 @@
-# crypto-assets — learnings from the q-fin.ST corpus
+# Crypto Assets — learnings from the q-fin.ST corpus
 
 `723` of 4372 corpus papers matched this category (720 with PDFs); this doc is based on a close reading of `6`.
 
@@ -184,7 +184,7 @@ The data layer routes on 33 categories (`finrobot_desktop/finrobot/engine/data/c
 | Global news tone (event study) | `https://api.gdeltproject.org/api/v2/doc/doc` | news_sentiment | gdelt | rate_limited (HTTP 429) |
 | Risk-free / rate curve for carry & APR comparison | `https://api.stlouisfed.org/fred/series/observations` | macro_data | fred | ok |
 | Prediction-market probabilities on crypto events | `https://gamma-api.polymarket.com/markets` | prediction_markets | polymarket | ok |
-| Crypto options surface (e.g. Deribit DVOL/skew) | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | options_surface | cboe | **gap** — cboe row is SPX-only (also HTTP 307); no crypto options provider |
+| Crypto options surface (e.g. Deribit DVOL/skew) | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | options_surface | cboe | **gap** — cboe row is SPX-only; no crypto options provider |
 | Intraday bars / indicators (possible intraday route) | `moomoo://get_cur_kline` | technical_indicators | moomoo | gateway (local OpenD SDK); equity-focused, not wired for crypto |
 | **Tick / aggTrade trades** | — | — | — | **gap** — no tick provider in the inventory |
 | **Taker imbalance / order-book depth** | — | — | — | **gap** — no L2/order-flow provider |

@@ -288,8 +288,8 @@ Every row below cites a real row of `strategies/endpoints.json`; probe status is
 | Macro indicators (secondary) | `moomoo://get_macro_indicator_list` | MACRO_DATA | moomoo | gateway (SDK) |
 | Corporate bond yields by rating (ICE BofA, e.g. `BAMLC0A1CAAAEY`) | `https://api.stlouisfed.org/fred/series/observations` | MACRO_DATA | fred | ok |
 | VIX monthly/daily (`VIXCLS`) | `https://api.stlouisfed.org/fred/series/observations` | MACRO_DATA | fred | ok |
-| Risk-free rate / Treasury curve | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | RISK_FREE_CURVE | federal_reserve | connect (ReadTimeout) |
-| Options surface / implied vol | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | OPTIONS_SURFACE | cboe | http (307) |
+| Risk-free rate / Treasury curve | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | RISK_FREE_CURVE | federal_reserve | ok |
+| Options surface / implied vol | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | OPTIONS_SURFACE | cboe | ok |
 | Options chain (implied vol, expected move) | `moomoo://get_option_chain` | OPTIONS_DATA | moomoo | gateway (SDK) |
 | Expected move (option-implied) | `moomoo://get_option_underlying_overview` | EXPECTED_MOVE | moomoo | gateway (SDK) |
 | News flow as nowcast indicator | `https://eodhd.com/api/news` | NEWS_DATA | eodhd | ok |
@@ -316,8 +316,9 @@ Every row below cites a real row of `strategies/endpoints.json`; probe status is
 
 Notes. (i) FRED is routed under `MACRO_DATA` and can serve both the nowcast regressors and the
 ICE BofA rating yields / VIX, so most of §2.1–2.2 and §2.5 are implementable today. (ii) The
-`RISK_FREE_CURVE` and `OPTIONS_SURFACE` probes currently fail (timeout / 307), so any curve- or
-surface-based factor must fail over to FRED (`MACRO_DATA`) or moomoo. (iii) moomoo rows are
+`RISK_FREE_CURVE` and `OPTIONS_SURFACE` probes both return `ok` on re-probe (2026-10-10); the failures recorded earlier were probe
+bugs — a 15 s timeout against a ~17 s Treasury CSV and a non-followed cboe redirect — so no
+failover is required, though FRED (`MACRO_DATA`) remains a sound fallback for redundancy. (iii) moomoo rows are
 reachable only through the local OpenD gateway (`moomoo://`), so they are effectively unavailable
 in a hosted deployment. (iv) The panel-regression regressors of §2.4 are Eurostat/World Bank
 series with no provider in the current inventory — that technique cannot be reproduced end-to-end

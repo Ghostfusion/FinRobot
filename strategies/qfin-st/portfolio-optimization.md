@@ -146,7 +146,7 @@ $\mathbb{E}(X)=\mu+h(\lambda_0,\lambda_1)\Sigma^{1/2}\lambda_1/\sqrt{1+\lambda_1
 | Fundamentals (alt) | `https://www.alphavantage.co/query` | fundamental_data | alpha_vantage | ok |
 | Technical indicators (momentum screens) | `https://www.alphavantage.co/query` | technical_indicators | alpha_vantage | ok |
 | Intraday K-line (proxy for tick volumes) | `moomoo://get_cur_kline` | technical_indicators | moomoo | gateway (local OpenD SDK) |
-| Risk-free curve (Sharpe, $\gamma$ scaling) | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | risk_free_curve | federal_reserve | connect timeout |
+| Risk-free curve (Sharpe, $\gamma$ scaling) | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | risk_free_curve | federal_reserve | ok |
 | Analyst ratings (BL views) | `https://api.benzinga.com/api/v2.1/calendar/ratings` | analyst_ratings | benzinga | ok |
 | Analyst actions / insights (BL views) | `https://api.benzinga.com/api/v1/analyst/insights` | analyst_actions | benzinga | HTTP 403 |
 | News sentiment (BL views) | `https://eodhd.com/api/sentiments` | news_sentiment | eodhd | ok |
@@ -157,7 +157,7 @@ $\mathbb{E}(X)=\mu+h(\lambda_0,\lambda_1)\Sigma^{1/2}\lambda_1/\sqrt{1+\lambda_1
 | Short interest (crowding) | `moomoo://get_short_interest` | short_interest | moomoo | gateway |
 | Market breadth | `moomoo://get_rise_fall_distribution` | market_breadth | moomoo | gateway |
 | Insider trades (smart money) | `moomoo://get_insider_trade_list` | smart_money | moomoo | gateway |
-| Options surface (implied vol / risk) | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | options_surface | cboe | HTTP 307 |
+| Options surface (implied vol / risk) | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | options_surface | cboe | ok |
 | Options chain | `moomoo://get_option_chain` | options_data | moomoo | gateway |
 | Prediction markets (event views) | `https://gamma-api.polymarket.com/markets` | prediction_markets | polymarket | ok |
 | Corporate actions (total-return adjustment) | `https://eodhd.com/api/div/AAPL` | corporate_actions | eodhd | ok |

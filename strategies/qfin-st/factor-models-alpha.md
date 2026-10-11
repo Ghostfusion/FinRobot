@@ -1,6 +1,6 @@
 # Factor Models & Alpha — learnings from the q-fin.ST corpus
 
-`256` of 4372 corpus papers matched this category (252 with PDFs, 2000–2026); this doc is based on a close reading of `6`.
+`256` of 4372 corpus papers matched this category (252 with PDFs); this doc is based on a close reading of `6`.
 
 ## 1. What the corpus actually offers
 
@@ -153,9 +153,9 @@ Every row cites a probed endpoint from `strategies/endpoints.json` (49 rows, 14 
 | Dividends → dividend-inclusive total returns | `https://eodhd.com/api/div/AAPL` | corporate_actions | eodhd | ok |
 | Same (fallback) | `https://api.benzinga.com/api/v2.2/calendar/dividends` | corporate_actions | benzinga | ok |
 | Risk-free rate for excess returns | `https://api.stlouisfed.org/fred/series/observations` | macro_data | fred | ok |
-| Treasury curve | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | risk_free_curve | federal_reserve | degraded: `connect` ReadTimeout |
+| Treasury curve | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | risk_free_curve | federal_reserve | ok |
 | VIX monthly average (paper 5) | `https://api.stlouisfed.org/fred/series/observations` (VIXCLS) | macro_data | fred | ok |
-| Options-implied vol surface | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | options_surface | cboe | degraded: `http` 307 |
+| Options-implied vol surface | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | options_surface | cboe | ok |
 | Institutional holdings (characteristic) | `moomoo://get_shareholders_institutional` | institution_data | moomoo | gateway |
 | Insider trades (characteristic) | `moomoo://get_insider_trade_list` | smart_money | moomoo | gateway |
 | Analyst ratings (characteristic) | `https://api.benzinga.com/api/v2.1/calendar/ratings` | analyst_ratings | benzinga | ok |

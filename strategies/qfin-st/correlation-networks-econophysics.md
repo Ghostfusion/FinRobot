@@ -1,6 +1,6 @@
 # Correlation Networks & Econophysics — learnings from the q-fin.ST corpus
 
-`912` of 4372 corpus papers matched this category (the largest cluster; 909 with PDFs); this doc is based on a close reading of `6`.
+`912` of 4372 corpus papers matched this category (909 with PDFs); this doc is based on a close reading of `6`.
 
 Two of the six assigned papers (household income/wealth; herding-based technology transfer) are macro/distributional econophysics with no tradable signal — they are summarised and explicitly marked non-actionable in §1. The remaining four (Marchenko–Pastur spectral cleaning, conditional mutual-information core–periphery networks, relative-entropy finite-sample theory, 2D Ising stylised facts) yield concrete, implementable machinery.
 
@@ -112,8 +112,8 @@ Every row below cites a real probe row from `strategies/endpoints.json`.
 | News sentiment, fallback | `https://www.alphavantage.co/query` | news_sentiment | alpha_vantage | ok |
 | News sentiment, fallback | `https://api.gdeltproject.org/api/v2/doc/doc` | news_sentiment | gdelt | rate_limited |
 | Crash/event probability (prediction market) | `https://gamma-api.polymarket.com/markets` | prediction_markets | polymarket | ok |
-| Risk-free rate for Sharpe/Sharpe-difference tests | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | risk_free_curve | federal_reserve | **failed** (`connect`) |
-| Implied-vol index / VIX term structure | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | options_surface | cboe | **failed** (`http`) |
+| Risk-free rate for Sharpe/Sharpe-difference tests | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | risk_free_curve | federal_reserve | ok |
+| Implied-vol index / VIX term structure | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | options_surface | cboe | ok |
 | Short interest (crowding/periphery proxy) | `moomoo://get_short_interest` | short_interest | moomoo | gateway (not live) |
 | Market breadth (advance/decline for MSF analogue) | `moomoo://get_rise_fall_distribution` | market_breadth | moomoo | gateway (not live) |
 | Capital flow (periphery vs core flows) | `moomoo://get_capital_flow` | capital_flow | moomoo | gateway (not live) |

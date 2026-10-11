@@ -230,8 +230,8 @@ structure.
 | News sentiment (event-coded tone, GDELT) | `https://api.gdeltproject.org/api/v2/doc/doc` | news_sentiment | gdelt | rate_limited |
 | Analyst ratings (pre-event revision) | `https://api.benzinga.com/api/v2.1/calendar/ratings` | analyst_ratings | benzinga | **ok** |
 | Short-dated option chain (IV smile grid) | `moomoo://get_option_chain` | options_data | moomoo | gateway (SDK, not live) |
-| Listed index option surface | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | options_surface | cboe | http (fails; SPX-only) |
-| Risk-free curve (C-spread/DCF) | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | risk_free_curve | federal_reserve | connect (fails) |
+| Listed index option surface | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | options_surface | cboe | ok (SPX-only) |
+| Risk-free curve (C-spread/DCF) | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | risk_free_curve | federal_reserve | ok |
 | Macro/rates (FinBERT-free level control) | `https://api.stlouisfed.org/fred/series/observations` | macro_data | fred | **ok** |
 | SEC filings (event anchor / text) | **gap** — category `SEC_FILINGS` routes to `sec_edgar` (categories.py `PRIORITY`) but **no live row exists in `strategies/endpoints.json`** | sec_filings | sec_edgar | no probe |
 | Per-earnings-day strike-level option IVs with European-equivalents (Bloomberg-style) | **gap** — no provider row supplies calibrated IV surfaces for single names | options_surface | — | missing |

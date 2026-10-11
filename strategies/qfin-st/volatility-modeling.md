@@ -96,10 +96,10 @@ A fully connected transverse-field Ising reservoir, $H=\sum_{i<j}J_{ij}X_iX_j + 
 | Aggregate bars (intraday candidates) | `https://api.massive.com/v2/aggs/ticker/AAPL/prev` | core_stock_apis | massive | ok |
 | EOD bars (alt) | `https://api.stockdata.org/v1/data/eod` | core_stock_apis | stockdata | ok |
 | Daily OHLCV (local gateway) | `moomoo://get_market_snapshot` | core_stock_apis | moomoo | gateway |
-| Options surface / model-free implied vol (VIX-like) | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | options_surface | cboe | fail — HTTP 307 |
+| Options surface / model-free implied vol (VIX-like) | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | options_surface | cboe | ok |
 | Expected move (implied, from option chain) | `moomoo://get_option_underlying_overview` | expected_move | moomoo | gateway |
 | Macro state: term spread, rates, HY credit spread | `https://api.stlouisfed.org/fred/series/observations` | macro_data | fred | ok |
-| Treasury yield curve / risk-free | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | risk_free_curve | federal_reserve | fail — connect/read timeout |
+| Treasury yield curve / risk-free | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | risk_free_curve | federal_reserve | ok |
 | News/attention features for ML-RV models | `https://eodhd.com/api/news` | news_data | eodhd | ok |
 | News sentiment (alt) | `https://www.alphavantage.co/query` | news_sentiment | alpha_vantage | ok |
 | Global news tone | `https://api.gdeltproject.org/api/v2/doc/doc` | news_sentiment | gdelt | fail — HTTP 429 rate_limited |

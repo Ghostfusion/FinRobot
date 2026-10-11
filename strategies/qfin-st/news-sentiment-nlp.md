@@ -1,4 +1,4 @@
-# News sentiment & NLP — learnings from the q-fin.ST corpus
+# News Sentiment & NLP — learnings from the q-fin.ST corpus
 
 `373` of 4372 corpus papers matched this category (372 with PDFs); this doc is based on a close reading of `6`.
 
@@ -242,7 +242,7 @@ name only.
 | News headline/URL/publish time per ticker | `https://eodhd.com/api/news` (`api_token=$EODHD_API_KEY`) | news_data | eodhd | ok |
 | Per-article polarity (EODHD `sentiment.polarity`) | `https://eodhd.com/api/news` | news_data | eodhd | ok |
 | Aggregated daily sentiment series (`normalized` ∈ [-1,1]) | `https://eodhd.com/api/sentiments` (`s={ticker}`) | news_sentiment | eodhd | ok |
-| News + per-ticker sentiment score (AV feed) | `https://www.alphavantage.co/query?function=NEWS_SENTIMENT` | news_sentiment | alpha_vantage | ok |
+| News + per-ticker sentiment score (AV feed) | `https://www.alphavantage.co/query` (`function=NEWS_SENTIMENT`) | news_sentiment | alpha_vantage | ok |
 | Global news tone timeline (per-article tone) | `https://api.gdeltproject.org/api/v2/doc/doc` (`mode=timelinetone`) | news_sentiment | gdelt | rate_limited |
 | Wire/company news feed, Benzinga | `https://api.benzinga.com/api/v2/news` (`token=$BENZINGA_API_KEY`) | news_data | benzinga | ok |
 | News retractions/corrections | `https://api.benzinga.com/api/v2/news-removed` | news_retractions | benzinga | ok |
