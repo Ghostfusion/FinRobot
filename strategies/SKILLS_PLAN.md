@@ -237,3 +237,56 @@ One caveat on the taxonomy: `q-fin.PR` is a single arXiv category, so the 17-way
 (title+abstract term sets, multi-label, 93% of the corpus matched to at least one category), not
 arXiv's own. Each document states its own member count and the 163 unmatched papers are stated
 rather than hidden.
+
+### 7.1 Conversion review
+
+Each document was reviewed against the same criterion as §2 — the procedure must be executable on
+data the layer actually serves, and must not duplicate an existing skill. Read the §5 first item,
+not the served percentage: it is the honest test.
+
+**Eleven of the seventeen pass; four are deferred on a missing market feed; two are overlaps.**
+
+The pattern is the interesting part. The pricing categories convert *because pricing models need
+little market data* — the delayed SPX chain, the Treasury curve and equity OHLCV carry them, even
+where the §3 table is only half served. The four deferred documents are blocked for the opposite
+reason: their subject *is* a market the app has no feed for. A thin §3 table is therefore not the
+same as an unbuildable document, and the two must not be conflated.
+
+| document | served | verdict | basis |
+|---|---:|---|---|
+| `option-pricing-foundations` | 47% | **convertible** | §5.1/5.2/5.5 read only the served Treasury curve and SPX chain; gaps are a long-history panel, a VIX series and intraday measures |
+| `volatility-surface-calibration` | 60% | **convertible** | §5.1–5.3 invert and fit the served SPX chain; the model-free variance index needs nothing else |
+| `stochastic-volatility` | 67% | **convertible** | §5.1 model-side on the served chain/curve; §5.2–5.3 need no data at all |
+| `numerical-methods` | 71% | **convertible** | every §5 item is model-side or reads the served curve/chain; no external feed |
+| `american-exotic-options` | 65% | **convertible** | §5.1–5.3 LSMC/Bermudan/barrier need only OHLCV plus the curve |
+| `jump-and-levy` | 56% | **convertible** | §5.1–5.4 calibrate to the served SPX chain and daily OHLCV |
+| `hedging-incomplete-markets` | 72% | **convertible** | §5.1–5.3 run on OHLCV plus the served SPX surface |
+| `interest-rate-term-structure` | 53% | **convertible** | §5.1–5.4 use the served Treasury curve and SPX put-call parity; the swaption arm is `gap` and stays out |
+| `equilibrium-and-corporate-valuation` | 78% | **convertible** | §5.1–5.3 use OHLCV, FRED and dividends — but partially overlaps the vendored `dcf-model` |
+| `risk-and-optimal-decisions` | 63% | **convertible** | §5.1–5.3 run on the equity panel, chain and FRED; the risk-measure half overlaps `risk-management-tails` |
+| `ml-and-neural-pricing` | 55% | **convertible** | the NumPy arm only (delta correction, no-transaction-band evaluation, LSMC); the `torch` arms are out of scope by red line 11 |
+| `market-microstructure-liquidity` | 53% | **overlap** | §5.1–5.2 repeat `volatility-surface-calibration`'s chain harness and IV inversion; the depth/funding arms are `gap` |
+| `mathematical-foundations` | 62% | **overlap** | the BSDE/Malliavin/robust-bound machinery duplicates `numerical-methods` and `hedging-incomplete-markets`, with no distinct data story |
+| `credit-counterparty-risk` | 58% | **deferred** | the category's core is credit spreads and CDS, which nothing serves; only the Merton distance-to-default proxy is buildable |
+| `commodity-energy-derivatives` | 57% | **deferred** | every core input — power, gas, temperature, carbon — is `gap` |
+| `crypto-digital-derivatives` | 45% | **deferred** | the document itself concludes the category is blocked on data, not on models |
+| `insurance-mortality-linked` | 43% | **deferred** | mortality tables, insurance loss data and credit spreads are all `gap` |
+
+**Recommended order, by tranche.** The six pricing/numerics documents share one data story (the
+served SPX chain, the Treasury curve, equity OHLCV) and one domain, so they belong together:
+`option-pricing-foundations`, `volatility-surface-calibration`, `stochastic-volatility`,
+`jump-and-levy`, `numerical-methods`, `american-exotic-options`. Then `hedging-incomplete-markets`
+and `interest-rate-term-structure`, then `equilibrium-and-corporate-valuation`,
+`risk-and-optimal-decisions` and the NumPy arm of `ml-and-neural-pricing`.
+
+Two overlap notes to settle before converting. `volatility-surface-calibration` and
+`stochastic-volatility` both contain a Heston pricer — keep the surface-inversion and no-arbitrage
+content in the former and the model-side pricing, VIX futures and moment-explosion guard in the
+latter. `option-pricing-foundations` and `jump-and-levy` both calibrate a Merton jump-diffusion —
+keep the jump-family pricers in the latter and Black-Scholes, replicability and discrete-hedging
+error in the former.
+
+None of the eleven is converted. Conversion is mechanical once a document is chosen: author
+`strategies/skill_meta/<id>.yaml` (description, triggers, persona, output format) and run
+`uv run --no-sync python scripts/convert_strategy_docs.py --only <id>`. The declared `torch`-only
+methods must stay out of any converted `ml-and-neural-pricing` body.
