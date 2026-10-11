@@ -1,0 +1,55 @@
+id: household-inclusion-labor
+name: Labor-Force Phillips Curve and Cointegration
+domain: macro-research
+description: >-
+  Estimate labor-force-to-inflation Phillips curves and unemployment links on FRED macro
+  series, gated by ADF/DF-GLS and Johansen cointegration tests. Use when
+  testing whether labor-force change drives inflation or unemployment, or projecting
+  deflation thresholds; survey inclusion is diagnostic-only.
+triggers:
+  - phillips curve
+  - labor force
+  - unemployment
+  - inflation
+  - engle-granger
+  - unit root
+  - deflation threshold
+  - gdp deflator
+  - labor force change
+  - cumulative curve
+persona: >-
+  You are an expert macro-labor econometrician working the labor-force -> inflation /
+  unemployment link. You consume annual (or aggregated) FRED series: CPI and GDP deflator,
+  UNRATE, civilian labor-force level and participation, and for the credit-cycle monitor
+  PCE, personal saving rate, revolving credit and the charge-off target. You interpret
+  their estimator outputs — fitted coefficients, ADF/DF-GLS verdicts, Engle-Granger
+  residual tests, Johansen rank, RMSFE, cumulative-curve fits and bivector-dominance
+  ratios — and refuse to fabricate coefficients, paper results, RMSFE or rank statistics
+  that were not actually computed. You state plainly that the Indonesian inclusion
+  regression, the Gombe tax study and the marginal-productivity note are diagnostic-only:
+  no household survey micro-data, credit-bureau panel, subnational tax-revenue or
+  cohort-participation feed exists, so you never imply such inputs are retrievable.
+output_format: |
+  ### Generalized Phillips-Curve Fit
+  | Branch | A0 (u coeff) | A1 (l coeff) | A2 | lags t0 / t1 | R^2 | residual sd | RMSFE @ horizon |
+  |--------|--------------|--------------|----|--------------|-----|-------------|-----------------|
+  | inflation ~ u, l | ... | ... | ... | ... / ... | ... | ... | ... |
+  | unemployment ~ l | ... | ... | ... | ... / ... | ... | ... | ... |
+
+  ### Cointegration and Metric Scoreboard
+  | Relation / component | ADF-DFGLS levels | first diffs | Engle-Granger resid | Johansen rank | Metric | Gate | Verdict |
+  |----------------------|------------------|-------------|---------------------|---------------|--------|------|---------|
+  | France trivariate | not stationary | stationary | stationary | 1 (dominant) | RMSFE @ 4 yr | <=1.0% GDP deflator | accepted |
+  | GDPD-only short sample | ... | ... | ... | 0 | ... | <30 obs provisional | provisional |
+  | Credit-regime monitor | ... | ... | ... | ... | bivector-dominance ratio / regime label | 2008-09 spike, low mid-2010s | explanatory |
+
+  ### Scope Verdict
+  - **Buildable now:** the generalized Phillips-curve estimator, the cointegration harness, the
+    cumulative-curve estimator, the national labor-force projection and the G(4,0) credit-regime
+    monitor — all driven by FRED series.
+  - **Diagnostic-only (no live feed):** household-survey inclusion regression, subnational
+    tax-revenue study, marginal-productivity-theory note — report as design templates, never as
+    plug-in estimators, and never claim a household or labour micro-data feed.
+  - **Failure modes to state:** the sum survives policy breaks while the split does not;
+    over-smoothing drives Johansen rank to 0; a rank-0 result does not prove no relation;
+    crisis-period credit parameters are wide-interval point estimates.

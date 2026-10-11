@@ -1,10 +1,10 @@
 # Skills plan — the 63 corpus documents against FinRobot's native skill system
 
-Status of this pass: **2026-10-11.** Twenty-three corpus documents are converted and shipped as
-agent skills — the twelve strongest of the first three corpora (§3) and eleven of the seventeen in
-the fourth, `cat:q-fin.PR` (§7.1). The deferred, reference-only and overlap verdicts of §2, §4, §5
-and §7.1 are recorded decisions, not a backlog. **79 skills ship**: 56 vendored plus 23
-corpus-derived.
+Status of this pass: **2026-10-11.** Every document this plan verdicts as a *skill* is converted and
+shipped: all 35 of the first three corpora's skill rows (§2, §3) and eleven of the seventeen in the
+fourth, `cat:q-fin.PR` (§7.1). **102 skills ship**: 56 vendored plus 46 corpus-derived. What remains
+unconverted is not a backlog — it is §4's eight documents, blocked on a market feed no provider
+serves, and §5's two reference-only plus one overlap, which are not procedures at all.
 
 A corpus here is a set of literature reviews — what the finance papers say FinRobot should be able
 to do — mapped input-by-input against the live endpoint inventory. A document becomes a
@@ -112,7 +112,10 @@ currently exits clean (0 mismatches over 63 documents).
 
 Totals: **35 skill · 8 deferred · 2 reference-only · 1 overlap.**
 
-## 3. The first landed tranche — 12 skills
+All 35 `skill` rows are landed. The eight `deferred`, two `reference-only` and one `overlap` rows
+carry their own verdicts and are not converted — §4 and §5 give the reason for each.
+
+## 3. The landed tranche — 12 skills
 
 Chosen as the documents whose §3 inputs are entirely served and which no vendored skill
 covers. Each is `finrobot_desktop/skills/<domain>/<id>/SKILL.md`:
@@ -132,13 +135,14 @@ covers. Each is `finrobot_desktop/skills/<domain>/<id>/SKILL.md`:
 | `optimal-execution-liquidation` | Almgren-Chriss, VWAP/TWAP, impact/risk trade-off |
 | `earnings-events-anomalies` | event studies, CAR/BHAR, surprise, post-earnings drift |
 
-**Landed:** all 12 of these, plus the eleven `qfin-pr` skills of §7.1 — **23 corpus-derived skills
-in all**. **Convertible but not yet landed:** the remaining 23 documents of the first three
-corpora, in the same shape — the converter emits them as soon as a `skill_meta/<id>.yaml` is
-reviewed. Adopt in tranches: `list_summary()` is injected into the lead agent's instructions on
-every run, so its size is a permanent context cost. At 79 skills it is 8,253 chars; the acceptance
-test budgets ~120 chars per skill rather than a fixed total, so a new tranche fails only if
-unusually verbose.
+**Landed:** all 12 of these, plus the remaining 23 `skill` rows of §2 and the eleven `qfin-pr`
+skills of §7.1 — **46 corpus-derived skills in all**, so every document this plan verdicts as a
+skill is converted.
+
+`list_summary()` is injected into the lead agent's instructions on every run, so its size is a
+permanent context cost: at 102 skills it is 11,229 chars against the acceptance test's ~120
+chars-per-skill budget of 12,240. That margin is now about 8%, so the next tranche — or a batch of
+unusually verbose descriptions — needs the budget revisited rather than assumed.
 
 ## 4. Deferred — 8 documents
 
@@ -176,10 +180,13 @@ same short list `strategies/TODO.md` §D1 records as the binding constraint.
 
 - **Literature-derived, never validated on FinRobot's own data.** §4/§5 of each document is the
   testing plan; nothing here is a backtested strategy.
-- The weakest verdicts: `derivatives-options` (partial overlap with the vendored
-  `partner-lseg/option-vol-analysis`), `high-frequency-latency` (narrow), `market-making-liquidity`
-  (DeFi pool-state bound) and `banking-credit-institutions` (depends on the single
-  `fred/macro_data` row, so one endpoint outage makes it inert).
+- The weakest verdicts are landed, but each carries its limitation in its persona rather than its
+  name: `derivatives-options` (partial overlap with the vendored `partner-lseg/option-vol-analysis`,
+  so its identity is the option-implied signal rather than the pricing it shares with the six
+  §7.1 siblings), `high-frequency-latency` (narrow — the measurement arm only),
+  `market-making-liquidity` (DeFi pool-state bound, not order-book market making) and
+  `banking-credit-institutions` (depends on the single `fred/macro_data` row, so one endpoint
+  outage makes it inert — the persona says so).
 - Any generated skill referenced by a pipeline step must also be registered in
   `_PIPELINE_SAFE_METHODOLOGY`, or the unattended prompt receives a raw body. No landed skill is
   referenced by a pipeline today.

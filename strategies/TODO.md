@@ -13,8 +13,9 @@ written; the `defect` rows do not.
 
 **Not to be confused with the skill track.** This file is the *build* backlog for FinRobot's own
 code. The separate question — which of the 63 documents can become an agent skill, and their
-verdicts — is recorded in [`SKILLS_PLAN.md`](SKILLS_PLAN.md); 23 of the 63 documents are now
-shipped as skills — 12 from the first three corpora, 11 from the fourth (`q-fin.PR`, §7.1).
+verdicts — is recorded in [`SKILLS_PLAN.md`](SKILLS_PLAN.md); 46 of the 63 documents are now
+shipped as skills — every document that plan verdicts as one. The other 17 are deferred on a
+missing feed, reference-only, or an overlap, and are not converted.
 
 **Status key.** `ready` buildable in this repo today · `needs-dep` needs a new dependency ·
 `needs-data` needs a feed no provider serves · `needs-owner` feature, owner sign-off required ·

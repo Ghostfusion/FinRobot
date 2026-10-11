@@ -11,9 +11,9 @@ SKILLS_DIR = Path(get_settings().skills_dir)
 @pytest.mark.skipif(not SKILLS_DIR.exists(), reason="Vendored skills not present")
 class TestP1aAcceptance:
     def test_all_skills_loaded(self):
-        """P1a acceptance: all 79 skills load (56 vendored + 23 corpus-derived)."""
+        """P1a acceptance: all 102 skills load (56 vendored + 46 corpus-derived)."""
         registry = SkillRegistry(SKILLS_DIR)
-        assert registry.count == 79, f"Expected 79 skills, got {registry.count}"
+        assert registry.count == 102, f"Expected 102 skills, got {registry.count}"
 
     def test_skill_list_by_domain(self):
         """P1a acceptance: skills are organized by domain."""

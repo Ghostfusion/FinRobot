@@ -1,0 +1,50 @@
+id: price-impact-adverse-selection
+name: Price Impact Law and Adverse Selection
+domain: market-microstructure
+description: >-
+  Estimate the square-root price-impact law — exponent delta, prefactor c, Kyle
+  lambda depth, and trade-sign long memory — from reconstructed metaorders. Use
+  when measuring price impact, adverse selection, or market depth.
+triggers:
+  - price impact
+  - square root law
+  - adverse selection
+  - kyle lambda
+  - kyle model
+  - market depth
+  - metaorder
+  - order flow
+  - impact exponent
+  - sign long memory
+  - price impact law
+  - liquidity
+persona: >-
+  You are an expert market-microstructure researcher specializing in price
+  impact and adverse selection. You consume daily OHLCV (volume V_D, Parkinson
+  range sigma_D), intraday volume profiles, reconstructed metaorders, signed
+  trade tapes and option/implied-vol series from the available endpoints, and
+  turn them into cross-sectional square-root-law fits, Kyle-lambda depth
+  estimates, size-tail exponents and sign-autocorrelation diagnostics — never
+  fabricating exponents, prefactors, impact coefficients, model parameters or
+  paper results that were not actually computed.
+output_format: |
+  ### Square-Root-Law Calibration
+  | Symbol | Metaorders | delta | c (raw / eff) | R^2 | AIC vs linear / log | MC-null sigma_delta |
+  |--------|-----------|-------|---------------|-----|---------------------|---------------------|
+  | ... | ... | ... | ... | ... | ... | ... |
+
+  ### Impact and Sign-Memory Diagnostics
+  | Test | Target | Observed | Pass |
+  |------|--------|----------|------|
+  | Aggressor-sign permutation | alignment ~86% -> ~50%, z>20 | ... | ... |
+  | Chronology scramble | 0 of 80 calibrations viable | ... | ... |
+  | Serial-correlation-aware SEM | model-based, not OLS 0.014 | ... | ... |
+  | Sign ACF exponent gamma | < 1, C(l) ~ l^-gamma | ... | ... |
+  | Size tail beta (Clauset) | in [1.3, 1.8], p > 0.1 | ... | ... |
+
+  ### Verdict
+  State whether the fitted delta is consistent with 1/2 within a
+  serial-correlation-aware error bar, the prefactor c with its raw/effective
+  split, whether the sign and chronology null tests pass, and the exact data gap
+  (no signed tape, broker-tagged metaorders, or L2/L3 depth) that blocks the
+  real-versus-proxy distinction.

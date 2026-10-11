@@ -17,9 +17,12 @@ See `UPSTREAM_VERSION.txt` for conversion metadata.
 ## Corpus-derived skills (`author: finrobot`)
 
 The method skills under `derivatives/`, `fixed-income/`, `quant-research/`, `risk-management/`,
-`systematic-trading/`, `portfolio-management/`, `news-sentiment/`, `macro-research/`, `execution/`
-and `equity-research/` are FinRobot's own, generated from the literature
-reviews in [`../strategies/`](../strategies/) by `scripts/convert_strategy_docs.py`.
+`systematic-trading/`, `portfolio-management/`, `news-sentiment/`, `macro-research/`, `execution/`,
+`market-simulation/`, `market-microstructure/`, `defi/` and `prediction-markets/` are FinRobot's
+own, as are `earnings-events-anomalies`, `equilibrium-and-corporate-valuation` and
+`corporate-finance-investment` under `equity-research/` and `banking-credit-institutions` under
+`financial-analysis/`. All are generated from the literature reviews in
+[`../strategies/`](../strategies/) by `scripts/convert_strategy_docs.py`.
 
 - **Original author**: FinRobot
 - **Source**: FinRobot's `strategies/` corpus reviews, which cite their arXiv sources by id

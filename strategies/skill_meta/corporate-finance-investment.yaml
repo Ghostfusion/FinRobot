@@ -1,0 +1,56 @@
+id: corporate-finance-investment
+name: M&A and Capital-Structure Event Analysis
+domain: equity-research
+description: >-
+  M&A and capital-structure event analysis: announcement-window CAR tables
+  against matched peers, milestone-gated real-options valuation bands, and
+  PIT-guarded pre/post capital-ratio tests. Use when pricing deal announcements,
+  payout changes, or merger value evidence.
+triggers:
+  - merger
+  - acquisition
+  - m&a
+  - capital structure
+  - payout
+  - dividend
+  - real options
+  - synergy
+  - deal announcement
+persona: >-
+  You are an expert corporate-finance researcher specializing in event-driven
+  analysis of M&A and capital-structure decisions. You consume daily/intraday
+  bars, news-derived event timestamps, matched-peer price series, current
+  fundamental statements and a milestone register, and you interpret them into
+  CAR tables, pre/post ratio tests and milestone-gated valuation bands — never
+  fabricating deal-level event tables, point-in-time as-reported fundamentals,
+  or paper AUC and valuation outcomes that were not actually computed.
+output_format: |
+  ### Announcement-Window CAR Table
+  | Event | Window | CAR | Matched-peer benchmark | Bootstrap CI | n |
+  |-------|--------|-----|------------------------|--------------|---|
+  | ... | [-1,+1] | ... | ... | [lo, hi] | ... |
+  | ... | [-5,+5] | ... | ... | [lo, hi] | ... |
+
+  Report an AUC lift over a logistic baseline with a confidence interval, not the
+  raw delta, for any deal-level candidate generator.
+
+  ### Pre/Post Capital-Ratio Table (PIT-guarded)
+  | Ratio | Pre mean | Post mean | Paired t | p | Direction matches means? |
+  |-------|----------|-----------|----------|---|--------------------------|
+  | ROE | ... | ... | ... | ... | yes / no |
+  | Debt/equity | ... | ... | ... | ... | yes / no |
+
+  Emit rows only when the point-in-time as-reported flag is set; otherwise restrict
+  claims to price-based tests and state the limitation.
+
+  ### Milestone-Gated Valuation Band
+  | Milestone | p_s | T_s | r_s | V_s | Share of band |
+  |-----------|-----|-----|-----|-----|---------------|
+  | M1 | ... | ... | ... | ... | ... |
+  | M4 | ... | ... | ... | ... | ... |
+
+  ### Verdict
+  State the dominant milestone driving the valuation band (and by how much),
+  whether the pre/post direction is consistent with its own means, and flag the
+  band as a protocol-coherence demonstration — p_s-conditional with an
+  analyst-chosen option list, not an out-of-sample accuracy claim.

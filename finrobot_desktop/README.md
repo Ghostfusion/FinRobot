@@ -155,21 +155,23 @@ Supporting pieces: response caching, a symbol index, quote batching, SEC holding
 
 ### Skills
 
-`skills/` holds **79** analyst skills as `SKILL.md` files. The 56 vendored playbooks are grouped
-by desk (converted from Anthropic's financial-services plugins); the 23 corpus-derived ones are
+`skills/` holds **102** analyst skills as `SKILL.md` files. The 56 vendored playbooks are grouped
+by desk (converted from Anthropic's financial-services plugins); the 46 corpus-derived ones are
 grouped by method domain, generated from the `strategies/` literature reviews by
 `scripts/convert_strategy_docs.py`.
 
 | Category | Count | Category | Count |
 |:---|:---|:---|:---|
-| `financial-analysis` | 11 | `equity-research` | 11 |
-| `private-equity` | 10 | `investment-banking` | 9 |
-| `partner-lseg` | 8 | `derivatives` | 6 |
-| `wealth-management` | 6 | `quant-research` | 5 |
-| `partner-spglobal` | 3 | `risk-management` | 3 |
-| `systematic-trading` | 2 | `macro-research` | 1 |
-| `portfolio-management` | 1 | `execution` | 1 |
-| `news-sentiment` | 1 | `fixed-income` | 1 |
+| `quant-research` | 13 | `financial-analysis` | 12 |
+| `equity-research` | 12 | `private-equity` | 10 |
+| `investment-banking` | 9 | `partner-lseg` | 8 |
+| `derivatives` | 7 | `wealth-management` | 6 |
+| `risk-management` | 5 | `macro-research` | 4 |
+| `partner-spglobal` | 3 | `market-microstructure` | 2 |
+| `market-simulation` | 2 | `systematic-trading` | 2 |
+| `news-sentiment` | 2 | `portfolio-management` | 1 |
+| `execution` | 1 | `fixed-income` | 1 |
+| `defi` | 1 | `prediction-markets` | 1 |
 
 Browse them from the CLI with `finrobot skill list` and `finrobot skill search <query>`.
 Provenance for both groups is in `skills/ATTRIBUTION.md`; the verdicts for all 46 corpus
@@ -295,7 +297,7 @@ finrobot_desktop/
 │   ├── cli.py server.py   #   CLI and ASGI entry points
 │   └── sdk.py             #   programmatic API
 ├── desktop/               # Tauri shell + React 19 / Vite 6 / Zustand / Recharts
-├── skills/                # 79 analyst skills (SKILL.md)
+├── skills/                # 102 analyst skills (SKILL.md)
 ├── tutorials/             # 4 notebooks
 ├── tests/                 # pytest suite, incl. Hypothesis property tests
 └── scripts/               # maintenance and build tooling
