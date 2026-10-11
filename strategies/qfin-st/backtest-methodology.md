@@ -381,7 +381,12 @@ walk-forward and combinatorial purged splits (`splits.py`), the trial ledger and
 builder (`ledger.py`), PBO/CSCV, deflated Sharpe with an effective-trial count, MinTRL, the SPA
 block bootstrap and the regime diagnostic (`overfitting.py`), and the five-gate aggregate with its
 verdict-consistent display (`minerva.py`), driven end to end by `finrobot validate <ledger.jsonl>`
-(`validate.py`). Items 8–9 are the reason this is a *gate* rather than a full backtest stack: the
+(`validate.py`). The same package also carries the two report primitives the LLM-corpus document
+asks for beside a score — a Diebold–Mariano comparison of two forecasts and a percentile
+block-bootstrap confidence interval for the Sharpe ratio (`overfitting.py`) — since a point Sharpe
+with no interval is the number this whole document exists to stop trusting.
+
+Items 8–9 are the reason this is a *gate* rather than a full backtest stack: the
 RL-agent acceptance test needs intraday bars (moomoo gateway, so conditional on a local OpenD SDK),
 and the prediction-market replay harness needs a limit-order-book/trade/settlement feed that §3
 marks as a gap — the harness is not written, and filling it with invented fills would be worse than

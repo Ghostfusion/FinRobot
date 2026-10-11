@@ -17,7 +17,9 @@ for cost/settlement realism):
 * :mod:`scores` — GT-Score (a minimized loss) and the generalization ratio.
 * :mod:`ledger` — the trial ledger every search-weighted gate depends on.
 * :mod:`overfitting` — PBO/CSCV, deflated Sharpe, MinTRL, SPA block bootstrap,
-  regime stability.
+  regime stability, and the two inference primitives a report needs beside them:
+  a Diebold–Mariano comparison of two forecasts and a percentile block-bootstrap
+  Sharpe interval.
 * :mod:`minerva` — the five-gate blend, its verdict-consistent 0-100 display and
   the fail-closed rules.
 
@@ -54,18 +56,22 @@ from finrobot.engine.backtest.validation.minerva import (
 )
 from finrobot.engine.backtest.validation.overfitting import (
     AgentAcceptanceResult,
+    DMResult,
     DSRResult,
     MinTRLResult,
     PBOResult,
     RegimeResult,
     SPAResult,
+    SharpeCIResult,
     agent_acceptance_test,
     deflated_sharpe_ratio,
+    diebold_mariano,
     effective_trial_count,
     min_track_record_length,
     pbo_cscv,
     pbo_fold_proxy,
     regime_stability,
+    sharpe_confidence_interval,
     spa_test,
 )
 from finrobot.engine.backtest.validation.scores import (
@@ -95,6 +101,7 @@ __all__ = [
     "CombinatorialPurgedConfig",
     "CombinatorialSplit",
     "CostModel",
+    "DMResult",
     "DSRResult",
     "FoldResult",
     "GTScoreResult",
@@ -106,6 +113,7 @@ __all__ = [
     "PBOResult",
     "RegimeResult",
     "SPAResult",
+    "SharpeCIResult",
     "Split",
     "TrialLedger",
     "TrialRecord",
@@ -116,6 +124,7 @@ __all__ = [
     "combinatorial_purged_splits",
     "default_calibration",
     "deflated_sharpe_ratio",
+    "diebold_mariano",
     "effective_trial_count",
     "equicorrelation_matrix",
     "estimate_margin_sigma",
@@ -131,6 +140,7 @@ __all__ = [
     "pbo_cscv",
     "pbo_fold_proxy",
     "regime_stability",
+    "sharpe_confidence_interval",
     "spa_test",
     "stabilized_period_length",
     "validate_ledger",

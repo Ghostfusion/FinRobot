@@ -6,6 +6,9 @@ gates: determinism, sensitivity to search size (item 4), and the flat-trend
 property of the null benchmark as history grows (item 5). The aggregate-level
 items (verdict consistency, rank stability, synthetic ground truth) live in
 ``test_backtest_validation_minerva.py``.
+
+Also covers the two inference primitives that share this module's block
+resampler: the Diebold-Mariano comparison and the Sharpe confidence interval.
 """
 
 from __future__ import annotations
@@ -20,11 +23,13 @@ from finrobot.engine.backtest.validation.overfitting import (
     PBOResult,
     agent_acceptance_test,
     deflated_sharpe_ratio,
+    diebold_mariano,
     effective_trial_count,
     min_track_record_length,
     pbo_cscv,
     pbo_fold_proxy,
     regime_stability,
+    sharpe_confidence_interval,
     spa_test,
 )
 
@@ -366,3 +371,163 @@ class TestAgentAcceptance:
     def test_proxy_pbo_carries_a_warning(self) -> None:
         result = agent_acceptance_test(self._pbo(0.05, proxy=True))
         assert any("proxy" in warning for warning in result.warnings)
+
+
+class TestDieboldMariano:
+    """Is forecast A more accurate than forecast B, on paired observations?"""
+
+    @staticmethod
+    def _paired(n: int = 200, seed: int = 11) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        rng = np.random.default_rng(seed)
+        actual = rng.normal(0.0, 1.0, size=n)
+        better = actual + rng.normal(0.0, 0.10, size=n)
+        worse = actual + rng.normal(0.0, 1.00, size=n)
+        return actual, better, worse
+
+    def test_more_accurate_forecast_wins_with_the_corpus_sign_convention(self) -> None:
+        actual, better, worse = self._paired()
+        result = diebold_mariano(actual, better, worse)
+        assert result.mean_differential < 0.0  # A carries the lower loss
+        assert result.statistic < 0.0  # the sign a paper's DM figure would show
+        assert result.p_value < 0.01
+        assert result.p_value_one_sided == pytest.approx(result.p_value / 2.0, abs=1e-9)
+        assert result.n_observations == 200
+        assert result.loss == "squared"
+        assert not result.warnings
+
+    def test_sign_flips_with_the_argument_order(self) -> None:
+        actual, better, worse = self._paired()
+        assert diebold_mariano(actual, worse, better).statistic > 0.0
+
+    def test_identical_forecasts_are_degenerate_not_merely_noisy(self) -> None:
+        actual, better, _ = self._paired()
+        with pytest.raises(ValueError, match="non-positive"):
+            diebold_mariano(actual, better, better.copy())
+
+    def test_absolute_loss_path_and_rejects_an_unknown_loss(self) -> None:
+        actual, better, worse = self._paired()
+        result = diebold_mariano(actual, better, worse, loss="absolute")
+        assert result.loss == "absolute"
+        assert result.statistic < 0.0
+        with pytest.raises(ValueError, match="'squared' or 'absolute'"):
+            diebold_mariano(actual, better, worse, loss="huber")  # type: ignore[arg-type]
+
+    def test_multi_step_horizon_is_punished_by_the_hln_correction(self) -> None:
+        """h > 1 shrinks the correction multiple; it must never grow it."""
+        actual, better, worse = self._paired(n=120)
+        one_step = diebold_mariano(actual, better, worse, forecast_horizon=1)
+        five_step = diebold_mariano(actual, better, worse, forecast_horizon=5)
+        assert abs(five_step.statistic) < abs(one_step.statistic)
+
+    def test_default_lag_follows_the_newey_west_rule(self) -> None:
+        actual, better, worse = self._paired(n=200)
+        assert diebold_mariano(actual, better, worse).lag == math.floor(
+            4.0 * (200 / 100.0) ** (2.0 / 9.0)
+        )
+
+    def test_rejects_bad_shapes_sizes_and_lags(self) -> None:
+        actual, better, worse = self._paired(n=30)
+        with pytest.raises(ValueError, match="same length"):
+            diebold_mariano(actual, better, worse[:-1])
+        with pytest.raises(ValueError, match="at least 3 paired"):
+            diebold_mariano(actual[:2], better[:2], worse[:2])
+        with pytest.raises(ValueError, match="non-finite"):
+            diebold_mariano(actual, better, np.where(np.arange(30) == 3, np.nan, worse))
+        with pytest.raises(ValueError, match="lag must lie"):
+            diebold_mariano(actual, better, worse, lag=30)
+        with pytest.raises(ValueError, match="forecast_horizon"):
+            diebold_mariano(actual, better, worse, forecast_horizon=0)
+
+    def test_short_samples_are_warned_about(self) -> None:
+        actual, better, worse = self._paired(n=12)
+        assert any(
+            "normal approximation" in w for w in diebold_mariano(actual, better, worse).warnings
+        )
+
+
+class TestSharpeConfidenceInterval:
+    """How wide is that Sharpe, really?"""
+
+    @staticmethod
+    def _returns(n: int, *, seed: int, mu: float = 0.0005, sigma: float = 0.01) -> np.ndarray:
+        return np.random.default_rng(seed).normal(mu, sigma, size=n)
+
+    def test_brackets_the_point_estimate_and_names_its_method(self) -> None:
+        returns = self._returns(500, seed=3)
+        result = sharpe_confidence_interval(returns, n_bootstrap=400, seed=5)
+        assert result.lower < result.point < result.upper
+        assert result.point == pytest.approx(stats.annualized_sharpe(returns))
+        assert result.method == "percentile-moving-block-bootstrap"
+        assert result.n_observations == 500
+        assert any("not bias-corrected" in w for w in result.warnings)
+
+    def test_interval_narrows_with_more_observations(self) -> None:
+        short = sharpe_confidence_interval(self._returns(250, seed=7), n_bootstrap=400, seed=9)
+        long = sharpe_confidence_interval(self._returns(4000, seed=7), n_bootstrap=400, seed=9)
+        assert (long.upper - long.lower) < (short.upper - short.lower)
+
+    def test_is_deterministic_for_a_seed(self) -> None:
+        returns = self._returns(300, seed=1)
+        first = sharpe_confidence_interval(returns, n_bootstrap=300, seed=42)
+        second = sharpe_confidence_interval(returns, n_bootstrap=300, seed=42)
+        assert (first.lower, first.upper) == (second.lower, second.upper)
+
+    def test_coverage_is_near_nominal_on_iid_gaussian_returns(self) -> None:
+        """The interval has to actually contain the true Sharpe often enough.
+
+        Monte-Carlo error at 200 replications is about +/-1.5pp, so the band is
+        wide enough for that but tight enough to fail a band that is materially
+        too narrow. Measured at this seed set: 0.955 at the 95% level and 0.890 at
+        the 90% level, so the percentile interval is well calibrated on i.i.d.
+        data — it earns its place by being *wide* (about 3.8 Sharpe units at
+        n=250), which is the finding: a 250-bar Sharpe near 0.8 is not
+        distinguishable from zero.
+        """
+        mu, sigma, n, level, replications = 0.0006, 0.012, 250, 0.95, 200
+        true_sharpe = (mu / sigma) * math.sqrt(252.0)
+        covered = 0
+        for seed in range(replications):
+            returns = self._returns(n, seed=1000 + seed, mu=mu, sigma=sigma)
+            result = sharpe_confidence_interval(returns, level=level, n_bootstrap=300, seed=seed)
+            covered += int(result.lower <= true_sharpe <= result.upper)
+        coverage = covered / replications
+        assert 0.86 <= coverage <= 0.99, f"measured coverage {coverage:.3f}"
+
+    def test_autocorrelated_returns_are_flagged_and_only_roughly_calibrated(self) -> None:
+        """The block resample preserves dependence; it does not make the band exact.
+
+        Measured on an AR(1) with phi=0.2 over 200 replications: coverage 0.900 at
+        a nominal 0.95 (against 0.955 on i.i.d. data), and the autocorrelation
+        warning fires on 76% of those series. Both assertions are one-sided, so a
+        better interval estimator still passes.
+        """
+        phi, mu, sigma, n, replications = 0.2, 0.0006, 0.012, 250, 200
+        true_sharpe = (mu / sigma) * math.sqrt(252.0)
+        sigma_eps = sigma * math.sqrt(1.0 - phi * phi)
+        covered = 0
+        flagged = 0
+        for seed in range(replications):
+            shocks = np.random.default_rng(5000 + seed).normal(0.0, sigma_eps, size=n + 200)
+            series = np.empty_like(shocks)
+            series[0] = mu
+            for t in range(1, shocks.size):
+                series[t] = mu + phi * (series[t - 1] - mu) + shocks[t]
+            result = sharpe_confidence_interval(series[200:], n_bootstrap=300, seed=seed)
+            covered += int(result.lower <= true_sharpe <= result.upper)
+            flagged += int(any("under-covers" in w for w in result.warnings))
+        assert covered / replications >= 0.85, f"coverage {covered / replications:.3f}"
+        assert flagged / replications > 0.60, f"flagged {flagged / replications:.3f}"
+
+    def test_rejects_degenerate_and_invalid_inputs(self) -> None:
+        # A constant series has std ~1e-18, not exactly 0, so the guard that
+        # catches it is the one inside annualized_sharpe itself.
+        with pytest.raises(ValueError, match="zero-variance"):
+            sharpe_confidence_interval([0.01] * 100)
+        with pytest.raises(ValueError, match="level"):
+            sharpe_confidence_interval(self._returns(100, seed=2), level=1.5)
+        with pytest.raises(ValueError, match="block_length"):
+            sharpe_confidence_interval(self._returns(100, seed=2), block_length=200)
+        with pytest.raises(ValueError, match="n_bootstrap"):
+            sharpe_confidence_interval(self._returns(100, seed=2), n_bootstrap=1)
+        with pytest.raises(ValueError, match="non-finite"):
+            sharpe_confidence_interval([0.01, float("nan"), 0.02] * 40)
