@@ -12,6 +12,11 @@ Red lines tested:
   5. No bare `except Exception:` in finrobot/
   6. No `print(` in finrobot/ (use logging)
   7. No `os.environ` outside config.py (use dependency injection)
+  8. Heavy sync-bound coroutines must not block the server event loop
+  9. The output contract (artifact/contract.py) stays a "dumb" gate
+  10. compute/ must not import artifact/ (keeps the contract acyclic)
+  11. The declared runtime dependency set stays light, and anything imported
+      directly is declared rather than inherited from a transitive extra
 """
 
 from __future__ import annotations
@@ -474,4 +479,72 @@ class TestComputeNeverImportsArtifact:
         assert not violations, (
             "compute/ must not import artifact/ (would cycle artifact↔compute, "
             "ADR-0005 + spec Q4):\n" + "\n".join(violations)
+        )
+
+
+# ---------------------------------------------------------------------------
+# Red line 11: the declared runtime dependency set stays light
+# ---------------------------------------------------------------------------
+
+#: The heavy scientific / RL / deep-learning stack. The validation gate and the
+#: simulation package are deliberately pure NumPy (the engine is *built* rather
+#: than adopting ABIDES precisely because ABIDES-Gym needs gym/gymnasium — see
+#: ``finrobot/engine/simulation/__init__.py``), and the desktop app freezes this
+#: package with PyInstaller, so any of these arriving in the runtime set would
+#: change what ``pip install finrobot`` means and what the sidecar weighs. They
+#: belong in a separate environment, not here.
+BANNED_RUNTIME_DEPS = [
+    "torch",
+    "tensorflow",
+    "jax",
+    "stable-baselines3",
+    "gymnasium",
+    "gym",
+    "scipy",
+    "scikit-learn",
+    "sklearn",
+    "transformers",
+]
+
+#: First-party code imports these directly, so they must be declared rather than
+#: relied on as somebody else's transitive extra.
+REQUIRED_RUNTIME_DEPS = ["numpy"]
+
+
+class TestRuntimeDependencySet:
+    """``[project] dependencies`` is a contract about what an install pulls in.
+
+    The simulation/validation work made this worth enforcing: numpy was imported
+    by thirteen first-party modules while being declared nowhere — it only
+    arrived as a matplotlib extra, so an install that resolved differently would
+    have broken the validation gate at import time.
+    """
+
+    @staticmethod
+    def _declared_runtime_dependencies() -> dict[str, str]:
+        import tomllib
+
+        data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        declared: dict[str, str] = {}
+        for entry in data["project"]["dependencies"]:
+            name = re.split(r"[<>=!~\[; ]", entry, maxsplit=1)[0].strip().lower()
+            declared[name.replace("_", "-")] = entry
+        return declared
+
+    def test_heavy_stack_is_not_a_runtime_dependency(self) -> None:
+        declared = self._declared_runtime_dependencies()
+        offenders = [declared[name] for name in BANNED_RUNTIME_DEPS if name in declared]
+        assert not offenders, (
+            "the runtime dependency set must stay light (no RL / deep-learning / "
+            "heavy scientific stack — put it in its own environment):\n  "
+            + "\n  ".join(offenders)
+        )
+
+    def test_directly_imported_packages_are_declared(self) -> None:
+        declared = self._declared_runtime_dependencies()
+        missing = [name for name in REQUIRED_RUNTIME_DEPS if name not in declared]
+        assert not missing, (
+            "these packages are imported directly by first-party code but are not "
+            "declared in [project] dependencies (relying on a transitive extra is "
+            "how a resolvable install becomes an ImportError):\n  " + "\n  ".join(missing)
         )

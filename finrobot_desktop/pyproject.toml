@@ -34,6 +34,10 @@ dependencies = [
     "click>=8.1",
     "pyyaml>=6.0",
     "matplotlib>=3.8",
+    # Imported directly by first-party code (the validation gate, the simulation
+    # package, the strategy agent, the monte-carlo operator), so it is a declared
+    # dependency rather than something that arrived as a matplotlib extra.
+    "numpy>=1.26",
     "jinja2>=3.1",
     "rank-bm25>=0.2.2",
     "edgartools>=5.31.5",
