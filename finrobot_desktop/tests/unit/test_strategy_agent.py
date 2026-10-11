@@ -546,6 +546,64 @@ class TestTrialLedgerFromSearch:
         assert "out-of-sample" in result.warnings[1]
 
     @pytest.mark.asyncio
+    async def test_no_trade_trials_are_excluded_so_the_ledger_stays_scorable(
+        self, tmp_path
+    ) -> None:
+        """A parameter set that never traded must not poison the whole ledger.
+
+        Found by running --auto for real: the LLM's first parameter set never
+        traded, so its return series was constant, and the gates refuse a
+        zero-variance column — the app wrote a ledger nothing could score. A trial
+        with no position has an undefined Sharpe and carries no selection
+        information, so it is dropped and the count is reported.
+        """
+        config = _make_config()
+        target = tmp_path / "trials.jsonl"
+        result = await self._search(
+            runs=[
+                _make_result(0.0, series=[0.0] * 120, turnover=0.0),
+                _make_result(0.10, series=_series(seed=1), turnover=0.002),
+                _make_result(0.12, series=_series(seed=2), turnover=0.003),
+                _make_result(0.04),  # the OOS holdout
+            ],
+            decisions=[
+                _AdjustmentDecision(should_continue=True, config=config),
+                _AdjustmentDecision(should_continue=True, config=config),
+            ],
+            ledger_path=target,
+        )
+
+        assert target.exists()
+        ledger = TrialLedger.read_jsonl(target)
+        assert ledger.n_trials == 2  # the flat trial is gone, the two live ones stay
+        assert all(record.pre_phi_dsr is not None for record in ledger.trials), (
+            "every surviving trial must be scorable"
+        )
+        assert validate_ledger(ledger).display is not None
+        assert "no-trade parameter set(s) excluded" in result.warnings[0]
+
+    @pytest.mark.asyncio
+    async def test_a_search_of_only_no_trade_trials_writes_no_ledger(self, tmp_path) -> None:
+        """If nothing traded there is no search to score, and that is stated."""
+        config = _make_config()
+        target = tmp_path / "trials.jsonl"
+        result = await self._search(
+            runs=[
+                _make_result(0.0, series=[0.0] * 120),
+                _make_result(0.0, series=[0.0] * 120),
+                _make_result(0.04),
+            ],
+            decisions=[
+                _AdjustmentDecision(should_continue=True, config=config),
+                _AdjustmentDecision(should_continue=False, config=config),
+            ],
+            ledger_path=target,
+        )
+
+        assert not target.exists()
+        assert "actually traded" in result.warnings[0]
+
+    @pytest.mark.asyncio
     async def test_single_trial_search_writes_no_ledger_and_says_why(self, tmp_path) -> None:
         """One parameter set is not a search, and the gates cannot score it."""
         config = _make_config()

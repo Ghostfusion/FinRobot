@@ -377,6 +377,19 @@ async def run_strategy_selection(
 _MIN_LEDGER_TRIALS = 2
 
 
+def _is_flat_series(values: Sequence[float] | None) -> bool:
+    """True when a per-bar account return series never moved.
+
+    A constant series means the run never held a position, so its Sharpe is
+    undefined rather than zero. The gates refuse such a column (correctly), which
+    is why the ledger writer has to exclude it instead of shipping a file the gate
+    cannot score.
+    """
+    if not values:
+        return True
+    return max(values) == min(values)
+
+
 def _persist_trial_ledger(
     *,
     path: Path,
@@ -405,6 +418,28 @@ def _persist_trial_ledger(
             "No trial ledger written: the engine returned no per-bar series for "
             f"{len(missing)} of {len(trials)} runs."
         )
+    # A parameter set that never trades has an undefined Sharpe, and the gates
+    # refuse a zero-variance column on purpose — so keeping it would make the whole
+    # ledger unscorable. This is not hypothetical: a real --auto run produced
+    # fast=20/slow=50 with no trades at all beside two tuned sets. Such a trial
+    # carries no selection information either, so it is excluded and counted.
+    flat = [params for params, result in trials if _is_flat_series(result.daily_returns)]
+    live = [
+        (params, result) for params, result in trials if not _is_flat_series(result.daily_returns)
+    ]
+    if len(live) < _MIN_LEDGER_TRIALS:
+        return (
+            f"No trial ledger written: {len(live)} of {len(trials)} runs actually traded, and "
+            f"the gates need at least {_MIN_LEDGER_TRIALS} trials with a defined Sharpe."
+        )
+    excluded_note = (
+        f" ({len(flat)} no-trade parameter set(s) excluded: "
+        + ", ".join(str(params) for params in flat)
+        + ")"
+        if flat
+        else ""
+    )
+    trials = live
     widths = {len(result.daily_returns or []) for _, result in trials}
     if len(widths) != 1:
         return (
@@ -444,6 +479,6 @@ def _persist_trial_ledger(
     path.parent.mkdir(parents=True, exist_ok=True)
     ledger.write_jsonl(path)
     return (
-        f"Trial ledger written to {path} ({ledger.n_trials} trials x {n_bars} bars); "
-        f"score the search with: finrobot validate {path}"
+        f"Trial ledger written to {path} ({ledger.n_trials} trials x {n_bars} bars)"
+        f"{excluded_note}; score the search with: finrobot validate {path}"
     )
