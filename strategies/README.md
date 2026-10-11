@@ -46,6 +46,7 @@ strategies/
   README.md            # this index
   endpoints.json       # live probe snapshot of every provider endpoint (shared)
   data-endpoints.md    # the same snapshot, readable
+  TODO.md              # backlog derived from the reviews (qfin-tr trio, so far)
   qfin-st/             # 16 docs from cat:q-fin.ST  (+ its own README)
   qfin-tr/             # 14 docs from cat:q-fin.TR  (+ its own README)
   qfin-gn/             # 16 docs from cat:q-fin.GN  (+ its own README)
