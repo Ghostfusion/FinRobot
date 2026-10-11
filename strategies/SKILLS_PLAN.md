@@ -1,9 +1,10 @@
 # Skills plan — the 63 corpus documents against FinRobot's native skill system
 
-Status of this pass: **2026-10-11.** Of the 46 documents in the first three corpora, the twelve
-strongest are converted and shipped as agent skills; the eight deferred, two reference-only and one
-overlap verdicts below are recorded decisions, not a backlog. A fourth corpus — 17 more documents
-from `cat:q-fin.PR` — was written afterwards and is recorded in §7; none of it is converted yet.
+Status of this pass: **2026-10-11.** Twenty-three corpus documents are converted and shipped as
+agent skills — the twelve strongest of the first three corpora (§3) and eleven of the seventeen in
+the fourth, `cat:q-fin.PR` (§7.1). The deferred, reference-only and overlap verdicts of §2, §4, §5
+and §7.1 are recorded decisions, not a backlog. **79 skills ship**: 56 vendored plus 23
+corpus-derived.
 
 A corpus here is a set of literature reviews — what the finance papers say FinRobot should be able
 to do — mapped input-by-input against the live endpoint inventory. A document becomes a
@@ -13,7 +14,7 @@ inputs no provider can fetch would declare a capability nothing can fulfil.
 ## 1. How a document becomes a skill
 
 `finrobot_desktop/scripts/convert_strategy_docs.py` maps the uniform section template every
-document already follows onto the native skill body, so all 46 convert the same way:
+document already follows onto the native skill body, so all 63 convert the same way:
 
 | document section | becomes |
 |---|---|
@@ -38,8 +39,8 @@ uv run --no-sync python scripts/convert_strategy_docs.py --only <id>    # one do
 uv run --no-sync python scripts/convert_strategy_docs.py --all --stdout # preview everything
 ```
 
-`--check` parses all 46 §3 tables and reports every row the live inventory contradicts; it
-currently exits clean (0 mismatches over 46 documents).
+`--check` parses all 63 §3 tables and reports every row the live inventory contradicts; it
+currently exits clean (0 mismatches over 63 documents).
 
 ### Conventions
 
@@ -58,7 +59,7 @@ currently exits clean (0 mismatches over 46 documents).
   `list_summary()` groups by domain. Granularity is therefore cosmetic; the split below
   follows the corpora's own categories rather than inventing a taxonomy.
 
-## 2. Verdicts — all 46 documents
+## 2. Verdicts — the first three corpora, 46 documents
 
 | corpus | document | verdict | domain |
 |---|---|---|---|
@@ -111,7 +112,7 @@ currently exits clean (0 mismatches over 46 documents).
 
 Totals: **35 skill · 8 deferred · 2 reference-only · 1 overlap.**
 
-## 3. The landed tranche — 12 skills
+## 3. The first landed tranche — 12 skills
 
 Chosen as the documents whose §3 inputs are entirely served and which no vendored skill
 covers. Each is `finrobot_desktop/skills/<domain>/<id>/SKILL.md`:
@@ -131,11 +132,13 @@ covers. Each is `finrobot_desktop/skills/<domain>/<id>/SKILL.md`:
 | `optimal-execution-liquidation` | Almgren-Chriss, VWAP/TWAP, impact/risk trade-off |
 | `earnings-events-anomalies` | event studies, CAR/BHAR, surprise, post-earnings drift |
 
-**Landed:** 12. **Convertible but not yet landed:** 23, in the same shape — the converter
-emits them as soon as a `skill_meta/<id>.yaml` is reviewed. Adopt in tranches:
-`list_summary()` is injected into the lead agent's instructions on every run, so its size is a
-permanent context cost. At 68 skills it is 6,837 chars; the acceptance test budgets
-~120 chars per skill rather than a fixed total, so a new tranche fails only if unusually verbose.
+**Landed:** all 12 of these, plus the eleven `qfin-pr` skills of §7.1 — **23 corpus-derived skills
+in all**. **Convertible but not yet landed:** the remaining 23 documents of the first three
+corpora, in the same shape — the converter emits them as soon as a `skill_meta/<id>.yaml` is
+reviewed. Adopt in tranches: `list_summary()` is injected into the lead agent's instructions on
+every run, so its size is a permanent context cost. At 79 skills it is 8,253 chars; the acceptance
+test budgets ~120 chars per skill rather than a fixed total, so a new tranche fails only if
+unusually verbose.
 
 ## 4. Deferred — 8 documents
 
@@ -184,15 +187,14 @@ same short list `strategies/TODO.md` §D1 records as the binding constraint.
   (`partner-lseg`, `partner-spglobal`) name MCP tools this app does not implement; that dependency
   is now declared rather than silent.
 
-## 7. The q-fin.PR corpus — 17 more documents, none converted yet
+## 7. The q-fin.PR corpus — 17 more documents, eleven converted
 
 `strategies/qfin-pr/` is a fourth harvest: `cat:q-fin.PR` (*Pricing of Securities*), 2274 records /
 2250 PDFs, written in the same section template as the other three, so the converter in §1 handles
 it unchanged. One document per category, 17 in all, each based on a close reading of 6 papers; the
 coverage table and reading lens are in [`qfin-pr/README.md`](qfin-pr/README.md).
 
-**These are documents only.** The verdicts in §2 cover the other three corpora; nothing here is
-converted to a skill, and conversion is a separate decision per document.
+The verdicts in §2 cover the other three corpora; these 17 were reviewed separately, in §7.1.
 
 Two facts about this corpus bear directly on that decision.
 
@@ -272,21 +274,29 @@ same as an unbuildable document, and the two must not be conflated.
 | `crypto-digital-derivatives` | 45% | **deferred** | the document itself concludes the category is blocked on data, not on models |
 | `insurance-mortality-linked` | 43% | **deferred** | mortality tables, insurance loss data and credit spreads are all `gap` |
 
-**Recommended order, by tranche.** The six pricing/numerics documents share one data story (the
-served SPX chain, the Treasury curve, equity OHLCV) and one domain, so they belong together:
-`option-pricing-foundations`, `volatility-surface-calibration`, `stochastic-volatility`,
-`jump-and-levy`, `numerical-methods`, `american-exotic-options`. Then `hedging-incomplete-markets`
-and `interest-rate-term-structure`, then `equilibrium-and-corporate-valuation`,
-`risk-and-optimal-decisions` and the NumPy arm of `ml-and-neural-pricing`.
+**All eleven are converted and shipped.** Each has a reviewed `strategies/skill_meta/<id>.yaml`
+and a generated body under `finrobot_desktop/skills/`. One data story — the served SPX chain, the
+Treasury curve, equity OHLCV — carries them into three new domain groups: six into `derivatives`
+(`option-pricing-foundations`, `volatility-surface-calibration`, `stochastic-volatility`,
+`jump-and-levy`, `american-exotic-options`, `hedging-incomplete-markets`), one into `fixed-income`
+(`interest-rate-term-structure`), and `numerical-methods` and `ml-and-neural-pricing` into
+`quant-research`, `equilibrium-and-corporate-valuation` into `equity-research`,
+`risk-and-optimal-decisions` into `risk-management`. Their gaps are unchanged from §3 — the
+tranche declares 74 `gap` rows in `requires_data` rather than hiding them.
 
-Two overlap notes to settle before converting. `volatility-surface-calibration` and
-`stochastic-volatility` both contain a Heston pricer — keep the surface-inversion and no-arbitrage
-content in the former and the model-side pricing, VIX futures and moment-explosion guard in the
-latter. `option-pricing-foundations` and `jump-and-levy` both calibrate a Merton jump-diffusion —
-keep the jump-family pricers in the latter and Black-Scholes, replicability and discrete-hedging
-error in the former.
+The two overlap notes above were settled by scoping each sibling's *identity* and cutting the
+trigger that would misroute a query. The Heston engine and its calibration live in
+`stochastic-volatility`, while `volatility-surface-calibration` owns chain inversion, no-arbitrage
+and the model-free variance index. The jump-family pricers and the Merton calibration live in
+`jump-and-levy`, while `option-pricing-foundations` owns Black-Scholes, Greeks, implied-vol
+extraction, replicability and discrete-hedging error. The same treatment gave `discount curve` to
+`interest-rate-term-structure` while `put-call parity` stayed with `option-pricing-foundations`,
+kept `indifference pricing` with `hedging-incomplete-markets` (leaving `utility indifference` to
+`risk-and-optimal-decisions`), and kept plain-DCF framing out of
+`equilibrium-and-corporate-valuation`, whose identity is the discount rate and valuation duration
+the vendored `dcf-model` does not estimate.
 
-None of the eleven is converted. Conversion is mechanical once a document is chosen: author
-`strategies/skill_meta/<id>.yaml` (description, triggers, persona, output format) and run
-`uv run --no-sync python scripts/convert_strategy_docs.py --only <id>`. The declared `torch`-only
-methods must stay out of any converted `ml-and-neural-pricing` body.
+`ml-and-neural-pricing` ships the NumPy arm only — the delta-correction regression, the
+no-transaction-band evaluation and the LSMC module. Its persona states outright that the
+deep-hedging network, the band *training*, the PINN, the deep-calibration scaffold and CARLOS are
+not implemented, and the banned `torch` stack appears nowhere in the generated body.
