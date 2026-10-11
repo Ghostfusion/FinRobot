@@ -536,8 +536,7 @@ class TestRuntimeDependencySet:
         offenders = [declared[name] for name in BANNED_RUNTIME_DEPS if name in declared]
         assert not offenders, (
             "the runtime dependency set must stay light (no RL / deep-learning / "
-            "heavy scientific stack — put it in its own environment):\n  "
-            + "\n  ".join(offenders)
+            "heavy scientific stack — put it in its own environment):\n  " + "\n  ".join(offenders)
         )
 
     def test_directly_imported_packages_are_declared(self) -> None:
