@@ -9,7 +9,8 @@ not read directly.
 
 ## 1. What the corpus actually offers
 
-- **Composite anti-overfitting objective (GT-Score).** A single optimizable scalar
+- **Composite anti-overfitting objective (GT-Score).** A single optimizable scalar (a *minimized*
+  loss — see §2.1; taken as maximized it selects the worst strategy in the grid)
   $GT = \mu \cdot \ln(z) \cdot r^2 / \sigma_d$ that multiplies performance, a significance gate
   $z$, an equity-curve fit $r^2$, and downside deviation $\sigma_d$. Optimizing it raised the
   *generalization ratio* (validation ÷ training return) by **98%** in walk-forward (0.365 vs 0.185
@@ -77,9 +78,24 @@ $$
 \begin{cases}
 100 + 100\,(1 - e^{-|z-1|}) & z \le 0 \quad\text{(underperforms; large penalty)}\\
 100\,(1 - e^{-|z-1|})     & 0 < z \le 1 \quad\text{(marginal; smooth transition)}\\
-\mu\ln(z)r^2/(\sigma_d+\epsilon) & z > 1 \quad\text{(standard GT-Score)}
+-\mu\ln(z)r^2/(\sigma_d+\epsilon) & z > 1 \quad\text{(standard GT-Score; negated)}
 \end{cases}
 $$
+
+**Direction — the objective is a minimized loss, not a maximized score.** Algorithm 1 line 6 writes
+`score <- -mu*ln(z)*r^2/(sigma_d+eps)`, the negation of Eq. 1, and all four comparators in the
+paper's §2.6 are named "Loss Function" (Simple = −Profit, Sharpe = −Sharpe, Sortino = −Sortino).
+Only under minimization are the branch labels coherent: the $z \le 0$ branch evaluates to
+163.2–200, which a maximizer would select as the *best* strategy in the grid. Verified against the
+source PDF (arXiv:2602.00080v1 Algorithm 1, p. 5) — this section previously dropped that minus sign,
+and code written from it would have inverted every selection.
+
+**Where the paper is silent (do not attribute these to it).** A parameterization below $n_{\min}$ is
+"assigned a large penalty" and nothing more — no value is given, so any sentinel is the
+implementer's. $r^2$ is defined only as "the R-squared value measuring consistency of returns"; the
+paper never says what is regressed against what. The stabilized-variance search direction, its
+candidate ladder and its bounds come from the author's dissertation, not this paper, which states
+only the 1% plateau criterion and the $n{=}50$ fallback.
 
 **Required inputs.** Per-asset OHLCV to simulate the strategy; trade-level returns; benchmark
 (buy-and-hold) return series.
@@ -277,7 +293,7 @@ Every row cites a real endpoint from `strategies/endpoints.json`.
 | Crypto volatility index (CVIX, risk-control threshold 90.1) | — | — | — | **gap** |
 | S&P BDM crypto index benchmark | — | — | — | **gap** |
 | Prediction-market limit-order-book + trade prints + settlement streams | polymarket gamma exposes markets/quotes only; no LOB/trade/settlement stream inventoried | prediction_markets | polymarket | **gap** (markets only; replay harness data unavailable) |
-| Parameter-search trial ledger (for effective-trials / DSR deflation) | — | — | — | **gap** — must be produced and persisted by FinRobot's own optimizer |
+| Parameter-search trial ledger (for effective-trials / DSR deflation) | — | — | — | **schema implemented, not yet fed** — `TrialLedger` + `build_ledger_from_search` persist every trial's per-fold returns and its stored pre-Φ statistic; the `--auto` strategy agent does not write one yet, so a CLI run has no ledger to score |
 
 **Reading of the table.** The validation machinery (GT-Score, walk-forward, CPCV, DSR, MinTRL, SPA,
 MinervaScore) needs only daily equity OHLCV + a benchmark + a risk-free rate — all reachable today
@@ -358,6 +374,18 @@ crypto has no category) but the inventory has no LOB/trade/settlement or crypto-
 ---
 
 ## 5. Recommended first implementation in FinRobot
+
+**Implementation status (2026-10-10).** Items 1–7 below are built, as a self-contained gate in
+`finrobot/engine/backtest/validation/`: GT-Score and the generalization ratio (`scores.py`),
+walk-forward and combinatorial purged splits (`splits.py`), the trial ledger and its search→ledger
+builder (`ledger.py`), PBO/CSCV, deflated Sharpe with an effective-trial count, MinTRL, the SPA
+block bootstrap and the regime diagnostic (`overfitting.py`), and the five-gate aggregate with its
+verdict-consistent display (`minerva.py`), driven end to end by `finrobot validate <ledger.jsonl>`
+(`validate.py`). Items 8–9 are the reason this is a *gate* rather than a full backtest stack: the
+RL-agent acceptance test needs intraday bars (moomoo gateway, so conditional on a local OpenD SDK),
+and the prediction-market replay harness needs a limit-order-book/trade/settlement feed that §3
+marks as a gap — the harness is not written, and filling it with invented fills would be worse than
+leaving it absent. Item 9 also specifies a schema this repo has nowhere to store.
 
 1. **GT-Score as an optimizer objective.** Build `gt_score(trade_returns, benchmark_returns, equity_curve)`
    implementing §2.1 with $n_{\min}=50$ and the piecewise branches. Data: eodhd daily OHLCV
