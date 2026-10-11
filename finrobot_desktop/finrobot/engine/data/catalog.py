@@ -40,7 +40,7 @@ def endpoint_catalog() -> dict[str, dict[Category, EndpointSpec]]:
     """Aggregate every provider's ``ENDPOINTS`` declared in its module.
 
     Providers without a module-level ``ENDPOINTS`` (e.g. the vendored
-    yfinance/EDGAR adapters that predate the catalog) are simply absent — the
+    yfinance adapter that predates the catalog) are simply absent — the
     probe reports them as "no catalog rows".
     """
     catalog: dict[str, dict[Category, EndpointSpec]] = {}

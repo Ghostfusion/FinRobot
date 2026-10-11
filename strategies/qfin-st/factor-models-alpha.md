@@ -137,7 +137,7 @@ which under the attention-regularity condition ($\|A_z\|_{op}=O(1)$, $\frac1N\ma
 
 ## 3. Data requirements → available endpoints
 
-Every row cites a probed endpoint from `strategies/endpoints.json` (49 rows, 14 providers). Rows marked **gap** have no provider in the inventory.
+Every row cites a probed endpoint from `strategies/endpoints.json` (54 rows, 17 providers). Rows marked **gap** have no provider in the inventory.
 
 | Input | Endpoint | Category | Provider | Probe status |
 |---|---|---|---|---|

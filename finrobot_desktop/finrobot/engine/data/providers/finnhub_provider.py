@@ -7,6 +7,8 @@ from typing import Any
 
 import httpx
 
+from finrobot.engine.data.catalog import EndpointSpec
+from finrobot.engine.data.categories import Category
 from finrobot.engine.data.interface import (
     DataProvider,
     DataResult,
@@ -40,6 +42,35 @@ _MIN_INTERVAL = 1.1  # Finnhub free tier: 60 req/min → 1 req/sec; 1.1s adds 10
 # so the downstream 52-week high/low window (366 calendar days) is fully covered
 # even across weekend/holiday gaps at the boundary — mirrors FMP's _PRICE_HISTORY_DAYS.
 _PRICE_HISTORY_DAYS = 372
+
+#: Categories this provider serves. Finnhub's own ``_SUPPORTED`` is
+#: PRICE + NEWS, which map to these two categories; it is also named in
+#: ``categories.PRIORITY`` for analyst_ratings / earnings_calendar, but it
+#: declares no such endpoint (its fundamentals matcher was removed), so no row
+#: is invented for them.
+_CATEGORIES: list[Category] = [Category.CORE_STOCK_APIS, Category.NEWS_DATA]
+
+#: Declarative catalog rows for the v3 probe (see ``engine.data.catalog``).
+#: Both mirror requests ``FinnhubProvider._get`` actually makes. Finnhub
+#: authenticates with the ``X-Finnhub-Token`` header (never a query param), so
+#: ``$KEY`` rides in ``auth_value``. ``/company-news`` needs a date window; the
+#: probe can resolve ``{year}``, so the row uses the current year.
+ENDPOINTS: dict[Category, EndpointSpec] = {
+    Category.CORE_STOCK_APIS: EndpointSpec(
+        Category.CORE_STOCK_APIS,
+        "GET",
+        f"{_BASE_URL}/quote",
+        {"symbol": "{ticker}"},
+        auth_header="X-Finnhub-Token",
+    ),
+    Category.NEWS_DATA: EndpointSpec(
+        Category.NEWS_DATA,
+        "GET",
+        f"{_BASE_URL}/company-news",
+        {"symbol": "{ticker}", "from": "{year}-01-01", "to": "{year}-12-31"},
+        auth_header="X-Finnhub-Token",
+    ),
+}
 
 
 class FinnhubProvider(DataProvider):

@@ -61,6 +61,8 @@ except ImportError:  # pragma: no cover — defensive; we always pin edgartools
     set_identity = None
     _EDGAR_AVAILABLE = False
 
+from finrobot.engine.data.catalog import EndpointSpec
+from finrobot.engine.data.categories import Category
 from finrobot.engine.data.interface import (
     DataProvider,
     DataResult,
@@ -150,6 +152,26 @@ _SUPPORTED: list[DataType] = [
     DataType.RAG_10K,  # legacy alias
     DataType.FILINGS,  # legacy alias for 10-K
 ]
+
+#: Every DataType this provider serves routes to the one SEC_FILINGS category.
+_CATEGORIES: list[Category] = [Category.SEC_FILINGS]
+
+#: Declarative catalog row for the v3 probe (see ``engine.data.catalog``). SEC
+#: authenticates by IDENTITY, not by key: every request must carry a
+#: ``User-Agent`` naming the requester (``SEC_USER_AGENT``), which is why the
+#: row uses ``auth_header``/``auth_value`` instead of a query param. The URL is
+#: the per-issuer submissions JSON that edgartools reads to list filings
+#: (``edgar/urls.py`` → ``{SEC_DATA_URL}/submissions/CIK{cik:010d}.json``); it
+#: pins Apple's CIK (0000320193) because the probe ticker is AAPL — the same
+#: issuer every other catalog row probes.
+ENDPOINTS: dict[Category, EndpointSpec] = {
+    Category.SEC_FILINGS: EndpointSpec(
+        Category.SEC_FILINGS,
+        "GET",
+        "https://data.sec.gov/submissions/CIK0000320193.json",
+        auth_header="User-Agent",
+    ),
+}
 
 
 # Exceptions we map to ProviderError (don't crash the route layer).

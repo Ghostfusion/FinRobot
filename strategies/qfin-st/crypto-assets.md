@@ -168,7 +168,7 @@ $$p_{std}(vSol) = P\bigl(\text{grad}\,\big|\,\exists x: x > vSol\bigr), \qquad \
 
 ## 3. Data requirements → available endpoints
 
-The data layer routes on 33 categories (`finrobot_desktop/finrobot/engine/data/categories.py`). **There is no `crypto` category and no on-chain provider anywhere in the 14-provider inventory** — the only crypto-adjacent routes are the generic equity EOD endpoints (EODHD also serves crypto via `.CC` tickers, Twelve Data and yfinance accept crypto tickers, but the adapters carry no crypto symbol mapping) and the news/sentiment feeds. Every row below cites a real probed endpoint from `strategies/endpoints.json`; rows the layer cannot serve are marked **gap**.
+The data layer routes on 33 categories (`finrobot_desktop/finrobot/engine/data/categories.py`). **There is no `crypto` category and no on-chain provider anywhere in the 17-provider inventory** — the only crypto-adjacent routes are the generic equity EOD endpoints (EODHD also serves crypto via `.CC` tickers, Twelve Data and yfinance accept crypto tickers, but the adapters carry no crypto symbol mapping) and the news/sentiment feeds. Every row below cites a real probed endpoint from `strategies/endpoints.json`; rows the layer cannot serve are marked **gap**.
 
 | Input | Endpoint | Category | Provider | Probe status |
 |---|---|---|---|---|

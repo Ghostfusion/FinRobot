@@ -102,6 +102,20 @@ def _render(
     return url, params, headers
 
 
+def _credential(provider_id: str, kind: str, settings: FinRobotSettings) -> str | None:
+    """The value the probe substitutes for ``$KEY`` in a row's params/headers.
+
+    ``identity`` providers (SEC EDGAR) authenticate with a User-Agent naming the
+    requester rather than an API key, so their value lives in the
+    ``sec_user_agent`` setting; ``data_key()`` maps only the keyed providers and
+    would report a configured identity as "credential not configured". Both
+    kinds take the same substitution path — only the source differs.
+    """
+    if kind == "identity":
+        return getattr(settings, "sec_user_agent", "") or None
+    return settings.data_key(provider_id)
+
+
 async def probe_provider(
     provider_id: str, settings: FinRobotSettings, *, category: str | None = None
 ) -> list[ProbeResult]:
@@ -114,8 +128,8 @@ async def probe_provider(
     if not rows:
         return [ProbeResult(provider_id, "", "", False, "no_catalog", "no endpoint catalog rows")]
 
-    if spec.kind == "keyed":
-        key = settings.data_key(provider_id)
+    if spec.kind in ("keyed", "identity"):
+        key = _credential(provider_id, spec.kind, settings)
         if not key:
             return [
                 ProbeResult(

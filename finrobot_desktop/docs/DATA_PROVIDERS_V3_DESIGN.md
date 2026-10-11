@@ -298,8 +298,8 @@ unit tests.
   known registry id and resolves to the runtime name its provider reports;
   `sec_filings` ranks `edgar_tools`; and every priority provider either has
   catalog rows or is on the documented vendored-adapter exemption list
-  (`yfinance`, `fmp`, `finnhub`, `adanos`, `news_aggregator`, `sec_edgar` — they
-  predate the catalog and declare no module-level `ENDPOINTS`).
+  (`yfinance`, `adanos`, `news_aggregator` — they predate the catalog and declare
+  no module-level `ENDPOINTS`).
 - Shape parity: every price/financials adapter must satisfy the existing
   `test_provider_price_shape.py` / canonical-traceability contracts (or the
   category's canonical contract).

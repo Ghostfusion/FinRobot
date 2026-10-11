@@ -304,6 +304,22 @@
     "detail": ""
   },
   {
+    "provider": "finnhub",
+    "category": "core_stock_apis",
+    "url": "https://finnhub.io/api/v1/quote",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "finnhub",
+    "category": "news_data",
+    "url": "https://finnhub.io/api/v1/company-news",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
     "provider": "alpha_vantage",
     "category": "news_data",
     "url": "https://www.alphavantage.co/query",
@@ -368,6 +384,14 @@
     "detail": "HTTP 429"
   },
   {
+    "provider": "sec_edgar",
+    "category": "sec_filings",
+    "url": "https://data.sec.gov/submissions/CIK0000320193.json",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
     "provider": "federal_reserve",
     "category": "risk_free_curve",
     "url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all",
@@ -379,6 +403,22 @@
     "provider": "cboe",
     "category": "options_surface",
     "url": "https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "fmp",
+    "category": "core_stock_apis",
+    "url": "https://financialmodelingprep.com/stable/quote",
+    "ok": true,
+    "code": "ok",
+    "detail": ""
+  },
+  {
+    "provider": "fmp",
+    "category": "fundamental_data",
+    "url": "https://financialmodelingprep.com/stable/income-statement",
     "ok": true,
     "code": "ok",
     "detail": ""

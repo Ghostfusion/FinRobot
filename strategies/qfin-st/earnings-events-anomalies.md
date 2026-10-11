@@ -233,14 +233,14 @@ structure.
 | Listed index option surface | `https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json` | options_surface | cboe | ok (SPX-only) |
 | Risk-free curve (C-spread/DCF) | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | risk_free_curve | federal_reserve | ok |
 | Macro/rates (FinBERT-free level control) | `https://api.stlouisfed.org/fred/series/observations` | macro_data | fred | **ok** |
-| SEC filings (event anchor / text) | **gap** — category `SEC_FILINGS` routes to `sec_edgar` (categories.py `PRIORITY`) but **no live row exists in `strategies/endpoints.json`** | sec_filings | sec_edgar | no probe |
+| SEC filings (event anchor / text) | **gap** — `sec_edgar`'s `sec_filings` row now probes `ok` (the `data.sec.gov` submissions index), which gives the filing anchor/dates but not the filing text | sec_filings | sec_edgar | **gap** for text; submissions index probed `ok` |
 | Per-earnings-day strike-level option IVs with European-equivalents (Bloomberg-style) | **gap** — no provider row supplies calibrated IV surfaces for single names | options_surface | — | missing |
 | EUA / carbon futures + OIS curve + issuer bond Z-spreads | **gap** — out of data-layer scope | — | — | missing |
 | β̂, DW, and market-model residuals for SOM features | Derived locally from `core_stock_apis` OHLCV (**not** fetched) | — | — | derived |
 
 Every row above cites a real row from `strategies/endpoints.json` unless explicitly marked **gap**.
-`fmp`, `yfinance`, `finnhub`, and `sec_edgar` appear in `categories.py`'s routing priority but have **no
-live-probed row** in the inventory, so they are not cited as available.
+`yfinance` appears in `categories.py`'s routing priority but declares no endpoint catalog, so it is not
+cited as available.
 
 ## 4. Pitfalls, validation and measurement
 

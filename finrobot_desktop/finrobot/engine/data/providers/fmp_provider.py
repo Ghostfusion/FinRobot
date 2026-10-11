@@ -11,6 +11,8 @@ from typing import Any
 
 import httpx
 
+from finrobot.engine.data.catalog import EndpointSpec
+from finrobot.engine.data.categories import Category
 from finrobot.engine.primitives.ebitda import calculate_ebitda_operating
 from finrobot.engine.primitives.industry import (
     bank_net_revenue,
@@ -69,6 +71,29 @@ _PEER_ENRICH_MAX = 60
 # the downstream 52-week high/low window (366 calendar days) is fully covered
 # even across weekend/holiday gaps at the boundary.
 _PRICE_HISTORY_DAYS = 372
+
+#: Categories this provider serves (from the owner's priority table). FMP leads
+#: both groups in ``categories.PRIORITY`` — it is the primary quote and
+#: financials source.
+_CATEGORIES: list[Category] = [Category.CORE_STOCK_APIS, Category.FUNDAMENTAL_DATA]
+
+#: Declarative catalog rows for the v3 probe (see ``engine.data.catalog``).
+#: Both rows mirror the params ``FMPProvider`` itself sends through ``_get`` —
+#: the credential rides in the ``apikey`` query param, so no header auth.
+ENDPOINTS: dict[Category, EndpointSpec] = {
+    Category.CORE_STOCK_APIS: EndpointSpec(
+        Category.CORE_STOCK_APIS,
+        "GET",
+        f"{_BASE_URL}/quote",
+        {"symbol": "{ticker}", "apikey": "$KEY"},
+    ),
+    Category.FUNDAMENTAL_DATA: EndpointSpec(
+        Category.FUNDAMENTAL_DATA,
+        "GET",
+        f"{_BASE_URL}/income-statement",
+        {"symbol": "{ticker}", "period": "quarter", "limit": "4", "apikey": "$KEY"},
+    ),
+}
 
 
 def _adjusted_bar(p: dict[str, Any]) -> dict[str, Any] | None:

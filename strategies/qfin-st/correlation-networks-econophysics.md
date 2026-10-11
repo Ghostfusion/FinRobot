@@ -121,7 +121,7 @@ Every row below cites a real probe row from `strategies/endpoints.json`.
 | Correlation / covariance / MI matrices | derived from returns above | — | — | derived (no provider) |
 | Hellinger/MSF/CP/Q^cp statistics | derived | — | — | derived (no provider) |
 
-Notes: `fmp`, `yfinance`, `finnhub` and `sec_edgar` appear in `categories.py::PRIORITY` but are not in the live-probed inventory, so the rows above use only probed providers. Sector classification is a genuine gap — the corpus repeatedly interprets eigenmodes as sector modes but FinRobot has no category that returns GICS sectors.
+Notes: `yfinance` appears in `categories.py::PRIORITY` but is not in the live-probed inventory, so the rows above use only probed providers. Sector classification is a genuine gap — the corpus repeatedly interprets eigenmodes as sector modes but FinRobot has no category that returns GICS sectors.
 
 ---
 

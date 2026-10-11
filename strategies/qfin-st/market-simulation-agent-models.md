@@ -86,7 +86,7 @@ Two-stage training: SFT cross-entropy on teacher (DeepSeek-R1) reasoning traces,
 | News sentiment (News agent) | https://eodhd.com/api/sentiments ; https://www.alphavantage.co/query | news_sentiment | eodhd / alpha_vantage | ok / ok |
 | News sentiment (fallback) | https://api.gdeltproject.org/api/v2/doc/doc | news_sentiment | gdelt | rate_limited |
 | Fundamentals / financial statements (Fundamentals agent) | https://api.tiingo.com/tiingo/fundamentals/AAPL/statements ; https://www.alphavantage.co/query | fundamental_data | tiingo / alpha_vantage | ok |
-| 10-K/10-Q primary document text (RAG tool) | — | sec_filings (`sec_edgar`) | sec_edgar | **gap** — category routed in `categories.py` but no live-probed row in `endpoints.json` |
+| 10-K/10-Q primary document text (RAG tool) | — | sec_filings (`sec_edgar`) | sec_edgar | **gap** — `sec_filings` now probes `ok` via `sec_edgar` (the `data.sec.gov` submissions index), but that row serves filing metadata, not the primary document text |
 | Macro agent inputs (rates, CPI, etc.) | https://api.stlouisfed.org/fred/series/observations | macro_data | fred | ok |
 | 1-month T-bill opportunity cost (HODL) & risk-free | https://api.stlouisfed.org/fred/series/observations (T-bill series) | macro_data | fred | ok — note the dedicated `risk_free_curve` row (federal_reserve) failed probe (`connect`) |
 | Analyst ratings (Sentiment agent) | https://api.benzinga.com/api/v2.1/calendar/ratings | analyst_ratings | benzinga | ok |

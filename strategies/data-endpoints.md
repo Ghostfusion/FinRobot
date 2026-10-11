@@ -5,7 +5,7 @@ per catalog endpoint and classifies it. Results are printed, never persisted by 
 snapshot committed as reference for the strategy docs. **No credential value appears here** — the probe
 substitutes keys into request params/headers only, and those are not part of the emitted record.
 
-**49 endpoints across 14 providers.** Status counts: `ok`=28, `gateway`=19, `auth`=1, `rate_limited`=1.
+**54 endpoints across 17 providers.** Status counts: `ok`=33, `gateway`=19, `auth`=1, `rate_limited`=1.
 
 Status vocabulary: `ok` reachable | `auth` credential rejected/missing | `plan` tier does not include it |
 `rate_limited` throttled | `not_found` | `connect` network/TLS | `http` other HTTP | `no_key` |
@@ -33,6 +33,10 @@ Status vocabulary: `ok` reachable | `auth` credential rejected/missing | `plan` 
 | `eodhd` | `corporate_actions` | `https://eodhd.com/api/div/AAPL` | ok |  |
 | `eodhd` | `exchange_symbols` | `https://eodhd.com/api/exchange-symbol-list/US` | ok |  |
 | `federal_reserve` | `risk_free_curve` | `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all` | ok |  |
+| `finnhub` | `core_stock_apis` | `https://finnhub.io/api/v1/quote` | ok |  |
+| `finnhub` | `news_data` | `https://finnhub.io/api/v1/company-news` | ok |  |
+| `fmp` | `core_stock_apis` | `https://financialmodelingprep.com/stable/quote` | ok |  |
+| `fmp` | `fundamental_data` | `https://financialmodelingprep.com/stable/income-statement` | ok |  |
 | `fred` | `macro_data` | `https://api.stlouisfed.org/fred/series/observations` | ok |  |
 | `gdelt` | `news_sentiment` | `https://api.gdeltproject.org/api/v2/doc/doc` | rate_limited | HTTP 429 |
 | `massive` | `core_stock_apis` | `https://api.massive.com/v2/aggs/ticker/AAPL/prev` | ok |  |
@@ -57,6 +61,7 @@ Status vocabulary: `ok` reachable | `auth` credential rejected/missing | `plan` 
 | `moomoo` | `earnings_calendar` | `moomoo://get_earnings_calendar` | gateway | local gateway (SDK) |
 | `newsapi` | `news_data` | `https://newsapi.org/v2/everything` | ok |  |
 | `polymarket` | `prediction_markets` | `https://gamma-api.polymarket.com/markets` | ok |  |
+| `sec_edgar` | `sec_filings` | `https://data.sec.gov/submissions/CIK0000320193.json` | ok |  |
 | `stockdata` | `core_stock_apis` | `https://api.stockdata.org/v1/data/eod` | ok |  |
 | `stockdata` | `news_data` | `https://api.stockdata.org/v1/news/all` | ok |  |
 | `tiingo` | `core_stock_apis` | `https://api.tiingo.com/tiingo/daily/AAPL/prices` | ok |  |

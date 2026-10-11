@@ -132,7 +132,7 @@ $$\tilde P_d = S(S^\top W^{-1}S)^{-1}S^\top W^{-1}\hat P_d.$$
 
 ## 3. Data requirements → available endpoints
 
-Endpoint rows are from `strategies/endpoints.json` (49 live-probed rows, 14 providers). Note that `fmp` and `yfinance` lead several `PRIORITY` groups in `finrobot/engine/data/categories.py` but are **not present** in this endpoint inventory and are therefore not cited below. Probe status is the recorded `ok`/`code` (`ok`, `gateway`, `auth`, `rate_limited`, `connect`, `http`).
+Endpoint rows are from `strategies/endpoints.json` (54 live-probed rows, 17 providers). Note that `yfinance` leads several `PRIORITY` groups in `finrobot/engine/data/categories.py` but declares no endpoint catalog and is therefore not cited below. Probe status is the recorded `ok`/`code` (`ok`, `gateway`, `auth`, `rate_limited`, `connect`, `http`).
 
 | Input | Endpoint | Category | Provider | Probe status |
 |---|---|---|---|---|

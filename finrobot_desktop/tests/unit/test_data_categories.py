@@ -19,10 +19,10 @@ from finrobot.engine.data.registry import (
 
 #: Vendored adapters that predate the declarative catalog and declare no
 #: module-level ``ENDPOINTS`` (see ``engine.data.catalog``), so the probe reports
-#: them as ``no_catalog``. Documented limitation, not an oversight.
-CATALOG_EXEMPT_PROVIDER_IDS = frozenset(
-    {"yfinance", "fmp", "finnhub", "adanos", "news_aggregator", "sec_edgar"}
-)
+#: them as ``no_catalog``. Documented limitation, not an oversight. ``fmp``,
+#: ``finnhub`` and ``sec_edgar`` used to be exempt for this reason; they now
+#: declare catalog rows, so only the truly catalog-less adapters remain.
+CATALOG_EXEMPT_PROVIDER_IDS = frozenset({"yfinance", "adanos", "news_aggregator"})
 
 
 def test_every_priority_id_is_a_known_provider():

@@ -84,7 +84,10 @@ Classification vocabulary: `ok | auth | plan | rate_limited | not_found | connec
   `openrouter:deepseek/deepseek-v4.1-flash`, the OpenRouter key, base URL, the
   data keys, and `moomoo_host/port` from `.env`; keyless `data_key("yfinance")`
   returned None.
-- **Catalog:** `endpoint_catalog()` aggregated 14 providers / 49 endpoint rows.
+- **Catalog:** `endpoint_catalog()` aggregated 17 providers / 54 endpoint rows
+  (`fmp`, `finnhub` and `sec_edgar` gained rows after this section was first
+  written; only the catalog-less vendored adapters — `yfinance`, `adanos`,
+  `news_aggregator` — remain outside it).
 - **Chain build (live):** 19 providers registered from `.env`, including `moomoo`
   (its OpenD gateway was reachable) and `edgar_tools` (the `sec_edgar` adapter,
   served from `SEC_USER_AGENT` — see §9.2; this superseded an earlier 18-provider
