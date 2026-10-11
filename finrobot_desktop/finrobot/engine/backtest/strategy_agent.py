@@ -18,8 +18,12 @@ curve-fit number: tuning and reporting never happen on the same data.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+import statistics
+from collections.abc import Mapping, Sequence
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
+import numpy as np
 from pydantic import BaseModel, ValidationError
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import AgentRunError
@@ -27,6 +31,10 @@ from pydantic_ai.exceptions import AgentRunError
 from finrobot.config import FinRobotSettings
 from finrobot.engine.backtest.backtrader_adapter import BackTraderAdapter
 from finrobot.engine.backtest.engine import BacktestConfig, BacktestResult
+from finrobot.engine.backtest.validation.ledger import (
+    CostModel,
+    build_ledger_from_search,
+)
 from finrobot.engine.data.layer import DataLayer
 
 logger = logging.getLogger(__name__)
@@ -175,6 +183,7 @@ async def run_strategy_selection(
     end_date: str,
     data_layer: DataLayer,
     initial_cash: float = 100_000.0,
+    ledger_path: str | Path | None = None,
 ) -> BacktestResult:
     """Run LLM-guided strategy selection with in-sample/out-of-sample validation.
 
@@ -190,6 +199,15 @@ async def run_strategy_selection(
     a curve fit. When the window is too short to carve out an honest OOS tail
     (see ``_MIN_OOS_DAYS``) the function degrades to single-window tuning and
     attaches ``_NO_HOLDOUT_WARNING`` so the in-sample nature is never hidden.
+
+    When ``ledger_path`` is given, the tuning runs are persisted as a trial
+    ledger — every parameter set the search evaluated, with its per-bar returns
+    and the metric the search ranked them by — so the validation gate can score
+    the search itself with ``finrobot validate <ledger>``. The ledger holds the
+    in-sample tuning runs, which is exactly what the selection-bias gates need;
+    the holdout result stays a single out-of-sample evaluation and is deliberately
+    not folded into the ledger's grid, because it exists for one parameter set
+    only and padding it would invent folds.
     """
     model = settings.create_model()
     engine = BackTraderAdapter(data_layer)
@@ -226,13 +244,15 @@ async def run_strategy_selection(
     config = config_result.output
 
     # Force the immutable fields onto the LLM-chosen config, pinning the dates to
-    # the in-sample sub-range so every tuning backtest runs on IS only.
+    # the in-sample sub-range so every tuning backtest runs on IS only. The series
+    # is requested only when a ledger is going to be written from it.
     config = config.model_copy(
         update={
             "ticker": ticker,
             "start_date": is_start,
             "end_date": is_end,
             "initial_cash": initial_cash,
+            "include_series": ledger_path is not None,
         }
     )
 
@@ -240,6 +260,10 @@ async def run_strategy_selection(
     best_is_result: BacktestResult | None = None
     best_params: dict[str, float | int | str] = config.strategy_params
     best_strategy: str = config.strategy
+    # Every tuning run, in the order it was evaluated. This is what the ledger is
+    # built from: the gates need the whole search, not just its winner — a gate
+    # that only ever sees the winner cannot estimate selection bias at all.
+    trials: list[tuple[dict[str, float | int | str], BacktestResult]] = []
 
     # Pre-build the adjustment agent outside the loop to avoid
     # redundant Agent construction on each iteration.
@@ -260,6 +284,7 @@ async def run_strategy_selection(
         )
 
         result = await engine.run(config)
+        trials.append((dict(config.strategy_params), result))
 
         # Rank IS runs by the (length-normalised) selection metric, not raw
         # total_return, and remember the params that produced the best one.
@@ -300,17 +325,30 @@ async def run_strategy_selection(
                 "start_date": is_start,
                 "end_date": is_end,
                 "initial_cash": initial_cash,
+                "include_series": ledger_path is not None,
             }
         )
 
     if best_is_result is None:
         raise RuntimeError("No successful backtest result after all iterations")
 
+    ledger_note = (
+        _persist_trial_ledger(
+            path=Path(ledger_path),
+            ticker=ticker,
+            strategy=best_strategy,
+            trials=trials,
+        )
+        if ledger_path is not None
+        else None
+    )
+    ledger_warnings = [ledger_note] if ledger_note else []
+
     if split is None:
         # No holdout was possible: the IS result IS the reported result, but it
         # was tuned and evaluated on the same window — flag it as overfit.
         return best_is_result.model_copy(
-            update={"warnings": [_NO_HOLDOUT_WARNING, *best_is_result.warnings]}
+            update={"warnings": [*ledger_warnings, _NO_HOLDOUT_WARNING, *best_is_result.warnings]}
         )
 
     # Honest report: run the winning params ONCE on the untouched OOS holdout
@@ -328,4 +366,84 @@ async def run_strategy_selection(
         f"Parameters tuned on in-sample {is_start}..{is_end}; this result is "
         f"reported on the out-of-sample holdout {oos_start}..{oos_end}."
     )
-    return oos_result.model_copy(update={"warnings": [validation_note, *oos_result.warnings]})
+    return oos_result.model_copy(
+        update={"warnings": [*ledger_warnings, validation_note, *oos_result.warnings]}
+    )
+
+
+#: Minimum trials a ledger needs. The gates estimate selection bias across
+#: candidate parameter sets, so a single-trial "search" has nothing to correct
+#: for and ``spa_test`` refuses a one-column matrix outright.
+_MIN_LEDGER_TRIALS = 2
+
+
+def _persist_trial_ledger(
+    *,
+    path: Path,
+    ticker: str,
+    strategy: str,
+    trials: Sequence[tuple[Mapping[str, float | int | str], BacktestResult]],
+) -> str:
+    """Write the tuning search as a trial ledger; return the note to surface either way.
+
+    A ledger is only written when one would actually be valid: at least
+    ``_MIN_LEDGER_TRIALS`` runs, every one carrying a bar series, and all of them
+    on the same grid. Anything else would produce a file that the gates score as
+    if it were well-formed — the ledger enforces a common grid precisely so that a
+    ragged search cannot masquerade as a comparable one — so the failure is
+    reported in the result's warnings instead of papered over.
+    """
+    if len(trials) < _MIN_LEDGER_TRIALS:
+        return (
+            f"No trial ledger written: the search evaluated {len(trials)} parameter "
+            f"set(s) and the gates need at least {_MIN_LEDGER_TRIALS} to estimate "
+            f"selection bias."
+        )
+    missing = [params for params, result in trials if result.daily_returns is None]
+    if missing:
+        return (
+            "No trial ledger written: the engine returned no per-bar series for "
+            f"{len(missing)} of {len(trials)} runs."
+        )
+    widths = {len(result.daily_returns or []) for _, result in trials}
+    if len(widths) != 1:
+        return (
+            "No trial ledger written: the runs did not share one bar grid "
+            f"(lengths {sorted(widths)}), and a ledger over a ragged grid would be "
+            "scored as if the trials were comparable."
+        )
+    n_bars = widths.pop()
+    if n_bars < 2:
+        return f"No trial ledger written: {n_bars} bar(s) cannot support the gates."
+
+    matrix = np.column_stack(
+        [np.asarray(result.daily_returns, dtype=np.float64) for _, result in trials]
+    )
+    winner = max(range(len(trials)), key=lambda index: _selection_metric(trials[index][1]))
+    measured = [result.turnover for _, result in trials if result.turnover is not None]
+    mean_turnover = statistics.fmean(measured) if measured else None
+    ledger = build_ledger_from_search(
+        strategy=strategy,
+        tickers=[ticker],
+        trial_returns=matrix,
+        fold_boundaries=[n_bars],
+        params_by_trial=[params for params, _ in trials],
+        cost_model=CostModel(
+            version="backtrader-zero-friction-v1",
+            per_side_bps=0.0,
+            turnover=trials[winner][1].turnover,
+            description=(
+                "BackTrader adapter assumes zero commission and slippage; turnover is the "
+                "winning trial's measured notional per bar"
+                + (f" (mean across trials: {mean_turnover:.4g})" if mean_turnover else "")
+            ),
+        ),
+        created_utc=datetime.now(timezone.utc).isoformat(),
+        objective_by_trial=[_selection_metric(result) for _, result in trials],
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ledger.write_jsonl(path)
+    return (
+        f"Trial ledger written to {path} ({ledger.n_trials} trials x {n_bars} bars); "
+        f"score the search with: finrobot validate {path}"
+    )

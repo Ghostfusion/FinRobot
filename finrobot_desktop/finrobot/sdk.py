@@ -233,14 +233,17 @@ class FinRobot:
         start_date: str,
         end_date: str,
         initial_cash: float = 100_000.0,
+        ledger_path: str | None = None,
     ) -> "BacktestResult":
         """LLM-guided strategy selection with iterative tuning. Blocking.
 
         The LLM picks an initial strategy/params, runs the backtest, reviews
-        results, and iterates up to 3 times to improve performance.
+        results, and iterates up to 3 times to improve performance. Pass
+        ``ledger_path`` to persist the search as a trial ledger that
+        ``finrobot validate`` can score.
         """
         result: BacktestResult = self._run_sync(
-            lambda: self.aauto_backtest(ticker, start_date, end_date, initial_cash)
+            lambda: self.aauto_backtest(ticker, start_date, end_date, initial_cash, ledger_path)
         )
         return result
 
@@ -314,10 +317,14 @@ class FinRobot:
         start_date: str,
         end_date: str,
         initial_cash: float = 100_000.0,
+        ledger_path: str | None = None,
     ) -> "BacktestResult":
         """LLM-guided strategy selection with iterative tuning. Async.
 
         Requires ``pip install 'finrobot[backtest]'``.
+
+        Pass ``ledger_path`` to persist the search as a trial ledger, which
+        ``finrobot validate`` can then score with the selection-bias gates.
 
         (``abacktest`` needs no explicit call here — ``BacktestConfig`` runs
         the same ``validate_ticker`` in its pydantic field validator.)
@@ -332,6 +339,7 @@ class FinRobot:
             end_date,
             self._ensure_deps().data_layer,
             initial_cash=initial_cash,
+            ledger_path=ledger_path,
         )
 
     async def close(self) -> None:

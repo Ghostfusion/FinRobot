@@ -6,6 +6,7 @@ without hitting yfinance (mock data loading).
 
 from __future__ import annotations
 
+import math
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -15,7 +16,7 @@ from finrobot.engine.backtest.backtrader_adapter import (
     _check_backtrader,
     _get_sma_crossover,
 )
-from finrobot.engine.backtest.engine import BacktestConfig
+from finrobot.engine.backtest.engine import BacktestConfig, BacktestResult
 
 # backtrader is the optional ``[backtest]`` extra. This module exercises the
 # adapter that wraps it; when the extra is absent (a dev venv that did not
@@ -500,6 +501,52 @@ class TestSharpeOnDailyBars:
         assert result.total_trades >= 1
         assert result.sharpe_ratio is None
         assert any("nearly flat" in w for w in result.warnings)
+
+
+class TestSeriesAndTurnover:
+    """The trial ledger's inputs: per-bar account returns and measured turnover."""
+
+    @staticmethod
+    def _run(*, include_series: bool) -> BacktestResult:
+        bars = _one_year_daily_bars(seed=42)
+        data_layer = MagicMock()
+        data_layer.fetch_price_range = AsyncMock(return_value=bars)
+        adapter = BackTraderAdapter(data_layer)
+        adapter._render_chart = lambda *a, **k: None  # type: ignore[method-assign]
+        config = BacktestConfig(
+            ticker="SYNTH",
+            start_date="2023-01-02",
+            end_date="2024-01-02",
+            strategy="sma_crossover",
+            include_series=include_series,
+        )
+        return adapter._run_sync(config)
+
+    def test_series_is_absent_unless_requested(self) -> None:
+        """Off by default, so no existing consumer's payload grows a series."""
+        assert self._run(include_series=False).daily_returns is None
+
+    def test_series_compounds_to_the_accounts_total_return(self) -> None:
+        """~261 bars of account returns, and compounding them reproduces the total.
+
+        This is what makes the series usable as ledger material: a series that did
+        not compound to the reported ``final_value`` would be a different series
+        than the one the metrics came from.
+        """
+        result = self._run(include_series=True)
+        assert result.daily_returns is not None
+        assert len(result.daily_returns) > 200
+        compounded = math.prod(1.0 + value for value in result.daily_returns)
+        assert compounded == pytest.approx(result.final_value / result.initial_value, rel=1e-6)
+
+    def test_turnover_is_measured_not_assumed(self) -> None:
+        """A measured per-bar turnover is what a cost grid needs."""
+        result = self._run(include_series=True)
+        assert result.turnover is not None
+        assert result.turnover > 0.0  # the fixture does trade
+        # The default one-share sizer on a $100k account is a tiny fraction of
+        # capital per bar; the bound is loose, the measurement is the point.
+        assert result.turnover < 0.01
 
 
 @pytest.mark.skipif(FullyInvestedStrategy is None, reason="backtrader not installed")

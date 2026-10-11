@@ -3,9 +3,10 @@
 What this code does that raw LLM cannot: wraps BackTrader's synchronous,
 callback-heavy API into a clean async interface with typed config/result.
 Handles SMA crossover strategy (built-in), dynamic strategy loading via
-module:ClassName, 5 analyzers (Sharpe, DrawDown, Returns, TradeAnalyzer, and a
-daily TimeReturn series that gates the Sharpe), and equity curve PNG generation
-— all deterministic computation.
+module:ClassName, 6 analyzers (Sharpe, DrawDown, Returns, TradeAnalyzer, a daily
+TimeReturn series that gates the Sharpe, and a turnover meter that makes a cost
+sensitivity run grounded rather than assumed), and equity curve PNG generation —
+all deterministic computation.
 
 The SharpeRatio analyzer is configured for DAILY bars (timeframe=Days,
 annualize=True, factor=252). backtrader's default timeframe=Years resamples
@@ -127,6 +128,43 @@ def _get_sma_crossover() -> type:
     return SMACrossOver
 
 
+@functools.cache
+def _get_turnover_analyzer() -> type:
+    """Create and cache the per-bar turnover analyzer.
+
+    Deferred like the strategy class, so importing this module never imports
+    backtrader (which is only a hard dependency of the ``[backtest]`` extra).
+    Notional traded is the change in position size times the bar's close, over
+    account value — deliberately the same "fraction of capital per bar" scale
+    ``net_of_costs`` takes, so a measured turnover feeds straight into a cost
+    sensitivity run instead of being guessed.
+    """
+    import backtrader as bt
+
+    class Turnover(bt.Analyzer):
+        def start(self) -> None:
+            self._previous_size = 0.0
+            self._bars: list[float] = []
+
+        def next(self) -> None:
+            size = float(self.strategy.position.size)
+            account_value = float(self.strategy.broker.getvalue())
+            traded = abs(size - self._previous_size) * float(self.data.close[0])
+            self._bars.append(0.0 if account_value == 0.0 else traded / account_value)
+            self._previous_size = size
+
+        def prenext(self) -> None:
+            # Bars before the strategy's warm-up would otherwise be missing from
+            # the series, leaving the mean computed over a shorter window than the
+            # returns it will be applied to.
+            self.next()
+
+        def get_analysis(self) -> dict[str, list[float]]:
+            return {"turnover": list(self._bars)}
+
+    return Turnover
+
+
 class BackTraderAdapter(BacktestEngine):
     """BacktestEngine implementation using BackTrader.
 
@@ -191,6 +229,7 @@ class BackTraderAdapter(BacktestEngine):
             timeframe=bt.TimeFrame.Days,
             compression=1,
         )
+        cerebro.addanalyzer(_get_turnover_analyzer(), _name="turnover")
 
         # Run
         initial_value = cerebro.broker.getvalue()
@@ -204,6 +243,7 @@ class BackTraderAdapter(BacktestEngine):
         max_dd = self._extract_drawdown(strat, warnings)
         annualized_return = self._extract_returns(strat, warnings)
         total_trades, winning, losing = self._extract_trades(strat, warnings)
+        turnover = self._extract_turnover(strat)
 
         # Generate equity curve chart
         chart_b64 = self._render_chart(cerebro, config, warnings)
@@ -228,6 +268,8 @@ class BackTraderAdapter(BacktestEngine):
             winning_trades=winning,
             losing_trades=losing,
             chart_base64=chart_b64,
+            turnover=turnover,
+            daily_returns=(self._daily_return_series(strat) if config.include_series else None),
             warnings=warnings,
         )
 
@@ -373,13 +415,13 @@ class BackTraderAdapter(BacktestEngine):
         return ratio
 
     @staticmethod
-    def _daily_return_std(strat: Any) -> float | None:
-        """Population standard deviation of the daily equity-curve returns.
+    def _daily_return_series(strat: Any) -> list[float] | None:
+        """The daily ``TimeReturn`` series, in bar order.
 
-        Uses the daily ``TimeReturn`` series registered alongside the other
-        analyzers. ``None`` means the series is unavailable (a stub strategy in a
-        unit test, or a caller that built its own cerebro), in which case the
-        caller skips the guard instead of failing.
+        ``None`` means the series is unavailable (a stub strategy in a unit test,
+        or a caller that built its own cerebro), in which case the callers skip
+        their guard or the field instead of failing. Insertion order is bar order:
+        backtrader builds the analysis as an ordered mapping keyed by date.
         """
         analyzer = getattr(strat.analyzers, "daily_returns", None)
         if analyzer is None:
@@ -388,9 +430,35 @@ class BackTraderAdapter(BacktestEngine):
         if not isinstance(analysis, dict):
             return None
         values = [value for value in analysis.values() if isinstance(value, float)]
-        if not values:
+        return values or None
+
+    @classmethod
+    def _daily_return_std(cls, strat: Any) -> float | None:
+        """Population standard deviation of the daily equity-curve returns."""
+        values = cls._daily_return_series(strat)
+        if values is None:
             return None
         return statistics.pstdev(values)
+
+    @staticmethod
+    def _extract_turnover(strat: Any) -> float | None:
+        """Mean per-bar notional traded as a fraction of account value.
+
+        Disagrees with nothing else in the result — it is the input a cost
+        sensitivity run needs, and ``None`` (a stub strategy, or a caller that
+        built its own cerebro) means a cost grid cannot be run on this result
+        rather than that turnover was zero.
+        """
+        analyzer = getattr(strat.analyzers, "turnover", None)
+        if analyzer is None:
+            return None
+        analysis = analyzer.get_analysis()
+        if not isinstance(analysis, dict):
+            return None
+        bars = [value for value in analysis.get("turnover", []) if isinstance(value, float)]
+        if not bars:
+            return None
+        return statistics.fmean(bars)
 
     def _extract_drawdown(self, strat: Any, warnings: list[str]) -> float | None:
         analysis = strat.analyzers.drawdown.get_analysis()

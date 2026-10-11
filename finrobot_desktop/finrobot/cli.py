@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import click
 
 from finrobot import __version__
-from finrobot.config import get_settings
+from finrobot.config import FinRobotSettings, get_settings
 from finrobot.engine.analysis.prompts import ANALYSIS_TYPES
 from finrobot.engine.data.ticker import validate_ticker
 
@@ -40,6 +41,44 @@ def _validate_ticker_arg(raw: str) -> str:
         raise click.ClickException(str(e)) from e
 
 
+def _default_ledger_path(ticker: str) -> str:
+    """Where ``backtest --auto`` writes its trial ledger when ``--ledger`` is absent.
+
+    Under the app's own home directory rather than the working directory, so an
+    ``--auto`` run never drops a file into whatever tree the user happens to be
+    standing in; the run prints the path it used.
+    """
+    from finrobot.paths import ensure_home
+
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return str(ensure_home() / "ledgers" / f"{ticker}-{stamp}.jsonl")
+
+
+def _parse_bps_grid(raw: str) -> tuple[float, ...]:
+    """Parse a ``--cost-bps`` value like ``"0,1,2.5,5"`` into cost levels."""
+    try:
+        values = tuple(float(part) for part in raw.split(",") if part.strip())
+    except ValueError as e:
+        raise click.ClickException(f"Invalid --cost-bps {raw!r}: {e}") from e
+    if not values:
+        raise click.ClickException(f"--cost-bps {raw!r} names no cost levels")
+    return values
+
+
+def _settings_for_model(model: str | None) -> FinRobotSettings:
+    """CLI settings, applying ``--model`` only when one was actually given.
+
+    ``FinRobotSettings.model_name`` is a ``str``, not ``str | None``, so passing
+    ``model_name=None`` through is a validation error — which is exactly what
+    happened to ``backtest --auto`` without ``--model``: the command died on
+    startup before it could do anything. The override has to be conditional, and
+    this is the one place that gets it right instead of two.
+    """
+    if model:
+        return get_settings(use_env=True, model_name=model)
+    return get_settings(use_env=True)
+
+
 def _build_deps(model: str | None = None) -> "FinRobotDeps":
     """Build deps only. No agent creation.
     Used by pipeline commands that create their own sub-agents."""
@@ -52,7 +91,7 @@ def _build_deps(model: str | None = None) -> "FinRobotDeps":
     from finrobot.engine.skills.registry import SkillRegistry
 
     # Credentials come from the repo-root .env (Data Layer v3).
-    settings = get_settings(use_env=True, model_name=model) if model else get_settings(use_env=True)
+    settings = _settings_for_model(model)
 
     # Runtime config validation: checks LLM key + FMP key (required).
     # Raises ValueError; we convert to ClickException for clean CLI output.
@@ -501,6 +540,15 @@ def ic_memo(ticker: str, model: str | None, lang: str | None) -> None:
     "--auto", is_flag=True, default=False, help="LLM-guided strategy selection (iterative)"
 )
 @click.option("--model", default=None, help="Override model for --auto mode")
+@click.option(
+    "--ledger",
+    default=None,
+    type=click.Path(),
+    help=(
+        "With --auto, where to write the trial ledger for `finrobot validate`. "
+        "Defaults to ~/.finrobot/ledgers/<ticker>-<timestamp>.jsonl."
+    ),
+)
 def backtest(
     ticker: str,
     strategy: str,
@@ -511,14 +559,17 @@ def backtest(
     save_chart: str | None,
     auto: bool,
     model: str | None,
+    ledger: str | None,
 ) -> None:
     """Run a backtest on a ticker with a given strategy.
 
     Example:
         finrobot backtest AAPL --strategy sma_crossover --start 2023-01-01 --end 2024-01-01
 
-    With --auto, the LLM picks and iteratively tunes strategy parameters:
+    With --auto, the LLM picks and iteratively tunes strategy parameters, and the
+    search is persisted as a trial ledger so the validation gate can score it:
         finrobot backtest AAPL --start 2023-01-01 --end 2024-01-01 --auto
+        finrobot validate ~/.finrobot/ledgers/AAPL-<timestamp>.jsonl
     """
     ticker = _validate_ticker_arg(ticker)
 
@@ -528,7 +579,7 @@ def backtest(
     if auto:
         from finrobot.engine.backtest.strategy_agent import run_strategy_selection
 
-        settings = get_settings(use_env=True, model_name=model)
+        settings = _settings_for_model(model)
 
         # Catch a missing/invalid LLM key up front (same check _build_deps runs)
         # so --auto fails with a clean message instead of a late traceback from
@@ -538,11 +589,19 @@ def backtest(
         except ValueError as e:
             raise click.ClickException(str(e)) from e
 
+        ledger_target = ledger or _default_ledger_path(ticker)
+
         async def _run_auto() -> BacktestResult:
             data_layer = build_data_layer(settings)
             try:
                 return await run_strategy_selection(
-                    settings, ticker, start, end, data_layer, initial_cash=cash
+                    settings,
+                    ticker,
+                    start,
+                    end,
+                    data_layer,
+                    initial_cash=cash,
+                    ledger_path=ledger_target,
                 )
             finally:
                 await data_layer.close()
@@ -553,6 +612,13 @@ def backtest(
         import json
 
         from finrobot.engine.backtest.backtrader_adapter import BackTraderAdapter
+
+        if ledger:
+            click.echo(
+                "Note: --ledger applies to --auto only. A single manual run is not a search, "
+                "so there is no search for the selection-bias gates to correct — run --ledger "
+                "with --auto and score that ledger."
+            )
 
         strategy_params: dict[str, float | int | str] = {}
         if params:
@@ -601,12 +667,38 @@ def backtest(
     help="CSV of per-bar benchmark returns for the SPA test",
 )
 @click.option("--as-json", "as_json", is_flag=True, help="Emit the report as JSON")
+@click.option(
+    "--cost-grid",
+    "cost_grid_enabled",
+    is_flag=True,
+    default=False,
+    help=(
+        "Also re-price the ledger across the corpus's 0/1/2/5/10 bps-per-side grid, "
+        "because one frictionless number is not an answer. Needs a turnover: the "
+        "ledger's, or --turnover."
+    ),
+)
+@click.option(
+    "--cost-bps",
+    "cost_bps",
+    default=None,
+    help="Custom per-side grid in bps, e.g. '0,5,10'; implies --cost-grid",
+)
+@click.option(
+    "--turnover",
+    type=float,
+    default=None,
+    help="Notional traded per bar as a fraction of capital, when the ledger records none",
+)
 def validate(
     ledger: Path,
     trial_id: int | None,
     blocks: int,
     benchmark: Path | None,
     as_json: bool,
+    cost_grid_enabled: bool,
+    cost_bps: str | None,
+    turnover: float | None,
 ) -> None:
     """Score a trial ledger with the backtest validation gate.
 
@@ -618,12 +710,15 @@ def validate(
 
     Example:
         finrobot validate trials.jsonl --blocks 10
+        finrobot validate trials.jsonl --cost-grid
     """
     import csv
 
     from finrobot.engine.backtest.validation import (
+        DEFAULT_BPS_GRID,
         TrialLedger,
         ValidationConfig,
+        cost_grid,
         validate_ledger,
     )
 
@@ -658,10 +753,43 @@ def validate(
     except ValueError as e:
         raise click.ClickException(str(e)) from e
 
+    grid = None
+    if cost_grid_enabled or cost_bps is not None:
+        try:
+            grid = cost_grid(
+                loaded,
+                bps_grid=(_parse_bps_grid(cost_bps) if cost_bps is not None else DEFAULT_BPS_GRID),
+                turnover=turnover,
+                winner_trial_id=trial_id,
+                benchmark=benchmark_returns,
+                config=ValidationConfig(n_blocks=blocks),
+            )
+        except ValueError as e:
+            raise click.ClickException(str(e)) from e
+
     if as_json:
-        click.echo(report.model_dump_json(indent=2))
-    else:
-        click.echo(report.format_summary())
+        if grid is None:
+            click.echo(report.model_dump_json(indent=2))
+            return
+        # One document with both parts, so a machine consumer that asked for the
+        # grid does not have to concatenate two JSON documents from one stream.
+        import json
+
+        click.echo(
+            json.dumps(
+                {
+                    "report": report.model_dump(mode="json"),
+                    "cost_grid": grid.model_dump(mode="json"),
+                },
+                indent=2,
+            )
+        )
+        return
+
+    click.echo(report.format_summary())
+    if grid is not None:
+        click.echo()
+        click.echo(grid.format_summary())
 
 
 @cli.command()

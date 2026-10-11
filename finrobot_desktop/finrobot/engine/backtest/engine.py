@@ -33,6 +33,14 @@ class BacktestConfig(BaseModel):
         allow_inf_nan=False,
         description="Annual risk-free rate for Sharpe ratio calculation",
     )
+    include_series: bool = Field(
+        default=False,
+        description=(
+            "Return the per-bar account return series in the result. Off by default so "
+            "existing consumers keep a payload with no series in it; the trial ledger needs "
+            "it, and only the ledger builder turns it on."
+        ),
+    )
 
     @field_validator("start_date", "end_date")
     @classmethod
@@ -79,6 +87,13 @@ class BacktestResult(BaseModel):
     winning_trades: int = 0
     losing_trades: int = 0
     chart_base64: str | None = None  # PNG of equity curve
+    #: Mean notional traded per bar as a fraction of account value. Populated by
+    #: the adapter's turnover analyzer; it is what makes a cost sensitivity
+    #: analysis grounded rather than assumed.
+    turnover: float | None = None
+    #: Per-bar account returns, chronological. Only populated when the config sets
+    #: ``include_series``; the trial ledger is the consumer that needs them.
+    daily_returns: list[float] | None = None
     warnings: list[str] = []
 
     @property

@@ -47,6 +47,15 @@ class CostModel(BaseModel):
 
     version: str = Field(description="Cost-model version tag, e.g. 'flat-2bps-v1'")
     per_side_bps: float = Field(ge=0, description="Per-side cost in basis points (>= 0)")
+    turnover: float | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Notional traded per bar as a fraction of capital, when measured. ``None`` "
+            "means it was not measured, and a cost sensitivity run then refuses to guess "
+            "one: the stored net returns cannot be re-priced without it."
+        ),
+    )
     description: str = ""
 
     @field_validator("version")

@@ -2,11 +2,14 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from click.testing import CliRunner
 from pydantic_ai.models.test import TestModel
 
+import finrobot.cli as cli_module
 from finrobot.cli import cli
 from finrobot.engine.data.interface import DataResult
 from finrobot.engine.data.types import DataType
@@ -685,3 +688,69 @@ class TestParentDeathWatchdog:
             assert fired.wait(timeout=6), "watchdog did not exit when parent pid was dead"
         finally:
             stop.set()
+
+
+class TestSettingsForModel:
+    """Regression: ``backtest --auto`` without ``--model`` used to die on startup.
+
+    ``FinRobotSettings.model_name`` is a ``str``, not ``str | None``, so forwarding
+    the CLI's ``None`` as an override raised a pydantic ``ValidationError`` before
+    the command could do anything — the invocation the help text documents for
+    ``--auto`` could not run at all. The other pipeline commands already guarded
+    it; this pins the behaviour in one place.
+    """
+
+    def test_omits_model_name_when_no_model_was_given(self, monkeypatch) -> None:
+        calls: list[dict[str, object]] = []
+
+        def fake_get_settings(**kwargs: object) -> object:
+            # The defect in one assertion: None must never reach the settings model.
+            assert "model_name" not in kwargs or kwargs["model_name"], (
+                "model_name must not be forwarded as None — FinRobotSettings rejects it"
+            )
+            calls.append(kwargs)
+            return SimpleNamespace(model_name="default-from-env", skills_dir="")
+
+        monkeypatch.setattr("finrobot.cli.get_settings", fake_get_settings)
+        resolved = cli_module._settings_for_model(None)
+        assert resolved.model_name == "default-from-env"
+        assert calls == [{"use_env": True}]
+
+    def test_passes_an_explicit_model_through(self, monkeypatch) -> None:
+        calls: list[dict[str, object]] = []
+
+        def fake_get_settings(**kwargs: object) -> object:
+            calls.append(kwargs)
+            return SimpleNamespace(model_name=kwargs.get("model_name", "default"), skills_dir="")
+
+        monkeypatch.setattr("finrobot.cli.get_settings", fake_get_settings)
+        assert cli_module._settings_for_model("test:test").model_name == "test:test"
+        assert calls == [{"use_env": True, "model_name": "test:test"}]
+
+    def test_backtest_auto_survives_settings_construction(self, monkeypatch) -> None:
+        """Command level: ``--auto`` with no ``--model`` reaches the search."""
+        settings = MagicMock()
+        settings.model_name = "test:test"
+        settings.skills_dir = ""
+        monkeypatch.setattr("finrobot.cli.get_settings", lambda **kwargs: settings)
+        monkeypatch.setattr(
+            "finrobot.engine.data.factory.build_data_layer",
+            lambda _settings: MagicMock(close=AsyncMock()),
+        )
+        summary = MagicMock()
+        summary.format_summary.return_value = "SUMMARY"
+        summary.chart_base64 = None
+        run_search = AsyncMock(return_value=summary)
+        monkeypatch.setattr(
+            "finrobot.engine.backtest.strategy_agent.run_strategy_selection", run_search
+        )
+
+        result = CliRunner().invoke(
+            cli, ["backtest", "AAPL", "--start", "2023-01-01", "--end", "2024-01-01", "--auto"]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert "SUMMARY" in result.output
+        # And the search was asked for a ledger, so `finrobot validate` has input.
+        assert run_search.await_args is not None
+        assert run_search.await_args.kwargs["ledger_path"].endswith(".jsonl")

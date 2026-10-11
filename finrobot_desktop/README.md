@@ -109,12 +109,23 @@ Everything here is pure Python with no model in the loop, which is what makes th
 - **Selection objective** — the GT-Score as the paper defines it (a minimized loss) plus the generalization ratio of validation to training return.
 - **Overfitting gates** — PBO by CSCV (candidate-by-fold rank logits), the deflated Sharpe ratio with an *effective* trial count from eigenvalue decorrelation, MinTRL, White/Hansen SPA over a moving-block bootstrap, and a regime-stability diagnostic.
 - **Inference beside the gates** — a Diebold–Mariano comparison of two forecasts and a percentile block-bootstrap Sharpe interval, both on the same moving-block resampler as the SPA test. Measured on i.i.d. returns at n=250: 95% coverage is 0.955, and the interval is about 3.8 Sharpe units wide — the honest reading of a 250-bar Sharpe near 0.8 is that it is not distinguishable from zero.
+- **Cost sensitivity** — the same verdict re-priced across a 0/1/2/5/10 bps-per-side grid, so the answer is a range ("survives to 5 bps, dies at 10") rather than one frictionless number. Re-pricing needs the notional traded per bar; where a ledger records none the grid raises instead of inventing it, and an unpinned winner is re-selected at each level because that is what the search would have concluded under those costs.
 - **Aggregate** — five gates blended into one 0–100 display whose verdict is enforced, not asserted: `display ≥ 80` exactly when every gate passed, checked at runtime, and re-checked by the test suite.
 
 Two rules are structural rather than stylistic. **Fail closed:** a missing statistic produces a lower verdict, never a synthetic pass — no stored pre-Φ statistic means no score at all, because `Φ(u)` saturates and cannot be inverted. **Deterministic:** every gate is seeded and pure, so a score can be reproduced from the ledger alone. The constants are the source papers' own published calibration (arXiv:2602.00080v1, arXiv:2608.23808v2, arXiv:2209.05559v6), and the methodology is distilled in `../strategies/qfin-st/backtest-methodology.md`.
 
+The ledger comes from the app's own search: `backtest --auto` writes one for every
+parameter set the LLM tuned (with each run's per-bar returns and the metric the
+search ranked them by), so a search can be scored without anyone hand-building a
+ledger. A single manual run is not a search, so it writes none — there is nothing
+for a selection-bias gate to correct.
+
 ```bash
-finrobot validate trials.jsonl          # score a ledger with the validation gate
+finrobot backtest AAPL --start 2023-01-01 --end 2025-01-01 --auto
+#   -> Trial ledger written to ~/.finrobot/ledgers/AAPL-<stamp>.jsonl
+finrobot validate ~/.finrobot/ledgers/AAPL-<stamp>.jsonl          # score the search
+finrobot validate trials.jsonl --cost-grid                        # 0/1/2/5/10 bps
+finrobot validate trials.jsonl --cost-bps 0,5,25 --as-json        # custom grid
 finrobot validate trials.jsonl --as-json --blocks 6
 ```
 

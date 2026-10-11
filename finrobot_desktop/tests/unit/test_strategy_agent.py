@@ -7,14 +7,17 @@ without hitting real LLM or BackTrader — both are fully mocked.
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import numpy as np
 import pytest
 
 from pydantic_ai.exceptions import ModelHTTPError
 
 from finrobot.config import FinRobotSettings
 from finrobot.engine.backtest.engine import BacktestConfig, BacktestResult
+from finrobot.engine.backtest.validation import TrialLedger, validate_ledger
 from finrobot.engine.backtest.strategy_agent import (
     _FALLBACK_WARNING,
     _NO_HOLDOUT_WARNING,
@@ -27,7 +30,13 @@ from finrobot.engine.backtest.strategy_agent import (
 )
 
 
-def _make_result(total_return: float, annualized_return: float | None = None) -> BacktestResult:
+def _make_result(
+    total_return: float,
+    annualized_return: float | None = None,
+    *,
+    series: list[float] | None = None,
+    turnover: float | None = None,
+) -> BacktestResult:
     """Helper to create a BacktestResult with a given return."""
     final = 100_000 * (1 + total_return)
     return BacktestResult(
@@ -40,7 +49,25 @@ def _make_result(total_return: float, annualized_return: float | None = None) ->
         total_trades=10,
         winning_trades=6,
         losing_trades=4,
+        turnover=turnover,
+        daily_returns=series,
     )
+
+
+def _series(seed: int, *, n: int = 120, mean: float = 0.0004, spread: float = 0.01) -> list[float]:
+    """A deterministic account-return series for ledger tests."""
+    rng = np.random.default_rng(seed)
+    return [float(value) for value in rng.normal(mean, spread, size=n)]
+
+
+def _mock_agent_runs(outputs: list[object]) -> AsyncMock:
+    """An ``Agent.run`` that answers with a different output on each call."""
+    answers = []
+    for output in outputs:
+        answer = MagicMock()
+        answer.output = output
+        answers.append(answer)
+    return AsyncMock(side_effect=answers)
 
 
 def _make_config(**overrides: object) -> BacktestConfig:
@@ -444,3 +471,128 @@ class TestSelectionMetric:
 class TestMaxIterationsConstant:
     def test_max_iterations_is_three(self) -> None:
         assert MAX_ITERATIONS == 3
+
+
+class TestTrialLedgerFromSearch:
+    """`--auto` has to leave behind something the validation gate can score.
+
+    Without this the gate shipped as a tool with no producer: the app could run a
+    search and the gate could score a ledger, and nothing connected them.
+    """
+
+    @staticmethod
+    async def _search(
+        *,
+        runs: list[BacktestResult],
+        decisions: list[_AdjustmentDecision],
+        ledger_path: Path,
+    ) -> BacktestResult:
+        settings = FinRobotSettings(model_name="test:test")
+        config = _make_config()
+        mock_engine_run = AsyncMock(side_effect=runs)
+        with (
+            patch("finrobot.engine.backtest.strategy_agent.Agent") as mock_agent_cls,
+            patch("finrobot.engine.backtest.strategy_agent.BackTraderAdapter") as mock_adapter_cls,
+        ):
+            mock_agent_cls.side_effect = [
+                MagicMock(run=_mock_agent_run(config)),
+                MagicMock(run=_mock_agent_runs(decisions)),
+            ]
+            mock_adapter_cls.return_value.run = mock_engine_run
+            return await run_strategy_selection(
+                settings,
+                "AAPL",
+                "2023-01-01",
+                "2024-01-01",
+                MagicMock(),
+                ledger_path=ledger_path,  # type: ignore[arg-type]
+            )
+
+    @pytest.mark.asyncio
+    async def test_two_trial_search_writes_a_ledger_the_gate_can_score(self, tmp_path) -> None:
+        """The acceptance criterion: --auto's own output scores end to end."""
+        config = _make_config()
+        target = tmp_path / "trials.jsonl"
+        result = await self._search(
+            runs=[
+                _make_result(0.10, series=_series(seed=1), turnover=0.002),
+                _make_result(0.12, series=_series(seed=2), turnover=0.003),
+                _make_result(0.04),  # the OOS holdout
+            ],
+            decisions=[
+                _AdjustmentDecision(should_continue=True, config=config),
+                _AdjustmentDecision(should_continue=False, config=config),
+            ],
+            ledger_path=target,
+        )
+
+        assert target.exists()
+        ledger = TrialLedger.read_jsonl(target)
+        assert ledger.n_trials == 2  # the two tuning runs, not the holdout
+        assert ledger.n_bars == 120
+        assert ledger.tickers == ["AAPL"]
+        # The cost model records the *winner's* measured turnover, so a cost grid
+        # can run on this ledger without inventing one.
+        assert ledger.cost_model.turnover == pytest.approx(0.003)
+        assert ledger.cost_model.per_side_bps == 0.0
+        # The objective the search ranked by is preserved as provenance.
+        assert [record.objective for record in ledger.trials] == pytest.approx([0.10, 0.12])
+
+        # The gate scores the app's own search — no hand-built ledger needed.
+        report = validate_ledger(ledger)
+        assert report.display is not None
+
+        assert str(target) in result.warnings[0]
+        assert "out-of-sample" in result.warnings[1]
+
+    @pytest.mark.asyncio
+    async def test_single_trial_search_writes_no_ledger_and_says_why(self, tmp_path) -> None:
+        """One parameter set is not a search, and the gates cannot score it."""
+        config = _make_config()
+        target = tmp_path / "trials.jsonl"
+        result = await self._search(
+            runs=[_make_result(0.10, series=_series(seed=1)), _make_result(0.04)],
+            decisions=[_AdjustmentDecision(should_continue=False, config=config)],
+            ledger_path=target,
+        )
+
+        assert not target.exists()
+        assert "at least 2" in result.warnings[0]
+
+    @pytest.mark.asyncio
+    async def test_ragged_grids_write_no_ledger(self, tmp_path) -> None:
+        """A ledger over mismatched bar counts would be scored as comparable."""
+        config = _make_config()
+        target = tmp_path / "trials.jsonl"
+        result = await self._search(
+            runs=[
+                _make_result(0.10, series=_series(seed=1, n=120)),
+                _make_result(0.12, series=_series(seed=2, n=100)),
+                _make_result(0.04),
+            ],
+            decisions=[
+                _AdjustmentDecision(should_continue=True, config=config),
+                _AdjustmentDecision(should_continue=False, config=config),
+            ],
+            ledger_path=target,
+        )
+
+        assert not target.exists()
+        assert "one bar grid" in result.warnings[0]
+
+    @pytest.mark.asyncio
+    async def test_missing_series_writes_no_ledger(self, tmp_path) -> None:
+        """No per-bar series means no ledger material at all."""
+        config = _make_config()
+        target = tmp_path / "trials.jsonl"
+        result = await self._search(
+            runs=[_make_result(0.10), _make_result(0.12), _make_result(0.04)],
+            decisions=[
+                _AdjustmentDecision(should_continue=True, config=config),
+                _AdjustmentDecision(should_continue=False, config=config),
+            ],
+            ledger_path=target,
+        )
+
+        assert not target.exists()
+        assert "no per-bar series" in result.warnings[0]

@@ -16,6 +16,9 @@ for cost/settlement realism):
   cross-validation.
 * :mod:`scores` — GT-Score (a minimized loss) and the generalization ratio.
 * :mod:`ledger` — the trial ledger every search-weighted gate depends on.
+* :mod:`costs` — the cost sensitivity grid: the same verdict re-priced at
+  0/1/2/5/10 bps per side, so a result is a range rather than one frictionless
+  number.
 * :mod:`overfitting` — PBO/CSCV, deflated Sharpe, MinTRL, SPA block bootstrap,
   regime stability, and the two inference primitives a report needs beside them:
   a Diebold–Mariano comparison of two forecasts and a percentile block-bootstrap
@@ -32,6 +35,12 @@ instead of returning NaN, since every NaN comparison would silently pass.
 
 from __future__ import annotations
 
+from finrobot.engine.backtest.validation.costs import (
+    DEFAULT_BPS_GRID,
+    CostGridResult,
+    CostLevel,
+    cost_grid,
+)
 from finrobot.engine.backtest.validation.ledger import (
     CostModel,
     FoldResult,
@@ -94,12 +103,15 @@ from finrobot.engine.backtest.validation.splits import (
 )
 
 __all__ = [
+    "DEFAULT_BPS_GRID",
     "GATE_ORDER",
     "INSUFFICIENT_SAMPLE_PENALTY",
     "WEIGHTS",
     "AgentAcceptanceResult",
     "CombinatorialPurgedConfig",
     "CombinatorialSplit",
+    "CostGridResult",
+    "CostLevel",
     "CostModel",
     "DMResult",
     "DSRResult",
@@ -122,6 +134,7 @@ __all__ = [
     "agent_acceptance_test",
     "build_ledger_from_search",
     "combinatorial_purged_splits",
+    "cost_grid",
     "default_calibration",
     "deflated_sharpe_ratio",
     "diebold_mariano",
