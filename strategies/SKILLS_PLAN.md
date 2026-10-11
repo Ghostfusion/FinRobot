@@ -307,3 +307,100 @@ the vendored `dcf-model` does not estimate.
 no-transaction-band evaluation and the LSMC module. Its persona states outright that the
 deep-hedging network, the band *training*, the PINN, the deep-calibration scaffold and CARLOS are
 not implemented, and the banned `torch` stack appears nowhere in the generated body.
+
+## 8. The three loose formula catalogues — `quants.md`, `Quant3.md`, `quant2.md`
+
+Status of this pass: **2026-10-11.** Three files sit in this directory outside the corpus mechanism:
+`quants.md` (1762 lines), `Quant3.md` (1571) and `quant2.md` (198). They are broad quant *formula maps*
+— the same curriculum written three times, harvested from public explainers (streetofwalls,
+Investopedia, Dummies, Wikipedia) and carrying inline links to them rather than arXiv ids. They follow
+no document template, so §1's converter never sees them: its walk is `strategies/qfin-*/*.md`, which
+also means `--check` reports 0 mismatches over 63 documents whether or not these three are correct.
+They had drifted out of `README.md`'s layout too, which is why their review status was unknowable.
+
+**Verdict: no skill, and no report section.** Read end to end (~3,531 lines, ~450 formula entries) and
+mapped topic by topic against the 102 shipped skills and against the live endpoint inventory:
+
+| topic | owner |
+|---|---|
+| return/compounding arithmetic | none — see below |
+| descriptive statistics, higher moments, autocorrelation | the corpus method skills need no dedicated owner |
+| EWMA / rolling / range volatility, GARCH, HAR | `volatility-modeling` |
+| AR/ARMA/ARIMA, stationarity, cointegration + ECM, OU half-life, Kalman | `econometrics-forecasting`, `mean-reversion-pairs` |
+| OLS/ridge/lasso, coefficient t-stats, information coefficient / rank IC | `ml-price-prediction` |
+| mean-variance, GMV, max-Sharpe, shrinkage, Black-Litterman, risk parity, marginal risk, turnover/costs | `portfolio-optimization` |
+| CAPM/beta, Fama-French, Carhart, cross-sectional factor scores | `asset-pricing-anomalies`, `statistical-arbitrage`, `ml-price-prediction` |
+| Sharpe / Sortino / IR / Treynor / Calmar / MDD, Kelly, capacity, net-of-cost accounting | `statistical-arbitrage` (tails: `risk-management-tails`) |
+| VaR, ES/CVaR, stress tests, extreme-value tails | `risk-management-tails` |
+| Black-Scholes, trees, Greeks, implied vol, put-call parity, variance risk premium | the seven `derivatives/` skills |
+| bond pricing, duration, convexity, curve bootstrap, swaps, FX forward, futures fair value | `interest-rate-term-structure` |
+| credit spreads, default intensity, Merton distance-to-default, CVA/DVA/FVA | none — see below |
+| spread/midprice, VWAP/TWAP, implementation shortfall, Almgren-Chriss, square-root impact, order-book imbalance, microprice, latency | `optimal-execution-liquidation`, `price-impact-adverse-selection`, `high-frequency-latency` |
+| SMA/EMA, momentum, z-score reversion, RSI, Bollinger, volatility-scaled momentum | `mean-reversion-pairs`, `statistical-arbitrage` |
+| losses, logistic regression, gradient descent, standardisation, PCA, classification metrics, DSR/PBO | `ml-price-prediction`, plus DSR/PBO as *code* (A1, `TODO.md` §F6) |
+| Monte Carlo, finite differences, PDE, variance reduction | `numerical-methods` |
+| backtest P&L, turnover, exposure, costs, capacity, break-even alpha, look-ahead | `statistical-arbitrage` + `engine/backtest/validation/` |
+
+The two topics without an owner do not become skills:
+
+- **return/compounding arithmetic** is a definition set, not a procedure — no persona, no workflow, no
+  data requirement beyond prices the report already reads. It is the "learning order" item in both
+  catalogues' own closing sections, not a capability.
+- **credit** is §4's missing feed arriving from a second direction. The catalogues state the spread
+  relation `s = y_corporate − y_rf`, the Merton equity-as-call identity, and CVA/DVA/FVA. Their inputs
+  are unserved: corporate bond yields and CDS, and the Merton model's firm value $V$ and asset
+  volatility $\sigma_V$, which are latent and need the KMV joint solve. This is the same gap that
+  defers `credit-counterparty-risk` in §7.1 and leaves the same residue — the KMV distance-to-default
+  proxy is the one buildable arm. It is deliberately **not** authored here: a skill must rest on its own
+  procedure, these three files never state the KMV iteration, and the deferred document's §5 does.
+
+**What is import-worthy, and where it already lives.** Of ~450 entries, ~27 carry a procedure, a
+validation rule, or a convention that genuinely differs between the three files; the rest is textbook
+restatement or pricing the derivatives skills already own. The non-duplicative ones are *rules*, and
+each is already embodied — mostly in shipped code rather than prose:
+
+| rule | already embodied in |
+|---|---|
+| anti-look-ahead `w_t = f(I_t)` scored against $r_{t+1}$; point-in-time standardisation | `ml-price-prediction` (leakage controls), `normalize/news_timing.py` |
+| ½-turnover convention; net-of-cost ledger; participation-based capacity check | `statistical-arbitrage`; `validation/costs.py`; the `validate --cost-grid` CLI |
+| deflated Sharpe / PBO / multiple-testing discount | *code*: `validation/overfitting.py` (A1, `TODO.md` §F6) — the strongest item in the trio is already a documented implementation |
+| HAC / block-bootstrap t-statistic, the $\sqrt h$ caveat | `overfitting.py::diebold_mariano`, `sharpe_confidence_interval` |
+
+A skill built from these would restate shipped behaviour — the `backtest-methodology` overlap verdict
+(§5) one level up — and would spend context for nothing: `list_summary()` is 11,229 chars against a
+12,240 budget (§3).
+
+**Corrections applied (6).** The pass found the catalogues wrong in six places, which is worth more than
+the coverage question: a wrong formula inside a document that exists to be read is a defect.
+
+| file | defect | corrected to |
+|---|---|---|
+| `quant2.md` §6 | historical VaR carried a spurious minus (`−inf{l : P(L>l) ≤ 1−α}`), and the two bullets of the same subsection read α as opposite conventions | one stated convention (α = the confidence level, `L` a positive loss, VaR a positive magnitude); `VaR_α = (z_ασ√Δt − μΔt)·V`, `VaR_α = Q_α(L)` |
+| `quants.md` §Value at Risk and expected shortfall | the same α split inside one block: `VaR_α = z_ασ√h` (α = confidence) versus `−(μh + z_ασ√h)` and `ES_α = σφ(z_α)/(1−α) − μ` (α = tail) | convention stated once; historical `VaR_α = −Q_{1−α}(R)`; mean-included `VaR_α = z_ασ√h − μh` |
+| `quants.md` §Convexity | convexity used annual compounding `(1+y)^{t+2}` while the Macaulay two bullets above used `(1+y/m)^{mt}`, so the two could not be combined in the approximation below them | `CF_i t_i(t_i+1/m)/(1+y/m)^{mt_i+2}`, with the shared `m` requirement stated (reduces to the old form at `m=1`) |
+| `quant2.md` §7 | `D_mod = D_mac/(1+y/k)` left `k` undefined against an annual price and Macaulay, so a semi-annual reading mismatched the annual convexity line below it | `k` stated as the compounding frequency and required to match all three lines |
+| `quant2.md` §8 | temporary impact written as `ηv²` (the *cost* form) with the `σ²Δt` timing-risk term listed as an impact | permanent `γv` and temporary `ηv`, both linear in the trading rate (the original model); `ηv²Δt` named as the cost; `σ²Δt` as the risk term in `λV[x]` |
+| `quants.md` §Practical Backtest Calculations | capacity as `∝ liquidity/(turnover × impact)` — circular (impact is what capacity bounds) and uncalibratable | the participation form `\|Q_t\|/ADV_t` against a 5–10 % limit, paired with the break-even cost stack |
+
+**Convention splits recorded, not "fixed".** Three quantities are stated two ways across the trio and
+both ways are legitimate for their own estimator, so they were left alone — listed here so a later
+reader does not align them by force:
+
+- **drawdown sign** — `quants.md` and `Quant3.md` report `DD_t = V_t/M_t − 1 ≤ 0`; `quant2.md` reports
+  the positive magnitude. Calmar takes `|MDD|` in all three, so the ratio is unaffected.
+- **half-life** — `quants.md` gives the exact discrete form `−ln2/ln(1+φ̂)` for `Δx_t = φx_{t−1} + ε`;
+  `Quant3.md` the ADF/OU approximation `−ln2/β`. They diverge as `|φ|` grows: state which one is
+  reported.
+- **Sharpe denominator** — `quants.md` uses `σ(R_p − r_f)` (the Sharpe 1994 form, equal to `σ_p` only
+  when the risk-free rate is constant); the other two use `σ_p`. The shipped skills use `σ_p`.
+
+### 8.1 Why no report section follows from them
+
+The equity-research report renders every top-level `structured.*` block its builder persists, with two
+exceptions: `price_session` (the prior-close → last-close delta, per run, read by no component) and
+`numeric_audit.data_capability` (present only when no FMP key — and its text also reaches the reader
+through `outputs.warnings`, which *is* rendered). The risk material the catalogues do state — historical
+VaR/ES, drawdown profiles, a return regression for beta — has **no producer** in the pipeline: beta is
+provider-supplied (`compute/coordinators/extractor.py:368`), and no step computes historical VaR/ES. A
+nav entry would advertise content nothing computes, which is the rule that already keeps §4's documents
+unbuilt (§7.1: the served share is a proxy, not the verdict; the producer comes first).

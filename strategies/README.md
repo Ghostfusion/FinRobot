@@ -60,7 +60,23 @@ strategies/
   qfin-tr/             # 14 docs from cat:q-fin.TR  (+ its own README)
   qfin-gn/             # 16 docs from cat:q-fin.GN  (+ its own README)
   qfin-pr/             # 17 docs from cat:q-fin.PR  (+ its own README)
+  quants.md            # formula catalogues — outside the corpus mechanism, reviewed in
+  Quant3.md            #   SKILLS_PLAN.md §8: no skill and no report section follows from them
+  quant2.md
 ```
+
+## The three formula catalogues
+
+`quants.md`, `Quant3.md` and `quant2.md` are not corpus documents: they are broad *formula maps* of the
+same quant curriculum written three times, harvested from public explainers and carrying inline links
+to them rather than arXiv ids, with no per-document endpoint table. §1's converter never sees them —
+its walk is `qfin-*/*.md` — so `--check` says nothing about them either way.
+
+They have been read end to end and are **verdict-recorded in [`SKILLS_PLAN.md`](SKILLS_PLAN.md) §8**:
+no skill and no report section follows from them (15 of the 17 topics they cover already have a shipped
+owner; the two that do not are return arithmetic and credit, and credit is §4's missing feed), six wrong
+formulas in them were corrected in the same pass, and the three convention splits between the files are
+recorded rather than aligned.
 
 ## The shared endpoint inventory
 
