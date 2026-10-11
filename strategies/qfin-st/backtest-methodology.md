@@ -1,5 +1,5 @@
 # Backtest Methodology — learnings from the q-fin.ST corpus
-`185` of 4372 corpus papers matched this category; this doc is based on a close reading of `6`.
+`185` of 4372 corpus papers matched this category (183 with PDFs); this doc is based on a close reading of `6`.
 
 Key: all claims below are from the six papers listed in the Appendix. Cross-references (Bailey &
 López de Prado, Lo, Hansen, White, Romano–Wolf, Harvey–Liu) are cited *as used inside those papers*,

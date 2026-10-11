@@ -1,6 +1,6 @@
 # Regime Switching — learnings from the q-fin.ST corpus
 
-135 of 4372 corpus papers matched this category; this doc is based on a close reading of 6.
+`135` of 4372 corpus papers matched this category (134 with PDFs); this doc is based on a close reading of `6`.
 
 Scope note: the six assigned papers are all on-topic for *state inference you can run* (continuous HMM with heavy-tailed emissions, multi-scale Markov-switching GARCH, Bayesian multi-change-point on a correlation metric, graph-similarity network change-point detection, copula–Markov change-point on a heavy-tailed positive series). One — the Dirichlet-ARMA structural-break paper (arXiv:2601.16821) — is only partly on-topic: its data are hospitality compositions, not returns, and it contributes the *smooth-transition break timing* mechanism (logistic gate + direction/amplitude decomposition), which is relevant to regime-transition timing and calibration rather than to return-regime state inference. It is flagged where used.
 

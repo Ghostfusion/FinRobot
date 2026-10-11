@@ -1,5 +1,5 @@
 # Derivatives & Options — learnings from the q-fin.ST corpus
-`236` of 4372 corpus papers matched this category (203 with PDFs); this doc is based on a close reading of `6`.
+`236` of 4372 corpus papers matched this category (235 with PDFs); this doc is based on a close reading of `6`.
 
 ## 1. What the corpus actually offers
 

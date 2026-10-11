@@ -1,5 +1,5 @@
 # Risk management & tails — learnings from the q-fin.ST corpus
-`426` of 4372 corpus papers matched this category (406 with PDFs); this doc is based on a close reading of `6`.
+`426` of 4372 corpus papers matched this category (426 with PDFs); this doc is based on a close reading of `6`.
 
 ## 1. What the corpus actually offers
 

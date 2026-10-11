@@ -1,6 +1,6 @@
 # Microstructure & Execution — learnings from the q-fin.ST corpus
 
-`600` of 4372 corpus papers matched this category (514 with PDFs); this doc is based on a close reading of `6`.
+`600` of 4372 corpus papers matched this category (599 with PDFs); this doc is based on a close reading of `6`.
 
 Headline: **this category has no support in the current data layer.** Not one of the 33 routing
 categories in `finrobot/engine/data/categories.py` exposes a limit-order-book, an order-level event

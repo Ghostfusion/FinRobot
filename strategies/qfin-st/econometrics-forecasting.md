@@ -1,6 +1,6 @@
 # Econometrics & Forecasting — learnings from the q-fin.ST corpus
 
-512 of 4372 corpus papers matched this category; this doc is based on a close reading of 9
+`512` of 4372 corpus papers matched this category (508 with PDFs); this doc is based on a close reading of `9`.
 (the 6 assigned papers plus three category papers — `1410.7799`, `2102.00968`, `2509.10483` —
 pulled from the manifest because the assignment's emphasis (dynamic model averaging, Occam's
 window, forecast combination, nowcasting) is not covered by the assigned six).

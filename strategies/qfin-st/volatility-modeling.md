@@ -1,5 +1,5 @@
 # Volatility Modeling — learnings from the q-fin.ST corpus
-442 of 4372 corpus papers matched this category (393 with PDFs); this doc is based on a close reading of 6.
+`442` of 4372 corpus papers matched this category (441 with PDFs); this doc is based on a close reading of `6`.
 
 ## 1. What the corpus actually offers
 

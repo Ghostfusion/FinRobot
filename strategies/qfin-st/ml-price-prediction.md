@@ -1,6 +1,6 @@
 # ML Price Prediction — learnings from the q-fin.ST corpus
 
-`736` of 4372 corpus papers matched this category (721 with PDFs); this doc is based on a close reading of `6`.
+`736` of 4372 corpus papers matched this category (731 with PDFs); this doc is based on a close reading of `6`.
 
 Two of the six (the THieF hierarchy paper and the probabilistic-EPF review) are **electricity-price papers whose domain does not transfer to equities**; their *methodological layers* (forecast reconciliation, conformal calibration) do, and they are used that way in §2.5–2.6, but their feature sets, error scales and reported gains do not. This is flagged inline.
 

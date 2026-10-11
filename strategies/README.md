@@ -1,67 +1,80 @@
-# Strategies — research distilled from the q-fin.ST corpus
+# Strategies — what the finance literature says FinRobot should be able to do
 
-Implementable strategy knowledge for FinRobot, distilled from a local corpus of **arXiv `q-fin.ST`**
-(Statistical Finance) papers, with every technique mapped onto data the project can actually fetch.
+FinRobot's data layer exposes a fixed set of provider endpoints. These documents go the other way:
+they read the academic literature, extract the techniques that are *implementable from data FinRobot
+can actually fetch*, and mark the inputs no provider can serve as **gap**.
 
-## Corpus and method
+## The three corpora
 
-- **Source**: `E:\fin paper` — 4372 metadata records and 4348 downloaded PDFs
-  (arXiv ids from 1997 through 2026; 24 records were unavailable at harvest time).
-- **Classification**: each paper's title + abstract is matched, case-insensitively, against a term set
-  per category below (multi-label — a paper may belong to several). **3435/4372 (79%) matched at least one** of the 16 categories.
-- **Reading**: 6 papers per category (96 total) were selected by title-term match, breadth of focus
-  (papers matching fewer categories rank higher) and recency, then read closely. Each document states
-  the full category size, its own reading list, and cites claims by arXiv id.
-- **Data mapping**: every input a technique needs is mapped to a **live-probed endpoint row** from
-  [`endpoints.json`](endpoints.json) — provider, URL and probe status — and marked **gap** when no
-  current provider can supply it.
+Sibling arXiv harvests covering the three `q-fin` subcategories, all harvested with the same tool and
+metadata schema, so they can be read the same way:
 
-## Coverage
+| Corpus | arXiv category | Sources | Records | PDFs | Categories | Documents |
+|---|---|---|---:|---:|---:|---|
+| statistical finance | `cat:q-fin.ST` | `E:\fin paper` | 4372 | 4348 | 16 | [`qfin-st/`](qfin-st/README.md) |
+| trading & market microstructure | `cat:q-fin.TR` | `E:\fin paper2` | 2370 | 2359 | 14 | [`qfin-tr/`](qfin-tr/README.md) |
+| general finance | `cat:q-fin.GN` | `E:\fin paper3` | 3095 | 3066 | 16 | [`qfin-gn/`](qfin-gn/README.md) |
+| **unique papers** | | | **9135** | 9076 | 46 | 46 documents |
 
-| Category | Corpus papers | With PDF | Strategy document |
-|---|---:|---:|---|
-| correlation networks econophysics | 912 | 709 | [`correlation-networks-econophysics.md`](correlation-networks-econophysics.md) |
-| ml price prediction | 736 | 721 | [`ml-price-prediction.md`](ml-price-prediction.md) |
-| crypto assets | 723 | 665 | [`crypto-assets.md`](crypto-assets.md) |
-| microstructure execution | 600 | 514 | [`microstructure-execution.md`](microstructure-execution.md) |
-| econometrics forecasting | 512 | 476 | [`econometrics-forecasting.md`](econometrics-forecasting.md) |
-| mean reversion pairs | 446 | 420 | [`mean-reversion-pairs.md`](mean-reversion-pairs.md) |
-| volatility modeling | 442 | 393 | [`volatility-modeling.md`](volatility-modeling.md) |
-| risk management tails | 426 | 406 | [`risk-management-tails.md`](risk-management-tails.md) |
-| news sentiment nlp | 373 | 366 | [`news-sentiment-nlp.md`](news-sentiment-nlp.md) |
-| factor models alpha | 256 | 246 | [`factor-models-alpha.md`](factor-models-alpha.md) |
-| derivatives options | 236 | 203 | [`derivatives-options.md`](derivatives-options.md) |
-| portfolio optimization | 187 | 171 | [`portfolio-optimization.md`](portfolio-optimization.md) |
-| backtest methodology | 185 | 183 | [`backtest-methodology.md`](backtest-methodology.md) |
-| regime switching | 135 | 130 | [`regime-switching.md`](regime-switching.md) |
-| market simulation agent models | 109 | 97 | [`market-simulation-agent-models.md`](market-simulation-agent-models.md) |
-| earnings events anomalies | 45 | 39 | [`earnings-events-anomalies.md`](earnings-events-anomalies.md) |
-| **total unique papers classified** | **3435** | 3046 | 16 documents + this index |
+The corpora overlap only lightly, so each contributes genuinely distinct ground: `q-fin.ST` ∩ `q-fin.TR`
+= 349 papers, `q-fin.ST` ∩ `q-fin.GN` = 237, `q-fin.TR` ∩ `q-fin.GN` = 136, all three = 20.
 
-## Provider endpoints
+| Corpus | Reading lens | Papers classified |
+|---|---|---:|
+| q-fin.ST | statistical methods: volatility, regimes, factors, ML and econophysics | 3435/4372 (79%) |
+| q-fin.TR | how trading *mechanically* works: books, liquidity, execution, latency | 1803/2370 (76%) |
+| q-fin.GN | the economic environment: growth, credit, policy, distribution | 2423/3095 (78%) |
 
-- [`data-endpoints.md`](data-endpoints.md) — the readable inventory: every catalog endpoint, its category,
-  provider and live probe status.
+## Method
+
+1. **Classify cover-everything.** Every paper's title + abstract is matched against per-category term
+   sets, case-insensitively and multi-label, so no paper is silently dropped — the unmatched share is
+   stated in each corpus README rather than hidden by a quota.
+2. **Read a small, stated sample.** Six papers per category (more where a category's sub-questions could
+   not be covered otherwise) are picked by title-term match, breadth of focus and recency, then read
+   closely. Each document's appendix lists exactly which papers it read.
+3. **Cite by arXiv id.** Every quantitative claim carries the id it came from, so it can be checked.
+4. **Map inputs to endpoints.** Each document's §3 table names, per required input, the real endpoint
+   row that serves it — provider, category, probe status — or marks it **gap**.
+5. **Say what to do first.** §5 ranks a first implementation for FinRobot, and §4 states how to validate
+   it — the pitfalls the papers themselves report.
+
+## Layout
+
+```
+strategies/
+  README.md            # this index
+  endpoints.json       # live probe snapshot of every provider endpoint (shared)
+  data-endpoints.md    # the same snapshot, readable
+  qfin-st/             # 16 docs from cat:q-fin.ST  (+ its own README)
+  qfin-tr/             # 14 docs from cat:q-fin.TR  (+ its own README)
+  qfin-gn/             # 16 docs from cat:q-fin.GN  (+ its own README)
+```
+
+## The shared endpoint inventory
+
+- [`data-endpoints.md`](data-endpoints.md) — every catalog endpoint with its category, provider and live
+  probe status; the "needs attention" section explains each failure.
 - [`endpoints.json`](endpoints.json) — the same snapshot as data, as emitted by the probe.
-- Regenerate with:
 
-  ```bash
-  cd finrobot_desktop
-  uv run python -m finrobot.probe            # human table
-  uv run python -m finrobot.probe --json     # machine-readable
-  ```
+Regenerate after any adapter or catalog change:
 
-  The probe exits non-zero when any endpoint fails, which is why a snapshot can show `auth`,
-  `rate_limited` or `gateway` rows: those are findings, not errors. No credential value is ever
-  emitted — the probe substitutes keys into request params/headers only.
+```bash
+cd finrobot_desktop
+uv run python -m finrobot.probe            # human table
+uv run python -m finrobot.probe --json     # machine-readable rows
+```
+
+The probe exits non-zero when any endpoint fails — by design. `auth`, `rate_limited`, `plan` and
+`gateway` rows are findings, not errors: `gateway` means the provider is SDK-shaped and served over the
+local OpenD gateway rather than HTTP. No credential value is ever emitted — the probe substitutes keys
+into request params/headers only, and neither is part of the emitted record.
 
 ## Caveats
 
-- The corpus is **statistical-finance weighted**: methodologically heavy on time series, ML and
-  econophysics, light on fundamental and discretionary strategy. A category's paper count reflects
-  corpus composition, not commercial importance.
-- Everything here is **literature-derived, not yet validated on FinRobot's own data**. Each document
-  §4/§5 states how to test an implementation and what to build first.
-- Several documents converge on the same hard data gaps: tick/L2 order-book history, crypto and
-  on-chain data, point-in-time fundamentals, and factor-return series. Those are recorded per document
-  as **gap**, not silently assumed.
+- These are **literature-derived, not validated on FinRobot's own data.** Nothing here is a
+  backtested strategy; §4/§5 of each document is the testing plan.
+- Paper counts reflect **corpus composition**, not commercial importance: `q-fin.ST` skews statistical,
+  `q-fin.TR` skews microstructure/ML, `q-fin.GN` skews econophysics and macro.
+- The gaps the documents converge on (tick/L2 order-book history, crypto and on-chain data,
+  point-in-time fundamentals, factor-return series) are recorded per document, not assumed away.

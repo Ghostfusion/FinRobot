@@ -1,6 +1,6 @@
 # Factor Models & Alpha — learnings from the q-fin.ST corpus
 
-`256` of 4372 corpus papers matched this category (246 with PDFs, 2000–2026); this doc is based on a close reading of `6`.
+`256` of 4372 corpus papers matched this category (252 with PDFs, 2000–2026); this doc is based on a close reading of `6`.
 
 ## 1. What the corpus actually offers
 

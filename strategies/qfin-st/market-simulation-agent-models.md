@@ -1,5 +1,5 @@
 # market-simulation-agent-models — learnings from the q-fin.ST corpus
-`109` of 4372 corpus papers matched this category; this doc is based on a close reading of `6`.
+`109` of 4372 corpus papers matched this category (109 with PDFs); this doc is based on a close reading of `6`.
 
 ## 1. What the corpus actually offers
 

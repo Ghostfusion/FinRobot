@@ -1,6 +1,6 @@
 # Correlation Networks & Econophysics — learnings from the q-fin.ST corpus
 
-`912` of 4372 corpus papers matched this category (the largest cluster; the manifest carries a PDF path for all 912); this doc is based on a close reading of `6`.
+`912` of 4372 corpus papers matched this category (the largest cluster; 909 with PDFs); this doc is based on a close reading of `6`.
 
 Two of the six assigned papers (household income/wealth; herding-based technology transfer) are macro/distributional econophysics with no tradable signal — they are summarised and explicitly marked non-actionable in §1. The remaining four (Marchenko–Pastur spectral cleaning, conditional mutual-information core–periphery networks, relative-entropy finite-sample theory, 2D Ising stylised facts) yield concrete, implementable machinery.
 

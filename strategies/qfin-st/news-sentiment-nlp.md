@@ -1,6 +1,6 @@
 # News sentiment & NLP — learnings from the q-fin.ST corpus
 
-`373` of 4372 corpus papers matched this category; this doc is based on a close reading of `6`.
+`373` of 4372 corpus papers matched this category (372 with PDFs); this doc is based on a close reading of `6`.
 
 Emphasis of the reading: text→signal pipelines, market-aligned calibration of sentiment, aggregation
 choices on long documents, zero-shot LLM agent aggregation, causal/event designs for news effects

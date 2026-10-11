@@ -1,6 +1,6 @@
 # crypto-assets — learnings from the q-fin.ST corpus
 
-`723` of 4372 corpus papers matched this category (665 with PDFs); this doc is based on a close reading of `6`.
+`723` of 4372 corpus papers matched this category (720 with PDFs); this doc is based on a close reading of `6`.
 
 > The `crypto-assets` tag in the manifest is broad — its year histogram runs from 1998 to 2026, so pre-2017 members are mostly cryptography/ledger-adjacent rather than crypto-asset market studies. All six papers read here are 2025–2026 and all are crypto-market studies. Co-tag counts confirm the sub-field split: `correlation-networks-econophysics` 142, `ml-price-prediction` 120, `microstructure-execution` 112, `econometrics-forecasting` 80, `mean-reversion-pairs` 79.
 

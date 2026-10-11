@@ -1,6 +1,6 @@
 # Portfolio Optimization — learnings from the q-fin.ST corpus
 
-`187` of 4372 corpus papers matched this category; this doc is based on a close reading of `6`.
+`187` of 4372 corpus papers matched this category (186 with PDFs); this doc is based on a close reading of `6`.
 
 ## 1. What the corpus actually offers
 
