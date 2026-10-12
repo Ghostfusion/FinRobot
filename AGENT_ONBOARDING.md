@@ -190,6 +190,11 @@ Only steps 2, 7, 8 (plus LLM peer *selection*) involve the LLM; steps 4/5/6 igno
 - **Truncation marker:** `engine/compute/operators/narrative_integrity.py` marks a section the
   model cut at `max_tokens` in the stored text and warns on the run; a cut *structured* field
   is named in a warning but never rewritten (the model's output is evidence).
+- **Report year axis:** every trajectory-chart year is derived from the artifact's OWN fiscal
+  anchor (`financial_modeling.assumption_current_actuals_fy`, else the last
+  `historical_metrics.years`) — **never the browser clock**. `chartAdapters.mergeDcfBaseRow`
+  drops the DCF base row only when the historical series already carries that year, so the axis
+  stays contiguous (last reported FY → FY+1E … FY+NE) instead of skipping the current year.
 
 **Implicit (follow the pattern):**
 
@@ -224,6 +229,7 @@ a bare `uv sync` removes installed extras; `run_semaphore=None` means "no conten
 | A **config setting / secret** | `config.py`, `secret_store.py` | server hydration, settings route | env red-line; secrets never serialized | `tests/unit/test_auth_capability.py`, settings route tests |
 | A **REST endpoint** | `routes/*.py`, `server.py` | frontend fetch client | router prefixes; SSE contract; auth middleware | `tests/routes/*` |
 | A **UI chapter/page** | `desktop/src/pages/artifact-detail/ReportChapters.tsx`, `src/stores/` | React only | client-side chapter composition; Zustand vs TanStack split | `*.test.tsx` + `npm test` |
+| A **report chart's year axis** | `desktop/src/utils/chartAdapters.ts` | `ChapterFinancialAnalysis` (anchor + base-row merge) | anchor from the artifact's `assumption_current_actuals_fy`, **never** `new Date()`; base row kept only when history lags | `src/utils/__tests__/chartAdapters.test.ts`, `ChapterFinancialAnalysis.test.tsx` |
 | The **Tauri sidecar/token** | `desktop/src-tauri/src/{lib,sidecar}.rs`, `sidecar/build_sidecar.py` | auth middleware, `/health` echo | token via env not argv; loopback binding; `/health` exempt | Rust build + `tests/unit/test_auth_capability.py` |
 | V1 **narrative text** | `core/src/modules/text_generator_agents.py` | (NOT `equity_agents/`) | direct OpenAI client path | `core/tests/` (mostly non-signal) |
 | V1 **data/reporting** | `core/src/modules/market_data_api.py`, `html_renderer.py`, `professional_pdf_report.py` | web_app flow | FMP contract | `core/tests/` |

@@ -3,6 +3,12 @@ import { render, screen } from '@testing-library/react'
 
 import { ChapterFinancialAnalysis } from './ChapterFinancialAnalysis'
 
+// Captures the props the revenue chart receives, so the year axis this chapter
+// ASSEMBLES (fiscal anchor + base-row merge) is asserted end to end and not only
+// through the adapter's own unit tests. `vi.hoisted` because the vi.mock factory
+// below is lifted above these imports.
+const { revenueChartProps } = vi.hoisted(() => ({ revenueChartProps: vi.fn() }))
+
 // raw_data is FinancialData.model_dump() — money line items nest under income.*.
 // This guards the 2026-05-29 fix: the chapter used to read rawData.ebitda etc.
 // from the TOP level, so the EBITDA / net-income cards silently never rendered.
@@ -23,8 +29,14 @@ vi.mock('../../../i18n', () => ({
 // historical trend is now passed as a FROZEN prop (historicalMetrics), not a
 // live hook — the KV cards don't depend on it, so pass null here.
 
-// Charts are irrelevant to the KV-card regression; render them as no-ops.
-vi.mock('../../../components/charts/RevenueEbitdaChart', () => ({ default: () => null }))
+// Charts are irrelevant to the KV-card regression; render them as no-ops — but
+// the revenue chart records its props, since the DCF year axis is built here.
+vi.mock('../../../components/charts/RevenueEbitdaChart', () => ({
+  default: (props: unknown) => {
+    revenueChartProps(props)
+    return null
+  },
+}))
 vi.mock('../../../components/charts/MarginTrendChart', () => ({ default: () => null }))
 vi.mock('../../../components/charts/BankTrajectoryChart', () => ({ default: () => null }))
 vi.mock('../../../components/charts/EpsTrendChart', () => ({ default: () => null }))
@@ -132,5 +144,81 @@ describe('ChapterFinancialAnalysis bank branch (financial_sector)', () => {
     )
     expect(screen.getByText('EBITDA')).toBeInTheDocument()
     expect(screen.queryByText(/口径错误/)).not.toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// DCF year axis. The chapter used to take the DCF's base year from the BROWSER
+// clock and then drop that row as a duplicate of the last historical bar — a bar
+// it did not duplicate, because the series ends at the last REPORTED fiscal year
+// (FY2025, while the clock says 2026). 2026 ended up on neither side of the
+// merge, so the axis jumped 2025 actual → 2027E forecast in every report.
+// ---------------------------------------------------------------------------
+
+/** Trend series ending at FY2025 — the shape every artifact in the store has.
+ *  Every array is present (the adapters touch them all — see HIST above). */
+const TREND_TO_2025 = {
+  years: [2022, 2023, 2024, 2025],
+  revenue: [4.42e10, 3.58e10, 3.9e10, 4.43e10],
+  revenue_growth_yoy: [null, -0.19, 0.09, 0.14],
+  cogs: [null, null, null, null],
+  gross_profit: [null, null, null, null],
+  gross_margin: [0.57, 0.55, 0.56, 0.55],
+  sga: [0, 0, 0, 0],
+  sga_ratio: [null, null, null, null],
+  ebitda: [1.73e10, 0.99e10, 1.27e10, 1.49e10],
+  ebitda_margin: [0.39, 0.28, 0.33, 0.34],
+  operating_income: [1.5e10, 0.8e10, 1.1e10, 1.3e10],
+  operating_margin: [0.35, 0.24, 0.29, 0.3],
+  net_income: [1.3e10, 0.7e10, 1.0e10, 1.2e10],
+  eps: [10, 11, 12, 13],
+  pe_ratio: [null, 12, 14, 15],
+  operating_cash_flow: [0, 0, 0, 0],
+  investing_cash_flow: [0, 0, 0, 0],
+  financing_cash_flow: [0, 0, 0, 0],
+  shareholders_equity: [],
+  cagr_revenue: 0.1,
+  ticker: 'QCOM',
+  price_data_available: true,
+} as unknown as import('../../../types/finance').HistoricalMetrics
+
+/** A DCF block with 2 projected years — only the year axis matters here. */
+function makeDcfShape(fiscalYear: number | null): import('./types').DcfShape {
+  return {
+    projected_revenue: [4.41e10, 4.41e10],
+    projected_ebitda: [1.44e10, 1.44e10],
+    projection_years: 2,
+    assumption_current_actuals_fy: fiscalYear,
+    inputs: { revenue_base: 4.407e10, ebitda_margin: 0.327, da_pct_revenue: 0.044 },
+  } as unknown as import('./types').DcfShape
+}
+
+function renderDcfChapter(dcf: import('./types').DcfShape): void {
+  revenueChartProps.mockClear()
+  render(
+    <ChapterFinancialAnalysis
+      dcf={dcf}
+      rawData={null}
+      historicalMetrics={TREND_TO_2025}
+      reportingCurrency="USD"
+    />,
+  )
+}
+
+/** The x-axis categories the revenue chart was handed, in order. */
+function chartYears(): string[] {
+  const props = revenueChartProps.mock.calls.at(-1)?.[0] as { data: { year: string }[] } | undefined
+  return (props?.data ?? []).map((row) => row.year)
+}
+
+describe('ChapterFinancialAnalysis DCF year axis (2026 must not vanish)', () => {
+  it('bridges the last actual year to the DCF schedule — no hole in the axis', () => {
+    renderDcfChapter(makeDcfShape(2025))
+    expect(chartYears()).toEqual(['2022', '2023', '2024', '2025', '2026E', '2027E'])
+  })
+
+  it('falls back to the last reported fiscal year when the anchor field is absent', () => {
+    renderDcfChapter(makeDcfShape(null))
+    expect(chartYears()).toEqual(['2022', '2023', '2024', '2025', '2026E', '2027E'])
   })
 })

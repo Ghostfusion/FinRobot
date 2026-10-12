@@ -1,6 +1,12 @@
-import { describe, it, expect } from 'vitest'
-import { compsResultToRadarData, dcfResultToMarginData } from '../chartAdapters'
-import type { CompsResult, DCFResult } from '../../types/finance'
+import { describe, it, expect, vi } from 'vitest'
+import {
+  compsResultToRadarData,
+  dcfResultToMarginData,
+  dcfResultToRevenueEbitdaData,
+  historicalToRevenueEbitdaData,
+  mergeDcfBaseRow,
+} from '../chartAdapters'
+import type { CompsResult, DCFResult, HistoricalMetrics } from '../../types/finance'
 
 // Only the fields the radar reads; the cast mirrors ChapterCompetitive's own
 // `as unknown as CompsResult` (the full shape is large and irrelevant here).
@@ -62,14 +68,14 @@ function makeDcfResult(daPct: number | undefined): DCFResult {
 
 describe('dcfResultToMarginData operating margin (D5)', () => {
   it('derives EBIT margin = EBITDA margin - D&A% when D&A is known', () => {
-    const rows = dcfResultToMarginData(makeDcfResult(0.05))
+    const rows = dcfResultToMarginData(makeDcfResult(0.05), 2025)
     // base year: ebitda_margin 0.30, operating 0.30 - 0.05 = 0.25
     expect(rows[0].ebitda_margin).toBeCloseTo(0.3)
     expect(rows[0].operating_margin).toBeCloseTo(0.25)
   })
 
   it('emits null operating_margin when D&A% is unknown — never equals EBITDA margin', () => {
-    const rows = dcfResultToMarginData(makeDcfResult(undefined))
+    const rows = dcfResultToMarginData(makeDcfResult(undefined), 2025)
     for (const row of rows) {
       expect(row.operating_margin).toBeNull()
       // EBITDA margin still rendered; the two must not silently coincide.
@@ -78,7 +84,7 @@ describe('dcfResultToMarginData operating margin (D5)', () => {
   })
 
   it('treats da_pct_revenue=0 as unknown rather than zero-D&A', () => {
-    const rows = dcfResultToMarginData(makeDcfResult(0))
+    const rows = dcfResultToMarginData(makeDcfResult(0), 2025)
     expect(rows[0].operating_margin).toBeNull()
   })
 })
@@ -101,5 +107,75 @@ describe('compsResultToRadarData — outward = favorable vs peer median', () => 
     ;(r.target as { pe_ratio: number }).pe_ratio = -15 // a loss → P/E is N/A, not "cheap"
     const rows = compsResultToRadarData(r)
     expect(rows).toHaveLength(4) // the P/E axis is excluded, not mapped to a bogus value
+  })
+})
+
+// ---------------------------------------------------------------------------
+// DCF year axis. The adapters used to label the base year with the BROWSER clock
+// (`new Date().getFullYear()`) and the projections `currentYear + 1 + i`, so the
+// base row claimed a calendar year the report held no actuals for, the whole
+// projection sat a year ahead of the DCF's own schedule, and — the chapter
+// dropping the base row as a duplicate of the last historical bar — 2026
+// disappeared from every trajectory chart (2025 actual → 2027E forecast).
+// ---------------------------------------------------------------------------
+
+/** Historical series ending at the last REPORTED fiscal year — the shape every
+ *  artifact in the store carries while the wall clock is on the next year. */
+function makeHistory(years: number[]): HistoricalMetrics {
+  return {
+    years,
+    revenue: years.map((_, i) => 100 + i),
+    ebitda: years.map((_, i) => 30 + i),
+    gross_margin: years.map(() => 0.5),
+    ebitda_margin: years.map(() => 0.3),
+    operating_margin: years.map(() => 0.25),
+  } as unknown as HistoricalMetrics
+}
+
+describe('DCF year axis — anchored on the DCF fiscal year, never the browser clock', () => {
+  it('labels the base row with the anchor and the projection from anchor + 1', () => {
+    const rows = dcfResultToRevenueEbitdaData(makeDcfResult(0.05), 2025)
+    expect(rows.map((r) => r.year)).toEqual(['2025', '2026E', '2027E'])
+    expect(rows[0].is_forecast).toBe(false)
+    expect(rows.slice(1).every((r) => r.is_forecast === true)).toBe(true)
+  })
+
+  it('ignores the wall clock entirely', () => {
+    vi.useFakeTimers()
+    try {
+      // Six years past the anchor: a clock-derived axis would relabel every
+      // year, so the anchor has to win.
+      vi.setSystemTime(new Date('2031-06-15T00:00:00Z'))
+      const bars = dcfResultToRevenueEbitdaData(makeDcfResult(0.05), 2025)
+      const margins = dcfResultToMarginData(makeDcfResult(0.05), 2025)
+      expect(bars.map((r) => r.year)).toEqual(['2025', '2026E', '2027E'])
+      expect(margins.map((r) => r.year)).toEqual(['2025', '2026E', '2027E'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('drops the base row when the historical series already carries that year', () => {
+    const merged = mergeDcfBaseRow(
+      historicalToRevenueEbitdaData(makeHistory([2024, 2025])),
+      dcfResultToRevenueEbitdaData(makeDcfResult(0.05), 2025),
+    )
+    // One bar per fiscal year, with the reported actual standing in for the
+    // anchor (the base row rests on a TTM run-rate, not that year's filing).
+    expect(merged.map((r) => r.year)).toEqual(['2024', '2025', '2026E', '2027E'])
+  })
+
+  it('keeps the base row when the series lags the anchor — no hole in the axis', () => {
+    const merged = mergeDcfBaseRow(
+      historicalToRevenueEbitdaData(makeHistory([2022, 2023])),
+      dcfResultToRevenueEbitdaData(makeDcfResult(0.05), 2025),
+    )
+    // Jumping 2023 → 2026E would hide the gap the base row exists to close.
+    expect(merged.map((r) => r.year)).toEqual(['2022', '2023', '2025', '2026E', '2027E'])
+  })
+
+  it('leaves the historical series untouched when there is no projection', () => {
+    const hist = historicalToRevenueEbitdaData(makeHistory([2024, 2025]))
+    expect(mergeDcfBaseRow(hist, [])).toBe(hist)
   })
 })

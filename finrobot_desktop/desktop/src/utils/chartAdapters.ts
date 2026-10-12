@@ -4,25 +4,36 @@ import { tSync } from '../i18n'
 /**
  * Build Revenue & EBITDA bar chart data from DCF projections.
  * Year 0 = base year (actual), Years 1..N = forecast.
+ *
+ * `baseYear` is the DCF's OWN fiscal anchor (`assumption_current_actuals_fy` —
+ * the last reported fiscal year at generation time), NOT the browser clock.
+ * It is a required argument on purpose: this adapter derived the axis from
+ * `new Date().getFullYear()` before, which labelled the base year with the
+ * CURRENT calendar year — always ahead of the last reported fiscal year — and
+ * pushed the whole projection a year past the DCF's own schedule (its FY2026-35
+ * schedule rendered as 2027E-2036E). Combined with the chapter dropping the base
+ * row (it restates the last historical bar), that punched a hole in the axis in
+ * EVERY report: 2025 actual → 2027E forecast, no 2026. A wall-clock default here
+ * would reintroduce exactly that, so the caller resolves the anchor.
  */
 export function dcfResultToRevenueEbitdaData(
   result: DCFResult,
+  baseYear: number,
 ): Array<Record<string, number | string | boolean | null>> {
-  const currentYear = new Date().getFullYear()
   const rows: Array<Record<string, number | string | boolean | null>> = []
 
   // Base year (actual)
   rows.push({
-    year: String(currentYear),
+    year: String(baseYear),
     revenue: result.inputs.revenue_base,
     ebitda: result.inputs.revenue_base * result.inputs.ebitda_margin,
     is_forecast: false,
   })
 
-  // Projected years
+  // Projected years — the DCF schedule starts the year AFTER its base year.
   for (let i = 0; i < result.projected_revenue.length; i++) {
     rows.push({
-      year: `${currentYear + 1 + i}E`,
+      year: `${baseYear + 1 + i}E`,
       revenue: result.projected_revenue[i],
       ebitda: result.projected_ebitda[i],
       is_forecast: true,
@@ -42,11 +53,17 @@ export function dcfResultToRevenueEbitdaData(
  * number. When `da_pct_revenue` is unknown we emit `null` rather than 0 —
  * defaulting D&A to zero would render operating_margin == ebitda_margin and
  * falsely imply the company has no depreciation drag.
+ *
+ * `baseYear` is the DCF's own fiscal anchor — see
+ * `dcfResultToRevenueEbitdaData` for why it is required and never the browser
+ * clock (a wall-clock base year put the projection a year ahead of the DCF
+ * schedule and, once the base row was dropped as a duplicate, left a hole in
+ * the axis: 2025 actual → 2027E forecast, no 2026).
  */
 export function dcfResultToMarginData(
   result: DCFResult,
+  baseYear: number,
 ): Array<Record<string, number | string | boolean | null>> {
-  const currentYear = new Date().getFullYear()
   const rows: Array<Record<string, number | string | boolean | null>> = []
 
   // null (not 0) when D&A% is unknown — see docstring.
@@ -60,7 +77,7 @@ export function dcfResultToMarginData(
   // Base year
   const baseEbitdaMargin = result.inputs.ebitda_margin
   rows.push({
-    year: String(currentYear),
+    year: String(baseYear),
     ebitda_margin: baseEbitdaMargin,
     operating_margin: ebitMargin(baseEbitdaMargin),
     is_forecast: false,
@@ -72,7 +89,7 @@ export function dcfResultToMarginData(
     const ebitda = result.projected_ebitda[i]
     const ebitdaMargin = rev > 0 ? ebitda / rev : 0
     rows.push({
-      year: `${currentYear + 1 + i}E`,
+      year: `${baseYear + 1 + i}E`,
       ebitda_margin: ebitdaMargin,
       operating_margin: ebitMargin(ebitdaMargin),
       is_forecast: true,
@@ -80,6 +97,31 @@ export function dcfResultToMarginData(
   }
 
   return rows
+}
+
+/**
+ * Merge a historical series with the DCF rows, reconciling the base year.
+ *
+ * The DCF's first row restates the last reported fiscal year (its
+ * `assumption_current_actuals_fy`), which the historical series usually already
+ * carries — on a different caliber: the row's revenue is `revenue_base`, a TTM
+ * run-rate, not that year's reported figure. History therefore stays the
+ * authority for that year, and the base row is dropped whenever the series
+ * reaches it, so the bar shown is the reported actual.
+ *
+ * When the series does NOT reach it (the vendor annual series can lag the DCF's
+ * own anchor), dropping the row would leave a hole in the axis — the exact
+ * "2025 actual → 2027E forecast, no 2026" case this fixes — so the base row is
+ * kept to bridge the two.
+ */
+export function mergeDcfBaseRow(
+  historical: Array<Record<string, number | string | boolean | null>>,
+  dcfRows: Array<Record<string, number | string | boolean | null>>,
+): Array<Record<string, number | string | boolean | null>> {
+  if (dcfRows.length === 0) return historical
+  const [base, ...forecast] = dcfRows
+  const covered = historical.some((row) => row.year === base.year)
+  return covered ? [...historical, ...forecast] : [...historical, base, ...forecast]
 }
 
 /**

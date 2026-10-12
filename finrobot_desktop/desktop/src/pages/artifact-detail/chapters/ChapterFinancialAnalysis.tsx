@@ -11,6 +11,7 @@ import {
   historicalToEpsData,
   dcfResultToRevenueEbitdaData,
   dcfResultToMarginData,
+  mergeDcfBaseRow,
 } from '../../../utils/chartAdapters'
 import type { DCFResult, HistoricalMetrics } from '../../../types/finance'
 import { useI18n } from '../../../i18n'
@@ -79,20 +80,33 @@ export function ChapterFinancialAnalysis({
     dcf.inputs?.revenue_base != null &&
     dcf.inputs?.ebitda_margin != null
 
+  // Fiscal anchor for the DCF's year axis: the DCF's OWN anchor (the last
+  // reported fiscal year at generation time), else the last year of the frozen
+  // historical series. NEVER the browser clock. Reading
+  // `new Date().getFullYear()` here is what removed 2026 from every trajectory
+  // chart: it labelled the base year with the CURRENT calendar year, which the
+  // merge below then discarded as a duplicate of a historical bar it did not
+  // actually duplicate (that series ends at the last REPORTED fiscal year), while
+  // the projection was labelled 2027E-2036E instead of the DCF's own FY2026-2035
+  // schedule. Null ⇒ no anchor ⇒ no projection overlay: the axis is never
+  // invented, and the DCF table still lists every projected year under its
+  // relative "Year +N" headings.
+  const dcfBaseYear = dcf?.assumption_current_actuals_fy ?? historical?.years?.at(-1) ?? null
+
   const revenueChartData = (() => {
     const hist = historical ? historicalToRevenueEbitdaData(historical) : []
-    if (hasDcfForecast) {
-      const fcst = dcfResultToRevenueEbitdaData(dcf as unknown as DCFResult)
-      return [...hist, ...fcst.slice(1)]
+    if (hasDcfForecast && dcfBaseYear != null) {
+      const fcst = dcfResultToRevenueEbitdaData(dcf as unknown as DCFResult, dcfBaseYear)
+      return mergeDcfBaseRow(hist, fcst)
     }
     return hist
   })()
 
   const marginChartData = (() => {
     const hist = historical ? historicalToMarginData(historical) : []
-    if (hasDcfForecast) {
-      const fcst = dcfResultToMarginData(dcf as unknown as DCFResult)
-      return [...hist, ...fcst.slice(1)]
+    if (hasDcfForecast && dcfBaseYear != null) {
+      const fcst = dcfResultToMarginData(dcf as unknown as DCFResult, dcfBaseYear)
+      return mergeDcfBaseRow(hist, fcst)
     }
     return hist
   })()
