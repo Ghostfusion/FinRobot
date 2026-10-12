@@ -1,5 +1,5 @@
 // Standalone valuation INSTRUMENTS — the second run entry beside the flagship
-// 14-chapter research CTA. The four single-method valuations (DCF / DDM / LBO /
+// 15-chapter research CTA. The four single-method valuations (DCF / DDM / LBO /
 // Comps) as live instruments: each tile shows its LATEST reading + version, an
 // idle "run" affordance, or — while running — inline progress INSIDE the tile.
 //

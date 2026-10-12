@@ -404,3 +404,25 @@ VaR/ES, drawdown profiles, a return regression for beta — has **no producer** 
 provider-supplied (`compute/coordinators/extractor.py:368`), and no step computes historical VaR/ES. A
 nav entry would advertise content nothing computes, which is the rule that already keeps §4's documents
 unbuilt (§7.1: the served share is a proxy, not the verdict; the producer comes first).
+
+**What changed since (2026-10-12).** Both items §8.1 left open are now built, and neither changes the
+verdict above — the catalogues still convert to nothing.
+
+- **`price_session` is rendered.** The frozen prior-close → last-close delta now labels the spot in the
+  left rail's identity card (with the as-of date in its tooltip, because
+  `NormalizedPrice.latest_session_change` is the session `current_price` belongs to, not "today").
+- **A producer exists for the structural credit measure**, so a nav entry no longer promises content
+  nothing computes: a deterministic `credit_risk` pipeline step (Merton 1974 solved by the KMV
+  fixed-point iteration over the served market cap, reported total debt and a one-year price history)
+  persists `structured.credit_risk`, and chapter 11 *Credit & Default Risk* renders it in four states —
+  computed / no debt / not applicable (balance-sheet financial) / not computable, each with its reason
+  and never a zero in place of an absent number. This is §7.1's "one buildable arm" of the deferred
+  `credit-counterparty-risk` document, built as a *narrow* producer rather than as a conversion of that
+  document: its core (spreads and CDS) is still `gap`, and a skill would still be the wrong container
+  for a number the pipeline computes.
+- The catalogues' other risk material — historical VaR/ES, drawdown profiles, a benchmark regression for
+  beta — still has no producer, and still has no nav entry.
+
+The KMV iteration itself is therefore now first-party code, not prose: if a future corpus document needs
+the credit method as *agent* methodology rather than as a report number, that code (and its assumptions)
+is the thing to rest a skill on.

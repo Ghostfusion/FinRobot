@@ -74,10 +74,11 @@ async def test_mode_b_equity_research():
         "peer_analysis",
         "financial_modeling",
         "technical_analysis",
+        "credit_risk",
         "ownership_governance_analysis",
         "thesis",
         "report",
-    }, "Not all 8 steps ran"
+    }, "Not all 9 steps ran"
     assert len(summary) > 200, "Report too short"
 
     # Check for real financial data markers (not hallucinated)

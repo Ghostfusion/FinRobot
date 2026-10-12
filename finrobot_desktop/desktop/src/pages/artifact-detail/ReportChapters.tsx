@@ -1,4 +1,4 @@
-// The report body — 14 numbered chapters plus the auxiliary sections (audit
+// The report body — 15 numbered chapters plus the auxiliary sections (audit
 // banner, engine summary, compute caveats) rendered from a single artifact.
 // Shared by the in-app detail page (ArtifactDetailPage) and the standalone HTML
 // export viewer (src/export/viewer.tsx) so both render byte-identical chapter
@@ -33,6 +33,7 @@ import {
   ChapterSensitivity,
   ChapterCatalysts,
   ChapterTechnical,
+  ChapterCreditRisk,
   ChapterCompetitive,
   ChapterFinancialData,
   ChapterOwnershipGovernance,
@@ -215,6 +216,12 @@ export function ReportChapters({
         snapshot52wHigh={d.snapshot52wHigh}
         snapshot52wLow={d.snapshot52wLow}
       />
+      {/* Credit & Default Risk closes the analytical spine: the DEBT leg of the
+          same capital structure the valuation prices from the equity side, and
+          the last chapter before the appendix. Deterministic Merton/KMV payload
+          (no LLM); it renders its own four states, so an uncomputable issuer
+          shows WHY instead of a blank or a fabricated zero. */}
+      <ChapterCreditRisk credit={d.creditRisk} />
       <ChapterFinancialData
         rawData={d.inputs.raw_data ?? null}
         dataSource={d.inputs.data_source ?? null}

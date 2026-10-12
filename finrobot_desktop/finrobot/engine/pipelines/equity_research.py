@@ -50,7 +50,11 @@ from finrobot.engine.compute.coordinators.segment_extractor import (
     build_segment_overview,
     build_sotp_breakdown,
 )
-from finrobot.engine.compute.operators.dcf_seed import dcf_current_actuals, seed_dcf_inputs
+from finrobot.engine.compute.operators.dcf_seed import (
+    DEFAULT_RISK_FREE_RATE,
+    dcf_current_actuals,
+    seed_dcf_inputs,
+)
 from finrobot.engine.compute.operators.forward_estimates import (
     ForwardFinancials,
     get_forward_revenue_growth,
@@ -60,6 +64,10 @@ from finrobot.engine.compute.operators.valuation_synthesis import (
     CanonicalThesis,
     resolve_canonical_thesis,
     street_range_disclosure,
+)
+from finrobot.engine.compute.coordinators.credit_payload import (
+    CreditRisk,
+    build_credit_risk,
 )
 from finrobot.engine.compute.coordinators.extractor import normalize_financials_to_usd
 from finrobot.engine.compute.coordinators.historical_extractor import fetch_historical_metrics
@@ -99,6 +107,7 @@ from finrobot.engine.primitives.industry import (
 )
 from finrobot.engine.pipelines.validators import (
     validate_catalyst_analysis,
+    validate_credit_risk,
     validate_has_fields,
     validate_has_peers,
     validate_has_thesis,
@@ -1135,6 +1144,110 @@ async def _execute_technical_analysis(
     return StepOutput(text=" ".join(summary_parts), structured=payload)
 
 
+async def _execute_credit_risk(
+    agent: Agent[Any, Any],  # noqa: ARG001 — kept for executor signature; unused
+    deps: FinRobotDeps,
+    prompt: str,  # noqa: ARG001 — kept for executor signature; unused
+    structured_context: dict[str, object],
+    ticker: str,
+    **_kwargs: object,
+) -> StepOutput:
+    """Run the Merton/KMV structural credit model → chapter 11 payload.
+
+    Deterministic: the equity leg is the frozen market cap, the barrier is the
+    reported total debt, and the volatility is the SAME one-year price series (and
+    the same estimator) the technical chapter's sniper levels are built from — so
+    one report shows one annualized volatility. The LLM contributes nothing here.
+    """
+    financial_data = structured_context.get("data_collection")
+    if not isinstance(financial_data, FinancialData):
+        raise ValueError(
+            "credit_risk requires FinancialData from data_collection step but received: "
+            + type(financial_data).__name__
+        )
+
+    # One report, one discounting rate: reuse the DCF's own risk-free rate rather
+    # than fetching a second curve. When the DCF degraded (a balance-sheet financial
+    # or an undefined terminal value) fall back to the pipeline's documented static
+    # 10Y default — and SAY so, because a static 2026-01 rate silently discounting a
+    # 2027 barrier is exactly the kind of quiet assumption this report refuses.
+    dcf = structured_context.get("financial_modeling")
+    rate_warnings: list[str] = []
+    if isinstance(dcf, DCFResult):
+        risk_free_rate: float | None = dcf.inputs.risk_free_rate
+    else:
+        risk_free_rate = DEFAULT_RISK_FREE_RATE
+        rate_warnings.append(
+            f"risk-free rate = {DEFAULT_RISK_FREE_RATE:.1%}, the pipeline's static 10Y "
+            "default: no DCF inputs were available to carry this run's own rate"
+        )
+
+    payload = await build_credit_risk(
+        ticker,
+        market_cap=financial_data.market.market_cap,
+        total_debt=financial_data.balance.total_debt,
+        risk_free_rate=risk_free_rate,
+        data_layer=deps.data_layer,
+        industry=financial_data.market.industry,
+        sector=financial_data.market.sector,
+        reporting_currency=financial_data.reporting_currency,
+        # financial_modeling's FX chokepoint writes the USD-normalized FinancialData
+        # back into structured_context and stamps this marker as it does; without it
+        # a non-USD reporter would be solved with a barrier in one currency divided
+        # by equity in another.
+        usd_normalized=structured_context.get("price_fx_to_usd") is not None,
+    )
+    if rate_warnings:
+        payload = payload.model_copy(update={"warnings": [*rate_warnings, *payload.warnings]})
+
+    return StepOutput(text=_credit_risk_narrative(payload), structured=payload)
+
+
+def _credit_probability_text(probability: float) -> str:
+    """The chapter's floor, reused: a 1e-27 default probability must not print as
+    '0.00%', which reads as "no risk" rather than "below what this model can
+    measure". One convention, so the run log and the chapter agree."""
+    if probability <= 0.0:
+        return "0.00%"
+    if probability < 0.0001:
+        return "<0.01%"
+    return f"{probability:.2%}"
+
+
+def _credit_spread_text(spread: float) -> str:
+    """Same flooring in basis points — 4e-17 is zero, not a spread."""
+    basis_points = spread * 10_000
+    if abs(basis_points) < 0.5:
+        return "≈0 bps"
+    return f"{basis_points:.0f} bps"
+
+
+def _credit_risk_narrative(payload: CreditRisk) -> str:
+    """One line for the run's step text — never a number the payload does not carry."""
+    if payload.state == "computed":
+        parts = [
+            f"Structural credit risk (Merton/KMV): distance to default "
+            f"{payload.distance_to_default:.2f}",
+        ]
+        if payload.default_probability is not None:
+            parts.append(
+                f"1y default probability {_credit_probability_text(payload.default_probability)}"
+            )
+        if payload.debt_to_value is not None:
+            parts.append(f"market leverage {payload.debt_to_value:.1%}")
+        if payload.implied_credit_spread is not None:
+            parts.append(
+                f"model-implied spread {_credit_spread_text(payload.implied_credit_spread)}"
+            )
+        return ", ".join(parts) + "."
+    if payload.state == "no_debt":
+        return "Structural credit risk: no debt on the balance sheet — no default barrier."
+    if payload.state == "not_applicable":
+        return "Structural credit risk not applicable: balance-sheet financial (bank / insurer)."
+    reason = payload.warnings[0] if payload.warnings else "input unavailable"
+    return f"Structural credit risk not computed: {reason}"
+
+
 # Matches a $-prefixed dollar figure: $276, $276.43, $1,234.50, $2172.06, $280.
 # Group 1 is the numeric body (with optional thousands separators / decimals).
 # Group 2 is an optional magnitude suffix ($3.41T, $391.0B, $3.4 billion).
@@ -1686,6 +1799,21 @@ def create_equity_research_pipeline(agents: dict[str, Agent]) -> Pipeline:
                 ),
                 executor=_execute_technical_analysis,
                 # Deterministic indicator compute — ignores the re-prompt (BUG-059).
+                deterministic=True,
+            ),
+            PipelineStep(
+                name="credit_risk",
+                skill_section=None,
+                agent=agents["modeling"],
+                required_data=[],
+                validator=StructuredValidator(
+                    validate_credit_risk,
+                    validate_is_non_empty,
+                ),
+                executor=_execute_credit_risk,
+                # Deterministic Merton/KMV solve — same inputs, same numbers, and
+                # no LLM call anywhere in the executor (the DCF's own risk-free
+                # rate is the only upstream input it does not fetch itself).
                 deterministic=True,
             ),
             PipelineStep(

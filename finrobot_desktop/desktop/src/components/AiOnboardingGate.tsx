@@ -66,7 +66,7 @@ export function AiOnboardingGate(): React.ReactElement | null {
   // AI chat is release-gated (VITE_ENABLE_AI_CHAT) — only advertise it as an
   // unlockable feature when it actually ships, else we'd promise a hidden panel.
   const needsModel = zh
-    ? ['AI 研报(14 章)', ...(AI_CHAT_ENABLED ? ['AI 对话分析'] : [])]
+    ? ['AI 研报(15 章)', ...(AI_CHAT_ENABLED ? ['AI 对话分析'] : [])]
     : ['AI research reports (13 ch.)', ...(AI_CHAT_ENABLED ? ['AI chat analysis'] : [])]
 
   return (

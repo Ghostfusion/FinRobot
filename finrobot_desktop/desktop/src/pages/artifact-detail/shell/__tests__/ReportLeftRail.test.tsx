@@ -6,7 +6,7 @@
 // Before this change the rail was a bare <aside> with an unlabelled <nav>, an
 // active state expressed ONLY as a colour, plain buttons with no tab semantics,
 // a scroll-spy that could only ever set (never clear) the active id, and no way
-// back to the top of a 14-chapter document.
+// back to the top of a 15-chapter document.
 
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, within } from '@testing-library/react'
@@ -14,6 +14,7 @@ import { MemoryRouter } from 'react-router-dom'
 
 import { ReportLeftRail, pickActiveSection } from '../ReportLeftRail'
 import { reportSectionEntries, type ReportSectionEntry } from '../../reportSections'
+import type { PriceSessionShape } from '../../chapters'
 
 /** Give the listed element ids a top offset (everything else stays at 0). jsdom
  *  has no layout, so the scroll-spy's measurements need a fixed stage. */
@@ -54,7 +55,11 @@ const CHAPTERS_ONLY = reportSectionEntries('en', {
   warnings: false,
 })
 
-function renderRail(entries: ReportSectionEntry[] = ALL_SECTIONS, extra?: React.ReactNode) {
+function renderRail(
+  entries: ReportSectionEntry[] = ALL_SECTIONS,
+  extra?: React.ReactNode,
+  card?: { priceSession?: PriceSessionShape | null; snapshotAsOf?: string | null },
+) {
   return render(
     <MemoryRouter>
       <div id="main-scroll">
@@ -65,6 +70,9 @@ function renderRail(entries: ReportSectionEntry[] = ALL_SECTIONS, extra?: React.
           currentArtifactId="a1"
           timeline={[]}
           reportType="equity_research"
+          snapshotPrice={187.42}
+          priceSession={card?.priceSession ?? null}
+          snapshotAsOf={card?.snapshotAsOf ?? null}
         />
         {extra}
       </div>
@@ -125,7 +133,7 @@ describe('ReportLeftRail contents', () => {
     }
     // Aux entries carry the marker instead of a chapter number.
     expect(within(nav).getAllByText('§')).toHaveLength(4)
-    expect(within(nav).getByText('12')).toBeTruthy() // filings
+    expect(within(nav).getByText('13')).toBeTruthy() // filings
   })
 
   it('presents the numbered spine first, in ascending order, then the note group', () => {
@@ -134,7 +142,7 @@ describe('ReportLeftRail contents', () => {
     const chapters = ALL_SECTIONS.filter((e) => e.kind === 'chapter')
     const notes = ALL_SECTIONS.filter((e) => e.kind === 'aux')
 
-    // Chapter rows first (01…14), then the unnumbered notes — never interleaved.
+    // Chapter rows first (01…15), then the unnumbered notes — never interleaved.
     // An interleaved § row sat between 01 and 02 and made the numbering read as
     // shuffled even though every number was correct.
     const rendered = [...nav.querySelectorAll('a[data-testid^="toc-"]')].map((a) =>
@@ -268,5 +276,66 @@ describe('pickActiveSection', () => {
 
   it('is empty-safe', () => {
     expect(pickActiveSection([], 0)).toBeNull()
+  })
+})
+
+describe('ReportLeftRail — the session delta beside the spot', () => {
+  it('renders the frozen prior-close → last-close move, labelled as the last session', () => {
+    renderRail(ALL_SECTIONS, undefined, {
+      priceSession: { latest_session_change: 12.46, latest_session_change_pct: 2.384 },
+      snapshotAsOf: '2026-10-10T20:00:00Z',
+    })
+
+    const line = screen.getByTestId('rail-session-change')
+    expect(line.textContent).toContain('+$12.46')
+    expect(line.textContent).toContain('+2.38%')
+    // The data layer documents this as the session `current_price` belongs to,
+    // NOT "today" — a closed-market view must not read as live.
+    expect(line.textContent).toContain('last session')
+    expect(line.textContent).not.toContain('today')
+    // …and the as-of date rides the tooltip so the basis is checkable.
+    expect(line.getAttribute('title')).toContain('prior close')
+  })
+
+  it('marks a decline with its own glyph and sign', () => {
+    renderRail(ALL_SECTIONS, undefined, {
+      priceSession: { latest_session_change: -3.75, latest_session_change_pct: -1.96 },
+      snapshotAsOf: '2026-10-10T20:00:00Z',
+    })
+
+    const line = screen.getByTestId('rail-session-change')
+    expect(line.textContent).toContain('▼')
+    expect(line.textContent).toContain('-$3.75')
+    expect(line.textContent).toContain('-1.96%')
+  })
+
+  it('renders a measured flat session as flat', () => {
+    renderRail(ALL_SECTIONS, undefined, {
+      priceSession: { latest_session_change: 0, latest_session_change_pct: 0 },
+    })
+
+    const line = screen.getByTestId('rail-session-change')
+    expect(line.textContent).toContain('·')
+    expect(line.textContent).toContain('$0.00')
+  })
+
+  it('renders nothing when the run had no session to diff', () => {
+    renderRail()
+    expect(screen.queryByTestId('rail-session-change')).toBeNull()
+  })
+
+  it('renders nothing when the payload carries no change even with the block present', () => {
+    renderRail(ALL_SECTIONS, undefined, {
+      priceSession: { latest_session_change: null, latest_session_change_pct: null },
+    })
+
+    expect(screen.queryByTestId('rail-session-change')).toBeNull()
+  })
+
+  it('still renders the price caption when there is no session block', () => {
+    renderRail(ALL_SECTIONS, undefined, { snapshotAsOf: '2026-10-10T20:00:00Z' })
+
+    expect(screen.queryByTestId('rail-session-change')).toBeNull()
+    expect(screen.getByText(/187.42/)).toBeTruthy()
   })
 })

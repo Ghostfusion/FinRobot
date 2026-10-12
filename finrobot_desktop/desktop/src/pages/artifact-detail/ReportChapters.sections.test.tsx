@@ -110,7 +110,7 @@ function expectedIds(art: ArtifactDetail, timeline: ArtifactSummaryV5[]): string
 }
 
 describe('ReportChapters render order == section manifest', () => {
-  it('renders exactly the 14 chapters, in CHAPTER_ORDER, when nothing optional exists', () => {
+  it('renders exactly the 15 chapters, in CHAPTER_ORDER, when nothing optional exists', () => {
     const outputs = { structured: {}, warnings: [] }
     expect(renderIds(artifact(outputs), [])).toEqual([...CHAPTER_ORDER])
   })

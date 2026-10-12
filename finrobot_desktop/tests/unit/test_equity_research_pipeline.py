@@ -107,9 +107,9 @@ def _make_test_agents(output: str = "analysis output") -> dict[str, Agent]:
 
 
 class TestPipelineStructure:
-    def test_has_exactly_8_steps(self):
+    def test_has_exactly_9_steps(self):
         pipeline = create_equity_research_pipeline(_make_test_agents())
-        assert len(pipeline.steps) == 8
+        assert len(pipeline.steps) == 9
 
     def test_step_names_correct(self):
         pipeline = create_equity_research_pipeline(_make_test_agents())
@@ -121,6 +121,10 @@ class TestPipelineStructure:
             "financial_modeling",
             "ownership_governance_analysis",
             "technical_analysis",
+            # credit_risk runs AFTER technical_analysis: it reads the DCF's own
+            # risk-free rate (financial_modeling) and re-derives the same one-year
+            # equity volatility the technical chapter uses.
+            "credit_risk",
             "thesis",
             "report",
         ]
@@ -134,6 +138,7 @@ class TestPipelineStructure:
         assert step_map["financial_modeling"] == "dcf-model"
         assert step_map["ownership_governance_analysis"] is None
         assert step_map["technical_analysis"] is None
+        assert step_map["credit_risk"] is None
         assert step_map["thesis"] == (
             "initiating-coverage",
             "competitive-analysis",
@@ -157,7 +162,7 @@ class TestPipelineStructure:
         assert "filings_8k" not in step1.required_data
         assert "xbrl_facts" not in step1.required_data
 
-    def test_steps_2_to_8_required_data_empty(self):
+    def test_steps_2_to_9_required_data_empty(self):
         pipeline = create_equity_research_pipeline(_make_test_agents())
         for step in pipeline.steps[1:]:
             assert step.required_data == []
@@ -233,8 +238,8 @@ def _make_stub_execute_fn(step_name: str):
 
 
 class TestPipelineExecution:
-    async def test_execute_produces_result_with_all_8_step_keys(self, capsys):
-        """Pipeline orchestration routes through all 8 steps and collects their outputs."""
+    async def test_execute_produces_result_with_all_9_step_keys(self, capsys):
+        """Pipeline orchestration routes through all 9 steps and collects their outputs."""
         pipeline = create_equity_research_pipeline(
             _make_test_agents("revenue 385B ebitda 130B price_history available")
         )
@@ -253,11 +258,12 @@ class TestPipelineExecution:
             "financial_modeling",
             "ownership_governance_analysis",
             "technical_analysis",
+            "credit_risk",
             "thesis",
             "report",
         }
 
-    async def test_execute_logs_8_progress_messages(self, caplog):
+    async def test_execute_logs_9_progress_messages(self, caplog):
         import logging
 
         with caplog.at_level(logging.INFO):
@@ -273,8 +279,8 @@ class TestPipelineExecution:
                 step.validator = TextValidator(validate_is_non_empty)
             await pipeline.execute(FakeDeps(), "AAPL")
         messages = " ".join(r.message for r in caplog.records)
-        for i in range(1, 9):
-            assert f"Step {i}/8" in messages
+        for i in range(1, 10):
+            assert f"Step {i}/9" in messages
 
 
 # ---------------------------------------------------------------------------

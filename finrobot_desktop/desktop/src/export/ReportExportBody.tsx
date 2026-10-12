@@ -1,11 +1,11 @@
 // The exported HTML's body. Mirrors ArtifactDetailPage's in-app type branch so a
-// standalone export shows the SAME thing the page does: the 14-chapter report for
+// standalone export shows the SAME thing the page does: the 15-chapter report for
 // equity_research, the compact single-computation viewer for every other type
 // (dcf / ddm / lbo / comps / earnings / ic_memo / …).
 //
 // Before this branch existed, the export rendered <ReportChapters> for EVERY
 // type, so exporting a dcf / ddm / lbo / comps artifact produced an empty
-// 14-chapter equity shell (null thesis / valuation / ownership) — the very
+// 15-chapter equity shell (null thesis / valuation / ownership) — the very
 // BUG-20260602-039 shell the in-app viewer already avoids via CompactArtifactViewer.
 
 import type { ArtifactDetail } from '../hooks/useV5Artifacts'

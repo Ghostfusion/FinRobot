@@ -1,13 +1,13 @@
 // ArtifactDetailPage — single artifact deep-dive route, mounted at
 // `/stocks/:ticker/runs/:artifactId`.
 //
-// Renders the artifact as a 14-chapter investment-bank-grade long-scroll
+// Renders the artifact as a 15-chapter investment-bank-grade long-scroll
 // research report in a two-column desktop layout:
 //   - sticky top toolbar  (back · snapshot quote · export HTML · print/PDF · re-run;
 //                          version switching lives in the rail's VERSIONS tab)
 //   - left sticky rail    (identity card + CONTENTS | VERSIONS tabs — scroll-spy
 //                          TOC and Version Timeline merged into one flank)
-//   - center scroll area  (the section manifest: chapters 01–14 plus the
+//   - center scroll area  (the section manifest: chapters 01–15 plus the
 //                          content-gated aux sections, each a structured Section)
 //
 // The chapters are split into per-file components under
@@ -175,7 +175,7 @@ export function ArtifactDetailPage(): React.ReactElement {
   // price + version label, right-rail WACC, diff headline). deriveReportData is
   // the single source of truth shared with the standalone export viewer. For
   // non-research artifacts only `versionLabel`/`createdAt` are meaningful (the
-  // 14-chapter shapes resolve to null) — the body renders via CompactArtifactViewer.
+  // 15-chapter shapes resolve to null) — the body renders via CompactArtifactViewer.
   const report = deriveReportData(data, timeline ?? [], locale)
   const {
     thesis,
@@ -183,6 +183,7 @@ export function ArtifactDetailPage(): React.ReactElement {
     createdAt,
     versionLabel,
     snapshotPrice,
+    priceSession,
     snapshotAsOf,
     fairlyValued,
     quoteCurrency,
@@ -214,7 +215,7 @@ export function ArtifactDetailPage(): React.ReactElement {
     try {
       const { buildInteractiveReportHtml, prepareReportExport } = await import('../export/bundle')
 
-      // Only the 14-chapter report pulls slow reference data (earnings calls)
+      // Only the 15-chapter report pulls slow reference data (earnings calls)
       // that must be prefetched into the offline cache for a deterministic file.
       // A compact artifact (dcf / ddm / lbo / comps / …) renders purely from its
       // own persisted fields — no prefetch, and no "fetching charts / earnings"
@@ -273,7 +274,7 @@ export function ArtifactDetailPage(): React.ReactElement {
   }
 
   // ── Non-research artifacts: compact single-column viewer ──────────────────
-  // No 14-chapter TOC, no Version Timeline rail, no
+  // No 15-chapter TOC, no Version Timeline rail, no
   // chapter scroll-spy status bar. Just the toolbar (type-aware) + the focused
   // compact body that shows the artifact's real inputs / result / audit trail.
   if (!isResearch) {
@@ -376,6 +377,8 @@ export function ArtifactDetailPage(): React.ReactElement {
           companyName={companyName}
           verdict={thesis?.recommendation ?? null}
           snapshotPrice={snapshotPrice}
+          priceSession={priceSession}
+          snapshotAsOf={snapshotAsOf}
           fairlyValued={fairlyValued}
           confidence={valuationSynthesis?.confidence ?? null}
           quoteCurrency={quoteCurrency}

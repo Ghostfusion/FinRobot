@@ -5,7 +5,7 @@
 // window.__FINROBOT_REPORT__ (artifact + version timeline + a dehydrated
 // react-query cache + locale), rehydrates the query cache so the chapters' data
 // hooks resolve from inlined data WITHOUT any network, and renders the exact
-// same body the app uses (ReportExportBody → the 14-chapter ReportChapters for
+// same body the app uses (ReportExportBody → the 15-chapter ReportChapters for
 // equity_research, the CompactArtifactViewer for dcf / ddm / lbo / comps / …) —
 // Recharts tooltips, heatmap and football field all live, fully offline.
 
@@ -89,7 +89,7 @@ function mount(): void {
               in-app shell owns the document's single main landmark, and a nested
               main is invalid) — so the standalone file supplies it here. */}
           <main className="report-export-shell">
-            {/* Mirrors the in-app page's type branch: the 14-chapter report for
+            {/* Mirrors the in-app page's type branch: the 15-chapter report for
                 equity_research, the compact single-computation viewer for
                 dcf / ddm / lbo / comps / earnings / … (so a standalone export
                 isn't an empty equity shell — BUG-20260602-039). */}

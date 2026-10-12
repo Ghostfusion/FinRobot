@@ -6,8 +6,8 @@ Source-of-truth schema for everything produced by
     ownership_governance_analysis)
   - artifact ``outputs.structured.sec_filings`` / ``ownership_governance`` /
     ``xbrl_facts_snapshot`` keys (see ``finrobot/artifact/builders.py``)
-  - UI chapters 04 Financial / 06 News / 08 Catalysts / 10 Competitive /
-    11 Data / 12 Ownership & Governance
+  - UI chapters 04 Competitive / 05 Financial / 08 Recent News / 09 Catalysts /
+    12 Financial Data / 13 Filings & XBRL / 14 Ownership & Governance
 
 Every SEC-sourced number lives in one of these models and **must** carry a
 ``FilingProvenance`` — that's the CLAUDE.md core contract ("LLM 永远不产出

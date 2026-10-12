@@ -1,7 +1,7 @@
 // CompactArtifactViewer — the detail body for NON equity_research artifacts
 // (dcf / ddm / lbo / comps / earnings / ic_memo / peer_research / ad_hoc).
 //
-// These artifacts are single deterministic computations, not 14-chapter reports.
+// These artifacts are single deterministic computations, not 15-chapter reports.
 // The four valuation tools (dcf / ddm / lbo / comps) now render through the SAME
 // chapter primitives the full report uses — one visual language, no raw K-V dump:
 //   - dcf   → ValuationBody (DCF inputs + bridge) + DcfForecastTable (10y, full) +

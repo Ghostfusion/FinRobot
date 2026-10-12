@@ -75,6 +75,39 @@ def validate_technical_analysis(output: object) -> ValidationResult:
     return ValidationResult(passed=True)
 
 
+def validate_credit_risk(output: object) -> ValidationResult:
+    """Credit-risk step validator.
+
+    All four payload states are honest outcomes, so all four pass — but each must
+    carry what makes it readable. 'computed' needs the two numbers the chapter
+    headlines; every non-computed state must say WHY in ``warnings``, or the
+    chapter renders a blank card with no explanation of what is missing. The state
+    itself is never inferred from an absent field: the payload declares it.
+    """
+    from finrobot.engine.compute.coordinators.credit_payload import CreditRisk
+
+    if not isinstance(output, CreditRisk):
+        return ValidationResult(
+            passed=False,
+            error=f"credit_risk output must be CreditRisk, got {type(output).__name__}",
+        )
+    if output.state == "computed":
+        if output.distance_to_default is None or output.default_probability is None:
+            return ValidationResult(
+                passed=False,
+                error=(
+                    "credit_risk state='computed' without distance_to_default / default_probability"
+                ),
+            )
+        return ValidationResult(passed=True)
+    if not output.warnings:
+        return ValidationResult(
+            passed=False,
+            error=f"credit_risk state={output.state!r} carries no reason for the reader",
+        )
+    return ValidationResult(passed=True)
+
+
 def validate_ownership_governance(output: object) -> ValidationResult:
     """Ownership & Governance validator for SEC-backed structured output."""
     from finrobot.engine.models.sec import OwnershipGovernanceAnalysis

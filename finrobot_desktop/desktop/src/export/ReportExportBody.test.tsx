@@ -45,9 +45,9 @@ function researchArtifact(): ArtifactDetail {
 
 // BUG-20260602-039 (export path): the standalone HTML export must render the
 // SAME body the in-app page does. A dcf/ddm/lbo/comps artifact exports the
-// compact viewer with its real numbers, NOT the empty 14-chapter shell.
+// compact viewer with its real numbers, NOT the empty 15-chapter shell.
 describe('ReportExportBody — export body mirrors the in-app page', () => {
-  it('renders the compact viewer for a dcf artifact, not the 14-chapter shell', () => {
+  it('renders the compact viewer for a dcf artifact, not the 15-chapter shell', () => {
     render(<ReportExportBody artifact={dcfArtifact()} timeline={[]} />)
     expect(screen.getByTestId('compact-artifact-viewer')).toBeTruthy()
     // The artifact's real headline + inputs surface (not an empty equity cover).
@@ -56,11 +56,11 @@ describe('ReportExportBody — export body mirrors the in-app page', () => {
     expect(screen.getAllByText('DCF Implied Price').length).toBeGreaterThan(0)
     expect(screen.getAllByText('$187.40').length).toBeGreaterThan(0)
     expect(screen.getByText('DCF Inputs & Implied Value')).toBeTruthy()
-    // The 14-chapter shell must be absent.
+    // The 15-chapter shell must be absent.
     expect(screen.queryByTestId('mock-report-chapters')).toBeNull()
   })
 
-  it('still renders the 14-chapter report for equity_research', () => {
+  it('still renders the 15-chapter report for equity_research', () => {
     render(<ReportExportBody artifact={researchArtifact()} timeline={[]} />)
     expect(screen.getByTestId('mock-report-chapters')).toBeTruthy()
     expect(screen.queryByTestId('compact-artifact-viewer')).toBeNull()

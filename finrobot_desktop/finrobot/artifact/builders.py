@@ -1075,6 +1075,13 @@ def build_equity_research_artifact(
         # computed from, so an export-window restatement / new fiscal year would
         # otherwise let the chart endpoints contradict the frozen prose.
         "historical_metrics",
+        # Structural (Merton/KMV) credit risk — distance to default, the implied
+        # one-year default probability and the model's own credit spread. Its own
+        # key, never merged into the valuation: it prices the DEBT leg of the
+        # capital structure off the equity view, so a reader can see the risk the
+        # cash-flow valuation does not carry. Absent only on artifacts written
+        # before the step existed (the chapter then renders its gap state).
+        "credit_risk",
     ):
         val = result.structured_data.get(key)
         if val is not None:

@@ -34,10 +34,10 @@ describe('reportSectionEntries — chapter spine', () => {
     expect(entries.every((e) => e.kind === 'chapter')).toBe(true)
   })
 
-  it('numbers the chapters 01..14 in reading order', () => {
+  it('numbers the chapters 01..15 in reading order', () => {
     const entries = reportSectionEntries('en', NOTHING)
     expect(entries.map((e) => e.num)).toEqual(CHAPTER_ORDER.map((id) => chapterNum(id)))
-    expect(entries.at(-1)?.num).toBe('14')
+    expect(entries.at(-1)?.num).toBe('15')
   })
 
   it('carries the localized title of every chapter', () => {

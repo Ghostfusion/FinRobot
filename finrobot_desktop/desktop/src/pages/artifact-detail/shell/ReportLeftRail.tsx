@@ -22,7 +22,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ArtifactSummaryV5 } from '../../../types/v5'
 import { useI18n } from '../../../i18n'
-import { formatCurrency } from '../../../utils/format'
+import { formatCurrency, formatDate, formatPercent } from '../../../utils/format'
 import {
   verdictLabel,
   verdictTone,
@@ -31,6 +31,7 @@ import {
 } from '../../../utils/verdict'
 import { ConfidenceChip } from '../../../components/ConfidenceChip'
 import type { ReportSectionEntry } from '../reportSections'
+import type { PriceSessionShape } from '../chapters'
 import { VersionTimelineList } from './ReportRightRail'
 
 /** The scroll container the report scrolls inside (`AppShell`). */
@@ -44,6 +45,12 @@ interface ReportLeftRailProps {
   companyName?: string | null
   verdict?: string | null
   snapshotPrice?: number | null
+  /** Frozen prior-close → last-close delta, in the QUOTE currency. Absent when
+   *  the run had fewer than 2 price bars → the caption renders nothing. */
+  priceSession?: PriceSessionShape | null
+  /** When the market snapshot was taken — labels the session delta so a
+   *  closed-market view cannot read the last session as live. */
+  snapshotAsOf?: string | null
   /** Point withheld because price is inside the fair-value band → "Fairly Valued"
    *  (confident HOLD), not a generic "WITHHELD". From deriveReportData. */
   fairlyValued?: boolean
@@ -115,6 +122,8 @@ export function ReportLeftRail({
   companyName = null,
   verdict = null,
   snapshotPrice = null,
+  priceSession = null,
+  snapshotAsOf = null,
   fairlyValued = false,
   confidence = null,
   quoteCurrency = 'USD',
@@ -330,6 +339,7 @@ export function ReportLeftRail({
             )}
           </>
         )}
+        <RailSessionChange session={priceSession} currency={quoteCurrency} asOf={snapshotAsOf} />
         {verdictText && (
           <div style={{ marginTop: 10 }}>
             <ConfidenceChip tier={tier} />
@@ -405,7 +415,7 @@ export function ReportLeftRail({
 
           <nav aria-label={t('report.toc.navLabel')}>
             {/* Presentation is TWO groups, in this order:
-                  1. the numbered chapter spine, ascending 01…14;
+                  1. the numbered chapter spine, ascending 01…15;
                   2. the unnumbered note sections, in page order.
                 The manifest keeps page order (the body render order and the hash
                 validator both depend on it — see ReportChapters.sections.test),
@@ -449,7 +459,7 @@ export function ReportLeftRail({
             )}
           </nav>
 
-          {/* Back-to-top: the report runs 14 chapters + appendices, so returning
+          {/* Back-to-top: the report runs 15 chapters + appendices, so returning
               to the cover should not require a long reverse scroll. */}
           <button
             type="button"
@@ -624,5 +634,72 @@ function RailTab({
     >
       {children}
     </button>
+  )
+}
+
+/** The prior-close → last-close move, as a caption under the spot.
+ *
+ * The data layer computed this at fetch time and `builders.py` froze it into the
+ * artifact, and NOTHING rendered it: the rail's headline is the TARGET, so the
+ * spot caption is the only place the price appears as context — its daily change
+ * belongs there.
+ *
+ * `NormalizedPrice.latest_session_change` documents the session as the one
+ * `current_price` belongs to, NOT "today", so the copy says "last session" and the
+ * tooltip carries the as-of date: a closed-market view must not read as live.
+ *
+ * Renders NOTHING when the run had fewer than 2 price bars (no session to diff) —
+ * never a 0.00, which would claim a flat session that was never measured. */
+function RailSessionChange({
+  session,
+  currency,
+  asOf,
+}: {
+  session?: PriceSessionShape | null
+  currency: string
+  asOf?: string | null
+}): React.ReactElement | null {
+  const { locale, t } = useI18n()
+  const change = session?.latest_session_change
+  const pct = session?.latest_session_change_pct
+  if (typeof change !== 'number' || !Number.isFinite(change)) return null
+
+  const flat = change === 0
+  // Up/down is a colour + glyph pair, never colour alone (CVD-safe).
+  const tone = flat ? 'var(--text-muted)' : change > 0 ? 'var(--success)' : 'var(--danger)'
+  const arrow = flat ? '·' : change > 0 ? '▲' : '▼'
+  const hasPct = typeof pct === 'number' && Number.isFinite(pct)
+
+  return (
+    <div
+      data-testid="rail-session-change"
+      title={
+        asOf
+          ? t('report.leftRail.sessionChangeTitle', { date: formatDate(asOf, locale, 'short') })
+          : undefined
+      }
+      style={{
+        display: 'flex',
+        alignItems: 'baseline',
+        gap: 5,
+        marginTop: 4,
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10.5,
+        color: tone,
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      <span>
+        {arrow} {change > 0 ? '+' : ''}
+        {formatCurrency(change, currency, locale, 2)}
+      </span>
+      {hasPct && (
+        <span>
+          ({pct > 0 ? '+' : ''}
+          {formatPercent(pct, locale, 2, true)})
+        </span>
+      )}
+      <span style={{ color: 'var(--text-muted)' }}>{t('report.leftRail.lastSession')}</span>
+    </div>
   )
 }

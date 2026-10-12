@@ -1,7 +1,7 @@
 // StockWorkspace — single-ticker dashboard at /stocks/:ticker.
 //
 // Job per CLAUDE.md: "保持 dashboard 形态：实时行情 + 跑 AI 入口 +
-// artifact timeline 跳转，不承担研报阅读". The 14-chapter research
+// artifact timeline 跳转，不承担研报阅读". The 15-chapter research
 // reading lives at /stocks/:ticker/runs/:artifactId (ArtifactDetailPage).
 //
 // Layout:
@@ -10,7 +10,7 @@
 //     market rail and a tall hot report don't drag each other (the page itself
 //     never scrolls). Left = MarketDataZone (live, always present), right =
 //     AIZone (cold = big CTA / running = progress + prior report / hot = verdict
-//     card + 14-chapter grid + version timeline + standalone/artifacts panels).
+//     card + 15-chapter grid + version timeline + standalone/artifacts panels).
 //
 // Section contents that constituted the actual research (HeroVerdict /
 // FootballField / Sensitivity / Peers / Risks / etc) now live as

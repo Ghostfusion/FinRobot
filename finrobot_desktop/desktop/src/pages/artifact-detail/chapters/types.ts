@@ -748,6 +748,44 @@ export interface ForwardEstimatesShape {
   confidence?: string | null
 }
 
+// Frozen structural (Merton/KMV) credit risk. The pipeline solves the equity-as-
+// a-call-on-assets identity for the latent asset value + asset volatility, then
+// reports distance to default and the model-implied default probability. `state`
+// is the load-bearing field: it says which of four readings this issuer got, and
+// every numeric field is optional so an uncomputed state is EMPTY — never a zero
+// that would read as "no default risk".
+export interface CreditRiskShape {
+  state?: 'computed' | 'no_debt' | 'not_applicable' | 'not_computable'
+  method?: string
+  horizon_years?: number | null
+  equity_value?: number | null
+  debt_barrier?: number | null
+  /** 'total_debt' today — the provider reports no short/long split. */
+  barrier_basis?: string | null
+  asset_value?: number | null
+  asset_volatility?: number | null
+  equity_volatility?: number | null
+  volatility_bars?: number | null
+  risk_free_rate?: number | null
+  distance_to_default?: number | null
+  default_probability?: number | null
+  debt_to_value?: number | null
+  /** The model's own risky-debt yield minus the risk-free rate, annualized. */
+  implied_credit_spread?: number | null
+  iterations?: number | null
+  converged?: boolean | null
+  warnings?: string[]
+}
+
+// Frozen prior-close → last-close price delta, in the QUOTE currency (frozen by
+// builders.py from the same PRICE canonical the data step narrated). Absent when
+// the run had fewer than 2 price bars — there is no session to diff, which is a
+// different thing from a 0.00 move.
+export interface PriceSessionShape {
+  latest_session_change?: number | null
+  latest_session_change_pct?: number | null
+}
+
 export interface ArtifactStructured {
   thesis?: ThesisShape
   currency?: CurrencyTagsShape
@@ -769,4 +807,12 @@ export interface ArtifactStructured {
   // pipeline's HistoricalMetrics) so ChapterFinancialAnalysis reads the charts
   // from the snapshot instead of a live ['historical'] refetch.
   historical_metrics?: HistoricalMetrics
+  // Structural (Merton/KMV) credit risk — its own key, never merged into the
+  // valuation: it prices the DEBT leg of the capital structure off the equity
+  // view. Absent on artifacts written before the step existed.
+  credit_risk?: CreditRiskShape
+  // The prior-close → last-close delta the data step computed and builders.py
+  // froze. Persisted since the price-session freeze landed and rendered nowhere
+  // until the rail's spot caption read it.
+  price_session?: PriceSessionShape
 }

@@ -5,7 +5,7 @@
 //   • the report body's render order (ReportChapters)
 //   • deep-link / hash validation (ArtifactDetailPage)
 //
-// The report is no longer "just the 14 numbered chapters": three sections that
+// The report is no longer "just the 15 numbered chapters": four sections that
 // carry real reader-visible content have no chapter number —
 //   report-version-diff  "what changed vs the prior version" (app chrome)
 //   report-audit-banner  the data-caveat / output-contract findings
@@ -17,7 +17,7 @@
 // nothing), and rendered with a marker instead of a number.
 //
 // Presence gates are NOT re-derived here: each owning component exports the
-// predicate it renders by (hasPriorVersion / auditBannerVisible /
+// predicate it renders by (priorVersions / auditBannerContent().visible /
 // hasComputeWarnings), so the nav can never list a section the body drops or
 // hide one it renders.
 //

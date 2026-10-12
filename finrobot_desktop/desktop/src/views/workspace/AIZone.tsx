@@ -1,11 +1,11 @@
 // Right column of the workspace dashboard. Surfaces the AI research
 // state for a ticker — either cold (no equity_research artifact yet,
-// big CTA to run one) or hot (most-recent verdict card + 14-chapter
+// big CTA to run one) or hot (most-recent verdict card + 15-chapter
 // preview grid + version timeline).
 //
 // Does NOT render the chapter contents themselves — clicking a chapter
 // or "Open full report" navigates to /stocks/:ticker/runs/:artifactId
-// which is where the 14-chapter long-scroll lives.
+// which is where the 15-chapter long-scroll lives.
 
 import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -169,7 +169,7 @@ export function AIZone({ ticker }: AIZoneProps): React.ReactElement {
   const isRunning = runState?.status === 'running'
 
   // ── Auto-advance into the report on a watched completion (UX-002) ─────────
-  // The first wow is "search → read a 14-chapter report"; making the user hunt
+  // The first wow is "search → read a 15-chapter report"; making the user hunt
   // for an "open" button after the run finishes blunts it. When a research run
   // the user is WATCHING here transitions running→completed, drill straight into
   // its report. Guarded so we never yank a user who merely lands on a workspace
@@ -261,7 +261,7 @@ export function AIZone({ ticker }: AIZoneProps): React.ReactElement {
     void timelineRefetch()
   }
 
-  // Shared launch path for every pipeline — the full 14-chapter report AND the
+  // Shared launch path for every pipeline — the full 15-chapter report AND the
   // standalone single-method valuations. Guards: a per-ticker run already active
   // → info toast (startRun locks one run per ticker); a known-bad precondition
   // (BUG-027) → route to Settings instead of POSTing a doomed 503/500 run. The
@@ -315,7 +315,7 @@ export function AIZone({ ticker }: AIZoneProps): React.ReactElement {
   }
 
   // Standalone single-method valuation (dcf / ddm / lbo / comps): a focused tool
-  // run that lands its own artifact + detail page, no 14-chapter report needed.
+  // run that lands its own artifact + detail page, no 15-chapter report needed.
   // The artifact type == pipeline type for these four, so artifactTypeLabel()
   // names the toast identically to the timeline row it will produce.
   async function launchMethod(pipelineType: string): Promise<void> {
@@ -523,7 +523,7 @@ export function AIZone({ ticker }: AIZoneProps): React.ReactElement {
 
 // Shown when the ticker has model artifacts but no full equity_research report
 // (BUG-040). Replaces the misleading "还没跑 AI 研报" cold state — the user DOES
-// have research here, just not a 14-chapter report. The OtherArtifacts list
+// have research here, just not a 15-chapter report. The OtherArtifacts list
 // below this surfaces the actual artifacts; this card only nudges toward a full
 // report and routes broken-config users to Settings.
 function NoReportYetState({
@@ -572,8 +572,8 @@ function NoReportYetState({
         }}
       >
         {zh
-          ? '该标的已有下方的模型产物。要生成 14 章完整研报,跑一次 AI 分析。'
-          : 'This ticker already has the model artifacts below. Run an AI analysis for the full 14-chapter report.'}
+          ? '该标的已有下方的模型产物。要生成 15 章完整研报,跑一次 AI 分析。'
+          : 'This ticker already has the model artifacts below. Run an AI analysis for the full 15-chapter report.'}
       </p>
       <RunCta
         preflightBlocked={preflightBlocked}

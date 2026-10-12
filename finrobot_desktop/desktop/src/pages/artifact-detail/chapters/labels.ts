@@ -8,7 +8,7 @@
 import type { Locale } from '../../../i18n'
 
 export interface ChapterLabel {
-  /** Two-digit display number, e.g. "01". User-visible — must read 1-14, not 0-13. */
+  /** Two-digit display number, e.g. "01". User-visible — must read 1-15, not 0-14. */
   num: string
   title: string
   sub: string
@@ -39,6 +39,12 @@ export const CHAPTER_ORDER = [
   'news',
   'catalysts',
   'technical',
+  // Structural credit risk (Merton/KMV). Placed at the END of the analytical
+  // spine — after the quant deep-dive, before the appendix. It is a risk lens on
+  // the SAME balance sheet the financial chapter reads; inserting it between
+  // `financial` and `valuation` would break the documented financial → valuation
+  // build-up, so it reads as the closing risk chapter of the argument.
+  'credit',
   'data',
   // Primary-source appendix (2026-10-11): the SEC 10-K/10-Q history + 8-K events
   // and the XBRL concept snapshot the numbers were read from. Persisted since the
@@ -63,6 +69,7 @@ const ZH: Record<ChapterId, Omit<ChapterLabel, 'num'>> = {
   sensitivity: { title: '敏感性分析', sub: '关键假设变动' },
   catalysts: { title: '催化剂信号', sub: '方向判读 · 类别构成' },
   technical: { title: '技术分析', sub: '蒙特卡洛 · 交易点位 · 价格走势' },
+  credit: { title: '信用与违约风险', sub: 'Merton/KMV 结构模型 · 违约距离 · 隐含利差' },
   competitive: { title: '竞争格局', sub: '同业三视图' },
   data: { title: '财务数据', sub: '原始数据 · 来源 · 审计轨迹' },
   filings: { title: '申报文件与 XBRL', sub: '10-K / 10-Q · 8-K 事件 · XBRL 科目快照' },
@@ -80,6 +87,7 @@ const EN: Record<ChapterId, Omit<ChapterLabel, 'num'>> = {
   sensitivity: { title: 'Sensitivity Analysis', sub: 'Key Assumption Shifts' },
   catalysts: { title: 'Catalyst Signal', sub: 'Directional Read · Category Mix' },
   technical: { title: 'Technical Analysis', sub: 'Monte Carlo · Trade Levels · Price' },
+  credit: { title: 'Credit & Default Risk', sub: 'Structural model · Distance to Default' },
   competitive: { title: 'Competitive Landscape', sub: 'Peers — 3 views' },
   data: { title: 'Financial Data', sub: 'Raw · Source · Audit Trail' },
   filings: { title: 'Filings & XBRL', sub: '10-K / 10-Q · 8-K Events · XBRL Facts' },
@@ -89,7 +97,7 @@ const EN: Record<ChapterId, Omit<ChapterLabel, 'num'>> = {
 
 export function chapterNum(id: ChapterId): string {
   const idx = CHAPTER_ORDER.indexOf(id)
-  // Display 01-14 (1-indexed); 0-based is a developer convention not appropriate for users.
+  // Display 01-15 (1-indexed); 0-based is a developer convention not appropriate for users.
   return String(idx + 1).padStart(2, '0')
 }
 

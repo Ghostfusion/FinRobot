@@ -1,4 +1,4 @@
-// Sticky top toolbar for the 14-chapter research report view.
+// Sticky top toolbar for the 15-chapter research report view.
 //
 // Single-row, Finder-style (Spacedrive-inspired): one ← back arrow that returns
 // to wherever the user came from, the ticker label, a quote strip with the

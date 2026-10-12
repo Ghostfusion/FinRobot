@@ -313,6 +313,14 @@ msgid "report.leftRail.spotLabel"
 msgstr "spot"
 
 #. js-lingui-explicit-id
+msgid "report.leftRail.lastSession"
+msgstr "last session"
+
+#. js-lingui-explicit-id
+msgid "report.leftRail.sessionChangeTitle"
+msgstr "{date} close vs the prior close — quote currency, not a live quote"
+
+#. js-lingui-explicit-id
 msgid "report.computeWarnings"
 msgstr "COMPUTE WARNINGS"
 

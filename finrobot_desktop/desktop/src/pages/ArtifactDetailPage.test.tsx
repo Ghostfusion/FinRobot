@@ -141,7 +141,7 @@ describe('ArtifactDetailPage ticker canonicalization (BUG-014)', () => {
   })
 })
 
-// BUG-20260602-039: only equity_research gets the 14-chapter shell. A dcf (or
+// BUG-20260602-039: only equity_research gets the 15-chapter shell. A dcf (or
 // any other) artifact must render the compact viewer — NOT the empty equity
 // shell with its TOC / right-rail (Version Timeline) / scroll-spy.
 describe('ArtifactDetailPage type branch (BUG-039)', () => {
@@ -154,7 +154,7 @@ describe('ArtifactDetailPage type branch (BUG-039)', () => {
     detail.isError = false
   })
 
-  it('renders the compact viewer (inputs + result) for a dcf artifact, not the 14-chapter shell', () => {
+  it('renders the compact viewer (inputs + result) for a dcf artifact, not the 15-chapter shell', () => {
     params.ticker = 'AAPL'
     detail.data = {
       id: 'art-aapl-dcf',
@@ -184,7 +184,7 @@ describe('ArtifactDetailPage type branch (BUG-039)', () => {
     // Audit trail surfaced.
     expect(screen.getByText('pipeline:dcf')).toBeTruthy()
 
-    // The 14-chapter equity shell must be ABSENT — neither the chapter body nor
+    // The 15-chapter equity shell must be ABSENT — neither the chapter body nor
     // the left-rail chrome mounts for a dcf artifact (the left rail is the only
     // shell sentinel that exists post-redesign; the old TOC / right-rail mocks
     // were removed when those components were merged into ReportLeftRail).
@@ -192,7 +192,7 @@ describe('ArtifactDetailPage type branch (BUG-039)', () => {
     expect(screen.queryByTestId('mock-left-rail')).toBeNull()
   })
 
-  it('still renders the 14-chapter shell for equity_research', () => {
+  it('still renders the 15-chapter shell for equity_research', () => {
     params.ticker = 'AAPL'
     detail.data = {
       id: 'art-aapl-eq',

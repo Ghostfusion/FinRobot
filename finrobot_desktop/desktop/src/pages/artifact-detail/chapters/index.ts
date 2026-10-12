@@ -10,6 +10,7 @@ export { ChapterNews } from './ChapterNews'
 export { ChapterSensitivity, SensitivityBody } from './ChapterSensitivity'
 export { ChapterCatalysts } from './ChapterCatalysts'
 export { ChapterTechnical } from './ChapterTechnical'
+export { ChapterCreditRisk } from './ChapterCreditRisk'
 export { ChapterCompetitive, CompetitiveBody } from './ChapterCompetitive'
 // Standalone tool-page bodies — reuse the report's chapter primitives without the
 // numbered <Chapter> chrome (rendered by CompactArtifactViewer under its own header).
@@ -31,6 +32,8 @@ export type {
   SegmentOverviewShape,
   SegmentShareShape,
   ForwardEstimatesShape,
+  CreditRiskShape,
+  PriceSessionShape,
   CatalystAnalysisShape,
   CatalystEventShape,
   PeerCompsShape,

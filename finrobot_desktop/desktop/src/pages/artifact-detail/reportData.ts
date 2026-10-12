@@ -1,5 +1,5 @@
 // Shared derivation: turn a raw artifact + version timeline into the typed
-// shapes the 14 chapters consume. Extracted from ArtifactDetailPage so the
+// shapes the 15 chapters consume. Extracted from ArtifactDetailPage so the
 // in-app report (ArtifactDetailPage) and the standalone HTML export (the viewer
 // bundle in src/export/) derive chapter data identically — one source of truth.
 
@@ -8,11 +8,13 @@ import type { ArtifactSummaryV5 } from '../../types/v5'
 import type {
   ArtifactStructured,
   CatalystAnalysisShape,
+  CreditRiskShape,
   DcfShape,
   NumericAuditShape,
   ForwardEstimatesShape,
   OwnershipGovernanceShape,
   PeerCompsShape,
+  PriceSessionShape,
   SecFilingsShape,
   TechnicalAnalysisShape,
   ThesisShape,
@@ -83,6 +85,12 @@ export interface DerivedReportData {
   segmentOverview: SegmentOverviewShape | null
   catalysts: CatalystAnalysisShape | null
   technical: TechnicalAnalysisShape | null
+  // Structural (Merton/KMV) credit risk — the DEBT-leg view of the same capital
+  // structure the valuation prices from the equity side. null on legacy artifacts
+  // (written before the step existed) and for issuers the model cannot serve, in
+  // which case the payload's own `state` carries the reason and the chapter
+  // renders its gap note.
+  creditRisk: CreditRiskShape | null
   ownership: OwnershipGovernanceShape | null
   // Frozen multi-year trend series (revenue/margin/cash-flow/EPS) the financial
   // chapter charts render from — persisted into the artifact at generation, so
@@ -101,6 +109,10 @@ export interface DerivedReportData {
   snapshot52wLow: number | null
   /** When the underlying market data was fetched — the report's "as of" stamp. */
   snapshotAsOf: string | null
+  /** Frozen prior-close → last-close delta, in the QUOTE currency. null when the
+   *  run had fewer than 2 price bars (no session to diff) — which is why the rail
+   *  renders it only when present, never as a 0.00 move. */
+  priceSession: PriceSessionShape | null
   /** True when the point target was withheld BECAUSE the price sits inside the
    *  fair-value range (range spans market) → a confident HOLD / "Fairly Valued",
    *  NOT a failed valuation. Distinct from a genuine withhold (M&A / single method). */
@@ -335,6 +347,8 @@ export function deriveReportData(
   const historicalMetrics = (structured.historical_metrics as HistoricalMetrics | undefined) ?? null
   const secFilings = (structured.sec_filings as SecFilingsShape | undefined) ?? null
   const xbrlFacts = (structured.xbrl_facts_snapshot as XbrlFactsSnapshotShape | undefined) ?? null
+  const creditRisk = (structured.credit_risk as CreditRiskShape | undefined) ?? null
+  const priceSession = (structured.price_session as PriceSessionShape | undefined) ?? null
 
   // Frozen snapshot quote — the ONE price/beta/52w the whole report renders, so
   // no surface re-fetches live and contradicts the cover. raw_data.market is the
@@ -409,6 +423,7 @@ export function deriveReportData(
     segmentOverview,
     catalysts,
     technical,
+    creditRisk,
     ownership,
     numericAudit,
     secFilings,
@@ -419,6 +434,7 @@ export function deriveReportData(
     snapshot52wHigh,
     snapshot52wLow,
     snapshotAsOf,
+    priceSession,
     fairlyValued,
     createdAt,
     computeVersionStr,
