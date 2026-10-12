@@ -1893,3 +1893,89 @@ def test_store_output_dedups_warnings_across_retries():
     _P._store_output("s", out, {}, {}, run_warnings)
     _P._store_output("s", out, {}, {}, run_warnings)
     assert run_warnings == ["w1", "w2"]
+
+
+_CUT = "The company's operating margin expanded to twenty four point three percent,"
+
+
+def test_store_output_marks_a_truncated_text_and_warns():
+    """A section cut at max_tokens is otherwise indistinguishable from a complete one,
+    so the stored text carries a visible marker and the run carries a warning naming
+    the step that produced it."""
+    from finrobot.engine.compute.operators.narrative_integrity import TRUNCATION_MARKER
+    from finrobot.engine.pipelines.base import Pipeline as _P
+
+    results: dict[str, str] = {}
+    run_warnings: list[str] = []
+    _P._store_output("thesis", StepOutput(text=_CUT), results, {}, run_warnings)
+    assert TRUNCATION_MARKER in results["thesis"]
+    assert len(run_warnings) == 1
+    assert "thesis" in run_warnings[0]
+
+
+def test_store_output_leaves_a_complete_text_alone():
+    """A false marker is its own defect — a complete section must pass untouched."""
+    from finrobot.engine.pipelines.base import Pipeline as _P
+
+    complete = "Revenue grew 12% year over year, driven by cloud demand."
+    results: dict[str, str] = {}
+    run_warnings: list[str] = []
+    _P._store_output("s", StepOutput(text=complete), results, {}, run_warnings)
+    assert results["s"] == complete
+    assert run_warnings == []
+
+
+def test_store_output_warns_on_a_truncated_structured_field_without_rewriting_it():
+    """The long prose lives in the structured payload (``ThesisResult.narrative``),
+    not in the one-line ``text``. A cut field is *named* in a warning and left byte
+    intact: the stored model is the model's own output, so rewriting it would be
+    editing evidence."""
+    from pydantic import BaseModel
+
+    from finrobot.engine.pipelines.base import Pipeline as _P
+
+    class _Probe(BaseModel):
+        narrative: str
+        risks: list[str]
+
+    probe = _Probe(narrative=_CUT, risks=["Supply chain normalised."])
+    structured: dict[str, object] = {}
+    run_warnings: list[str] = []
+    _P._store_output(
+        "thesis",
+        StepOutput(text="Recommendation: BUY.", structured=probe),
+        {},
+        structured,
+        run_warnings,
+    )
+    assert structured["thesis"] is probe
+    assert probe.narrative == _CUT
+    assert len(run_warnings) == 1
+    assert "thesis.narrative" in run_warnings[0]
+
+
+def test_store_output_marks_a_truncated_raw_string():
+    """The string branch is the same choke point and needs the same guard."""
+    from finrobot.engine.compute.operators.narrative_integrity import TRUNCATION_MARKER
+    from finrobot.engine.pipelines.base import Pipeline as _P
+
+    results: dict[str, str] = {}
+    run_warnings: list[str] = []
+    _P._store_output("s", f"{_CUT} and", results, {}, run_warnings)
+    assert TRUNCATION_MARKER in results["s"]
+    assert len(run_warnings) == 1
+
+
+def test_truncation_marker_and_warning_do_not_stack_across_retries():
+    """A retried step re-emits the same truncated text; the artifact must not gain a
+    second marker or a duplicate warning."""
+    from finrobot.engine.compute.operators.narrative_integrity import TRUNCATION_MARKER
+    from finrobot.engine.pipelines.base import Pipeline as _P
+
+    out = StepOutput(text=_CUT)
+    results: dict[str, str] = {}
+    run_warnings: list[str] = []
+    _P._store_output("s", out, results, {}, run_warnings)
+    _P._store_output("s", out, results, {}, run_warnings)
+    assert results["s"].count(TRUNCATION_MARKER) == 1
+    assert len(run_warnings) == 1

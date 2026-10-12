@@ -171,6 +171,25 @@ Only steps 2, 7, 8 (plus LLM peer *selection*) involve the LLM; steps 4/5/6 igno
 - **Auth:** capability middleware no-ops when `FINROBOT_CAPABILITY_TOKEN` is unset (browser/dev/test);
   enforced otherwise; `/health` and OPTIONS are exempt.
 - **Config env red-line:** only `config.py` / `secret_store.py` may read `os.environ`.
+- **Artifact seal:** `artifact/seal.py` hashes the payload minus the seal, minus the two
+  `meta` lifecycle mirrors the store re-derives from its columns, and minus the derived
+  `llm_narrative` projection. `SqliteArtifactStore.save` seals as its **last** mutation;
+  `get` verifies and only *warns* on a mismatch (`no_seal` = legacy, never inferred valid).
+- **Audit chain:** every persisted artifact appends one row to the hash-chained ledger in
+  `finrobot/audit_chain.py`, carrying the artifact's own seal hashes. `finrobot verify-audit`
+  checks it and exits 1 on a broken chain.
+- **Point-in-time:** `engine/data/asof.py` clamps dated reads to the run's as-of (a no-op
+  when unset, so live runs are unchanged); `engine/data/pit_store.py` makes a snapshot dated
+  after the query **invisible**, and an unmeasured symbol is `unknown`, never assumed listed.
+- **Numeric standing:** `engine/models/claim_status.py` names what `report_drift` found and
+  `claim_anchor.anchor_claim_status` maps it; the status is recorded on every narrative
+  artifact. A weak or unmeasured section is `inconclusive`/`unknown` — never `grounded`.
+- **One producer per metric:** `engine/models/metric_authority.py` declares the producer of
+  record for each published number. `resolve_metric` never promotes a fallback to canonical,
+  never returns `0` for an absent value, and publishes conflicts instead of averaging them.
+- **Truncation marker:** `engine/compute/operators/narrative_integrity.py` marks a section the
+  model cut at `max_tokens` in the stored text and warns on the run; a cut *structured* field
+  is named in a warning but never rewritten (the model's output is evidence).
 
 **Implicit (follow the pattern):**
 
@@ -193,6 +212,14 @@ a bare `uv sync` removes installed extras; `run_semaphore=None` means "no conten
 | A **pipeline's steps/order** | `engine/pipelines/<x>.py` + `registry.py` | CLI, REST, chat, SDK | registry is the single source; `deterministic`/`critical` flags | pipeline unit tests + `tests/integration/` |
 | **Step execution/retry/degradation** | `engine/pipelines/runner.py` | every pipeline | retry policy, degrade-vs-abort, single persist boundary | runner/validators tests |
 | The **output contract** | `artifact/contract.py` | persist boundary only | no compute/data/pipelines imports; calibrated constants; never raises | `tests/artifact/` |
+| **Artifact integrity / identity** | `artifact/seal.py` | `SqliteArtifactStore.save`/`get` | the seal is the LAST mutation; read-time-derived fields stay out of the hash | `tests/unit/test_artifact_seal.py` |
+| **Who owns a number** | `engine/models/metric_authority.py` | `operators/audit/ev_bridge.py` cites the owner | one producer per metric; a fallback is never canonical | `tests/unit/test_metric_authority.py` |
+| **A report's numeric standing** | `engine/models/claim_status.py` + `operators/audit/claim_anchor.py` | `artifact/builders.py::_report_drift_flag` | closed vocabulary; `unknown` never reads as `grounded` | `tests/unit/test_claim_status.py` |
+| **A section cut at `max_tokens`** | `engine/compute/operators/narrative_integrity.py` | `runner._store_output` (the single choke point) | the marker is visible; a structured field is named, never rewritten | `tests/unit/test_narrative_integrity.py` |
+| **Point-in-time reads** | `engine/data/asof.py`, `engine/data/pit_store.py` | `runner.execute` publishes, `_record_run_evidence` writes, `finrobot pit show` reads | later-dated rows invisible; `unknown` ≠ listed | `tests/unit/test_pit_store.py` |
+| **The audit ledger** | `finrobot/audit_chain.py` | `runner._record_run_evidence`, `finrobot verify-audit` | the link is inside the hash; the append is non-fatal | `tests/unit/test_audit_chain.py` |
+| **Accuracy calibration** | `engine/aggregations/calibration.py` | `routes/dashboard.py` | event-count floor — no rate below it; lift vs the overall base rate | `tests/unit/test_calibration.py` |
+| **A run's identity / lineage** | `run_store.py` (`input_fingerprint`, `verify_lineage`) | `routes/runs.py` re-run path (409 on mismatch) | a legacy NULL is `unavailable`, never `match` | `tests/unit/test_run_fingerprint.py` |
 | A **data provider** | `engine/data/providers/*`, `factory.py` | chain order, health breaker, cache slots | `DataProvider` ABC, provenance, canonical normalization | provider tests + `tests/audit/test_no_direct_yfinance_imports.py` |
 | A **config setting / secret** | `config.py`, `secret_store.py` | server hydration, settings route | env red-line; secrets never serialized | `tests/unit/test_auth_capability.py`, settings route tests |
 | A **REST endpoint** | `routes/*.py`, `server.py` | frontend fetch client | router prefixes; SSE contract; auth middleware | `tests/routes/*` |
@@ -221,6 +248,8 @@ pytest -m integration               # live-network/LLM tests
 ruff check . && ruff format --check . && mypy finrobot   # strict mypy
 ./dev.sh                            # browser smoke at http://localhost:5173
 finrobot research AAPL              # CLI end-to-end
+finrobot verify-audit               # audit ledger hash chain (exit 1 when broken)
+finrobot pit show AAPL --as-of 2026-10-01   # what a run knew on that date
 ```
 
 **V1 (`finrobot_equity/`):** `pytest finrobot_equity/core/tests/` (only `test_retail_sentiment_client.py`
@@ -242,11 +271,12 @@ propagate these claims.
 
 | Claim | Status | Reality |
 |---|---|---|
-| V2 "9 agents, each defined by a markdown instruction file" | **misleading** | Only **6** `Agent` objects are constructed (1 lead + 5 pipeline). The `bull/bear/judge` markdown exist but are **never loaded**; there is no debate router/endpoint. |
-| `finrobot research` runs "5 steps" | **outdated** | It is **8** steps (`equity_research.py`). |
+| V2 "9 agents, each defined by a markdown instruction file" | **fixed 2026-10-12** | `finrobot_desktop/README.md` now states **6** constructed agents (1 lead + 5 pipeline) and marks `bull/bear/judge` as deliberately unwired assets. `tests/audit/test_llm_surface_wiring.py` fails on a new orphan prompt, and the exemption list must stay recorded in this section. |
+| `finrobot research` runs "5 steps" | **outdated** | It is **9** steps (`equity_research.py`): data_collection · catalyst_analysis · peer_analysis · financial_modeling · ownership_governance_analysis · technical_analysis · credit_risk · thesis · report. The desktop's step mirror is now pinned to this list by `tests/audit/test_llm_surface_wiring.py`. |
 | `comps` is a "6-step" pipeline | **false** | 3 steps. |
 | Lead agent lives in "factory.py, orchestrator.py" | **imprecise** | Only `orchestrator.py`; `factory.py` builds sub-agents only. |
-| "13-chapter artifact" produced by the engine | **outdated framing** | Python emits a data snapshot; the 13 chapters are rendered **client-side** (`ReportChapters.tsx`), and README order differs from code order. |
+| "13-chapter artifact" produced by the engine | **outdated framing** | Python emits a data snapshot; the **15** chapters are rendered **client-side** (`ReportChapters.tsx`, `CHAPTER_ORDER`), and README order differs from code order. |
+| `/api/dashboard/*` (`hit-rate`, `calibration`) | **unconsumed in this repo** | Nothing under `desktop/src` fetches them — only the generated `api/schema.d.ts` names them. Their real consumer is external or planned; coverage today is `tests/routes/test_dashboard_landing.py` + `tests/unit/test_calibration.py`. Decide the consumer before growing the family further. |
 | "7 providers behind failover" incl. FX | **imprecise** | Only **6** are `DataProvider` chain members; `fx.py` is a standalone helper; 4 of 6 are key/identity-conditional. |
 | V1 "8 section writers … coordinated by agent_manager.py" | **false for the running system** | `equity_agents/` + `agent_manager.py` are **dead code**; the live path is `text_generator_agents.py`. |
 | V0 "`test_module.py` is a data-source smoke test" | **false** | It is a backtrader `TestStrategy` with no assertions. |

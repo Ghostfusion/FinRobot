@@ -26,7 +26,11 @@ this audit.
 
 from __future__ import annotations
 
+import ast
+import inspect
 import re
+import textwrap
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -42,6 +46,33 @@ from finrobot.engine.models.financial import (
     MarketData,
     ValuationMetrics,
 )
+
+
+def _called_names(fn: Callable[..., object]) -> set[str]:
+    """Every function/method name *called* inside ``fn``'s own body, read from its AST.
+
+    Call-site analysis rather than a substring match: searching the rendered source for
+    the normalizer's name is satisfied by a mention in a comment, a docstring or a
+    string literal even when the code never calls it, and it breaks on a rename that
+    preserves behaviour. Parsing the tree keeps the gate — the call must exist — without
+    pinning prose a refactor may legitimately rewrite. Same technique as
+    ``test_pipeline_deterministic_flags.py`` uses to locate LLM call sites.
+    """
+    try:
+        tree = ast.parse(textwrap.dedent(inspect.getsource(fn)))
+    except (OSError, TypeError, SyntaxError):  # pragma: no cover - introspection failure
+        return set()
+    names: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        callee = node.func
+        if isinstance(callee, ast.Name):
+            names.add(callee.id)
+        elif isinstance(callee, ast.Attribute):
+            names.add(callee.attr)
+    return names
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 UI_SRC = REPO_ROOT / "ui" / "src"
@@ -456,8 +487,6 @@ def test_all_standalone_valuation_seeders_fx_normalize_before_seeding():
     target. (equity_research's _execute_financial_modeling is covered by its own
     BUG-073 currency tests.)
     """
-    import inspect
-
     from finrobot.engine.pipelines import dcf, ddm, ic_memo, lbo
 
     cases = [
@@ -467,11 +496,11 @@ def test_all_standalone_valuation_seeders_fx_normalize_before_seeding():
         (ic_memo._execute_ic_financials, "normalize_financials_to_usd"),
     ]
     for fn, token in cases:
-        body = inspect.getsource(fn)
-        assert token in body, (
-            f"{fn.__module__}.{fn.__name__} must FX-normalize the snapshot before "
-            f"seeding (missing '{token}') — a foreign issuer would otherwise mix "
-            f"reporting-currency model inputs with a USD quote (BUG-073 family)."
+        called = _called_names(fn)
+        assert token in called, (
+            f"{fn.__module__}.{fn.__name__} must CALL {token} before seeding — a "
+            f"foreign issuer would otherwise mix reporting-currency model inputs with "
+            f"a USD quote (BUG-073 family). Calls found: {sorted(called)}"
         )
 
 

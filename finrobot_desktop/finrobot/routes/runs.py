@@ -36,7 +36,7 @@ from finrobot.events import (
     StepStarted,
 )
 from finrobot.obs import bind_run
-from finrobot.run_store import TERMINAL_RUN_STATUSES, RunRecord, RunStore
+from finrobot.run_store import TERMINAL_RUN_STATUSES, LineageVerdict, RunRecord, RunStore
 from finrobot.warning_text import safe_error_text
 
 if TYPE_CHECKING:
@@ -156,6 +156,28 @@ class RunDetail(BaseModel):
     error: str | None = None
 
 
+async def _source_lineage_verdict(
+    store: RunStore, source_artifact_id: str
+) -> LineageVerdict | None:
+    """Lineage verdict of the run that produced ``source_artifact_id``, or None.
+
+    A re-run inherits the version lineage of the report it was triggered from:
+    the new artifact's ``meta.parent_artifact_id`` points at the source artifact
+    and the desktop's diff view compares the two versions outright. That only
+    means anything if the source run's recorded input fingerprint still describes
+    its inputs — otherwise the run gets attributed to a report whose inputs have
+    since changed and the diff pits two different worlds against each other.
+
+    Returns None whenever the source cannot be resolved (no run_artifacts link,
+    artifact produced by a legacy row, deleted artifact). A lookup miss is NOT a
+    mismatch: we refuse only on a positive, recomputed divergence.
+    """
+    source_run = await store.find_run_by_artifact_id(source_artifact_id)
+    if source_run is None:
+        return None
+    return await store.verify_lineage(source_run.run_id)
+
+
 async def spawn_run(
     request: Request,
     pipeline_type: str,
@@ -180,6 +202,14 @@ async def spawn_run(
     ValueError the batch handler catches) propagates so a misconfigured box
     fails the whole Coverage batch instead of silently skipping every ticker
     (BUG-20260602-056).
+
+    Raises ``HTTPException(409)`` when the run names a ``source_artifact_id``
+    whose producing run no longer fingerprints to the digest recorded at its
+    creation (``LineageVerdict.status == "mismatch"``) — the new report would be
+    attributed to a lineage whose inputs have since changed. Also gated before
+    ``create_run``, so a refused re-run leaves no orphan row behind. A legacy
+    source with no digest recorded, or one whose artifact cannot be resolved, is
+    an honest unknown and proceeds.
     """
     startup_error = getattr(request.app.state, "startup_error", None)
     if startup_error:
@@ -220,6 +250,31 @@ async def spawn_run(
     norm = _normalise_ticker(ticker)
 
     store: RunStore = request.app.state.run_store
+    # Stale-lineage refusal: a re-run names the source artifact it continues, and
+    # that lineage is what the desktop's version-diff draws on. If the run that
+    # produced the source report no longer fingerprints to the digest recorded
+    # when it was created, the source's inputs changed underneath us — attributing
+    # this new report to it would show a diff comparing two different worlds.
+    # Refuse with 409 and BOTH digests so the caller can see what drifted. A NULL
+    # recorded digest (legacy row) is an honest unknown, and an unreachable source
+    # is a lookup miss — neither is a refusal, so both proceed.
+    if source_artifact_id is not None:
+        verdict = await _source_lineage_verdict(store, source_artifact_id)
+        if verdict is not None and verdict.status == "mismatch":
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "lineage_mismatch",
+                    "message": (
+                        "Source report lineage has changed since it was recorded — "
+                        "re-run from a fresh report instead of continuing this chain."
+                    ),
+                    "source_artifact_id": source_artifact_id,
+                    "recorded": verdict.recorded,
+                    "current": verdict.current,
+                    "reason": verdict.reason,
+                },
+            )
     record = await store.create_run(
         pipeline_type,
         norm,

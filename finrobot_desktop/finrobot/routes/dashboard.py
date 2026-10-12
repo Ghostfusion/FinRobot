@@ -83,6 +83,46 @@ class HitRateOverview(BaseModel):
     """The cap applied to the underlying summary scan (compute-cost bound)."""
 
 
+class CalibrationBucket(BaseModel):
+    """One confidence-tier (or overall) calibration snapshot."""
+
+    n_total: int
+    n_closed: int
+    n_hit: int
+    hit_rate: float | None
+    """null when the closed sample is below the floor — never 0.0, never 0.5."""
+    avg_excess_return: float | None
+    """null when no closed row carried a realised return (unpriceable / no
+    benchmark leg)."""
+    lift_vs_overall: float | None
+    """hit_rate minus the overall hit rate (base-rate correction); null unless
+    both this bucket and the overall row are measured."""
+    status: str  # "measured" | "insufficient"
+
+
+class CalibrationOverviewResponse(BaseModel):
+    """Response for /api/dashboard/calibration.
+
+    Answers the question the hit-rate banner cannot: does the engine's own
+    stated confidence predict its outcomes? `by_confidence` always carries the
+    four tiers plus "unknown"; `status` is the whole table's state (it mirrors
+    the overall row, since with no measured base rate no lift is readable).
+    """
+
+    window: str  # "30d" | "90d" | "all"
+    status: str  # "measured" | "insufficient"
+    min_closed: int
+    """Closed-event floor a bucket must clear to be reported as measured."""
+    overall: CalibrationBucket
+    by_confidence: dict[str, CalibrationBucket]
+    generated_at: datetime
+    is_sampled: bool = False
+    """True when the store exceeded the sample cap, so buckets cover only the
+    latest ``sample_size`` artifacts rather than the full track record."""
+    sample_size: int = _HIT_RATE_SAMPLE_CAP
+    """The cap applied to the underlying summary scan (compute-cost bound)."""
+
+
 class RecentTickerRun(BaseModel):
     """One clickable row inside a ticker card."""
 
@@ -123,6 +163,9 @@ class RecentResearchResponse(BaseModel):
 # Simple TTL caches — landing page makes both calls on cold load; one minute
 # is short enough to feel live and long enough to absorb a refresh storm.
 _HIT_RATE_CACHE: dict[str, tuple[float, HitRateOverview]] = {}
+# Keyed by window only (3 possible keys), so unlike _HIT_RATE_CACHE it needs no
+# cap: the key space is bounded by construction, not by caller-supplied input.
+_CALIBRATION_CACHE: dict[str, tuple[float, CalibrationOverviewResponse]] = {}
 _RECENT_CACHE: dict[tuple[int, bool], tuple[float, RecentResearchResponse]] = {}
 _LANDING_CACHE_TTL_S = 60.0
 
@@ -162,6 +205,7 @@ def invalidate_dashboard_caches() -> None:
     NOT route through an explicit invalidation (e.g. background stale-archive).
     """
     _HIT_RATE_CACHE.clear()
+    _CALIBRATION_CACHE.clear()
     _RECENT_CACHE.clear()
 
 
@@ -249,6 +293,63 @@ async def hit_rate(
         generated_at=stats.generated_at,
     )
     _hit_rate_cache_put(cache_key, (now_ts, overview))
+    return overview
+
+
+@router.get("/calibration", response_model=CalibrationOverviewResponse)
+async def calibration(
+    request: Request,
+    window: str = "all",
+) -> CalibrationOverviewResponse:
+    """Confidence calibration — does the engine's stated confidence predict hits?
+
+    `window`: "30d" | "90d" | "all" (default "all"), the same cut `/hit-rate`
+    applies, evaluated here against `ArtifactSummary.created_at` (the
+    aggregation itself is windowless: a row carries no timestamp).
+
+    Rows are assembled through the same path as `/hit-rate` — one
+    `list_by_ticker` page plus one cached quote batch, converted to USD per the
+    quote's own currency — and the confidence tier is read from the artifact
+    payload's valuation synthesis. A row that cannot be priced keeps
+    `signal=None`: it still counts toward `n_total`, never toward `n_closed`, and
+    a quote failure never raises out of this endpoint (the buckets degrade to
+    `status="insufficient"` rather than 500-ing the landing banner).
+
+    `avg_excess_return` is reported as null until a benchmark feed is wired: the
+    S&P 500 leg at each artifact's entry date is not stored, and a fabricated 0%
+    market leg would silently relabel raw return as excess return.
+
+    Like `/hit-rate`, this never 500s on sparse data — an empty store comes back
+    200 with `status="insufficient"` and null rates, never an error.
+    """
+    if window not in ("30d", "90d", "all"):
+        raise HTTPException(status_code=400, detail="window must be 30d|90d|all")
+
+    now_ts = time.time()
+    cached = _CALIBRATION_CACHE.get(window)
+    if cached and now_ts - cached[0] < _LANDING_CACHE_TTL_S:
+        return cached[1]
+
+    deps = getattr(request.app.state, "deps", None)
+    if deps is None or deps.artifact_store is None:
+        raise HTTPException(status_code=503, detail="Backend deps not initialized")
+
+    from finrobot.engine.aggregations.calibration import compute_calibration
+
+    rows, is_sampled = await _collect_calibration_rows(deps.artifact_store, deps.data_layer, window)
+    stats = compute_calibration(rows)
+
+    overview = CalibrationOverviewResponse(
+        window=window,
+        status=stats.status,
+        min_closed=stats.min_closed,
+        overall=_calibration_bucket(stats.overall),
+        by_confidence={k: _calibration_bucket(v) for k, v in stats.by_confidence.items()},
+        generated_at=datetime.now(tz=timezone.utc),
+        is_sampled=is_sampled,
+        sample_size=_HIT_RATE_SAMPLE_CAP,
+    )
+    _CALIBRATION_CACHE[window] = (now_ts, overview)
     return overview
 
 
@@ -408,18 +509,17 @@ async def recent_research(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-async def _collect_signal_inputs(
+async def _priced_summaries(
     store: Any, data_layer: Any, tickers: set[str] | None = None
-) -> list[Any]:
-    """Walk artifact summaries → ArtifactSignalInput list (with live prices).
+) -> tuple[list[Any], dict[str, float | None]]:
+    """List in-scope artifact summaries + resolve one USD price per ticker.
 
-    Uses ``ArtifactSummary.verdict`` directly — does NOT reload the full
-    artifact. The summary column is populated at save time
-    (see ``SqliteArtifactStore.save`` → ``extract_verdict``), so for
-    N artifacts the route does 1 ``list_by_ticker`` query + 1 cached
-    quote batch instead of the legacy 1 + N JSON file reads.
+    The shared data-assembly path behind /hit-rate and /calibration: both
+    endpoints describe the same artifacts, so they must never fan out twice or
+    disagree about a ticker's price. One ``list_by_ticker`` page (capped) plus
+    one cached quote batch; quote failures degrade to None prices rather than
+    raising (the callers turn that into honest "insufficient" buckets).
     """
-    from finrobot.engine.aggregations.hit_rate_overview import ArtifactSignalInput
     from finrobot.engine.data.quote_batch import fetch_quotes_batch_cached
 
     if tickers is not None:
@@ -436,7 +536,7 @@ async def _collect_signal_inputs(
             ticker=None, include_archived=False, limit=_HIT_RATE_SAMPLE_CAP
         )
     if not summaries:
-        return []
+        return [], {}
 
     quote_tickers = sorted({s.ticker for s in summaries if s.ticker})
     try:
@@ -445,7 +545,7 @@ async def _collect_signal_inputs(
         # Without live prices the aggregator can't classify signals so
         # buckets degrade to null hit-rate — UI shows "样本不足" which is
         # far better than a 500 black-out of the entire landing banner.
-        logger.exception("Quote batch failed for hit-rate overview")
+        logger.exception("Quote batch failed for dashboard aggregation")
         quotes = dict.fromkeys(quote_tickers)
 
     # Each quote carries its own currency (Quote.price + Quote.currency), so
@@ -453,7 +553,23 @@ async def _collect_signal_inputs(
     # For a foreign LOCAL listing (2330.TW, quote=TWD) the raw price would otherwise
     # be compared against a USD target → mis-bucketed verdicts (same cross-currency
     # hole fixed in coverage + valuation). USD / pure-ADR → strict no-op.
-    usd_by_ticker = await _signal_prices_usd(quotes, data_layer)
+    return summaries, await _signal_prices_usd(quotes, data_layer)
+
+
+async def _collect_signal_inputs(
+    store: Any, data_layer: Any, tickers: set[str] | None = None
+) -> list[Any]:
+    """Walk artifact summaries → ArtifactSignalInput list (with live prices).
+
+    Uses ``ArtifactSummary.verdict`` directly — does NOT reload the full
+    artifact. The summary column is populated at save time
+    (see ``SqliteArtifactStore.save`` → ``extract_verdict``), so for
+    N artifacts the route does 1 ``list_by_ticker`` query + 1 cached
+    quote batch instead of the legacy 1 + N JSON file reads.
+    """
+    from finrobot.engine.aggregations.hit_rate_overview import ArtifactSignalInput
+
+    summaries, usd_by_ticker = await _priced_summaries(store, data_layer, tickers)
     return [
         ArtifactSignalInput(
             entry_price=s.entry_price,
@@ -465,6 +581,101 @@ async def _collect_signal_inputs(
         )
         for s in summaries
     ]
+
+
+async def _collect_calibration_rows(
+    store: Any, data_layer: Any, window: str
+) -> tuple[list[Any], bool]:
+    """Assemble one CalibrationRow per in-window artifact summary.
+
+    Reuses `_priced_summaries` (the /hit-rate fetch path) and the sibling
+    aggregation's `_signal_for` classifier, so the two endpoints can never
+    disagree about what a row's price or signal is. Only the confidence tier is
+    extra work: it lives in the artifact payload (the summary has no column for
+    it), so this reads one payload per in-window row — bounded by the same
+    sample cap and cached for `_LANDING_CACHE_TTL_S` by the caller.
+
+    The window cut happens here because the aggregation is windowless (a row
+    carries no timestamp). A summary whose ticker cannot be priced keeps
+    `signal=None` — the row still counts toward `n_total`, never toward
+    `n_closed`, and no quote failure escapes this function.
+    """
+    from finrobot.engine.aggregations.calibration import CalibrationRow
+    from finrobot.engine.aggregations.hit_rate_overview import (
+        _WINDOW_DAYS,
+        ArtifactSignalInput,
+        _ensure_tz,
+        _signal_for,
+    )
+
+    summaries, usd_by_ticker = await _priced_summaries(store, data_layer)
+
+    window_days = _WINDOW_DAYS[window]  # type: ignore[index]
+    clock = datetime.now(tz=timezone.utc)
+    cutoff = clock - timedelta(days=window_days) if window_days is not None else None
+    # Disclose sampling against the same population the buckets describe — the
+    # IN-window count — never the global all-time COUNT(*) (BUG-039).
+    scoped_windowed_count = await store.count(include_archived=False, created_after=cutoff)
+    is_sampled = scoped_windowed_count > _HIT_RATE_SAMPLE_CAP
+
+    rows: list[CalibrationRow] = []
+    for s in summaries:
+        if cutoff is not None and _ensure_tz(s.created_at) < cutoff:
+            continue
+        price = usd_by_ticker.get(s.ticker) if s.ticker else None
+        rows.append(
+            CalibrationRow(
+                confidence=await _confidence_for(store, s.id),
+                verdict=s.verdict,
+                signal=_signal_for(
+                    ArtifactSignalInput(
+                        entry_price=s.entry_price,
+                        target_price=s.target_price,
+                        current_price=price,
+                        entry_date=s.created_at,
+                        target_date=s.target_date,
+                        verdict=s.verdict,
+                    ),
+                    clock,
+                ),
+                # No benchmark leg is stored (see the endpoint docstring), so a
+                # closed row carries no realised-return pair rather than a
+                # fabricated 0% market return.
+                closed_return=None,
+            )
+        )
+    return rows, is_sampled
+
+
+async def _confidence_for(store: Any, artifact_id: str) -> str | None:
+    """Read an artifact's valuation-synthesis confidence tier from its payload.
+
+    The summary projection has no confidence column, so this is the only source.
+    A missing payload / absent synthesis block / non-string value yields None,
+    which the aggregation buckets as "unknown" — never as a tier it merely
+    resembles.
+    """
+    artifact = await store.get(artifact_id)
+    if artifact is None:
+        return None
+    synthesis = artifact.outputs.structured.get("valuation_synthesis")
+    if not isinstance(synthesis, dict):
+        return None
+    value = synthesis.get("confidence")
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _calibration_bucket(stats: Any) -> CalibrationBucket:
+    """Map one aggregation bucket dataclass onto its response model."""
+    return CalibrationBucket(
+        n_total=stats.n_total,
+        n_closed=stats.n_closed,
+        n_hit=stats.n_hit,
+        hit_rate=stats.hit_rate,
+        avg_excess_return=stats.avg_excess_return,
+        lift_vs_overall=stats.lift_vs_overall,
+        status=stats.status,
+    )
 
 
 async def _signal_prices_usd(

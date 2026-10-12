@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal
@@ -49,7 +51,8 @@ CREATE TABLE IF NOT EXISTS runs (
     result_json   TEXT,
     error         TEXT,
     language      TEXT,
-    source_artifact_id TEXT
+    source_artifact_id TEXT,
+    input_fingerprint TEXT
 )
 """
 
@@ -60,6 +63,7 @@ CREATE TABLE IF NOT EXISTS runs (
 _RUN_COLUMN_MIGRATIONS = (
     ("language", "ALTER TABLE runs ADD COLUMN language TEXT"),
     ("source_artifact_id", "ALTER TABLE runs ADD COLUMN source_artifact_id TEXT"),
+    ("input_fingerprint", "ALTER TABLE runs ADD COLUMN input_fingerprint TEXT"),
 )
 
 _CREATE_RUN_EVENTS = """
@@ -99,8 +103,79 @@ _CREATE_INDEXES = [
 # with this tuple so positional decoding matches the row layout.
 _RUN_SELECT_COLUMNS = (
     "run_id, pipeline_type, ticker, status, created_at, completed_at, "
-    "duration_s, result_text, result_json, error, language, source_artifact_id"
+    "duration_s, result_text, result_json, error, language, source_artifact_id, "
+    "input_fingerprint"
 )
+
+
+def input_fingerprint(
+    *,
+    ticker: str,
+    pipeline_type: str,
+    language: str | None,
+    source_artifact_id: str | None,
+    source_decision_hash: str | None = None,
+) -> str:
+    """sha256 of the run's input set — a CONTENT fingerprint, never a timestamp.
+
+    Why this exists: a re-run (or a reattach after a desktop restart) inherits
+    the version lineage of the report it was triggered from — the new artifact's
+    ``meta.parent_artifact_id`` points at the source artifact and the desktop's
+    diff view compares the two. But the run row it is attributed to carries the
+    input set it was *born* with (ticker / pipeline / language / source artifact).
+    If that input set drifts — a migration rewrites a column, a row is re-stamped
+    out of band — the new report is silently attributed to a lineage it no longer
+    reflects, and the desktop renders a version-diff that compares two different
+    worlds as if they were gate-to-gate comparable. This digest is what
+    ``RunStore.verify_lineage`` re-derives to catch exactly that.
+
+    Deliberately a pure function of CONTENT: no wall-clock, no run id, no
+    ``created_at``. An unchanged input set fingerprints identically on every call
+    and on every machine, so "same inputs" and "same digest" are the same
+    statement — the moment a timestamp entered the payload the check would be
+    useless (every recomputation would "mismatch"). The JSON is canonicalised
+    (sorted keys, compact separators, UTF-8) so dict insertion order can never
+    move the digest.
+
+    ``source_decision_hash`` is the optional hash of the source artifact's
+    decision payload, for callers that can hash the content they re-run from; the
+    runs table has no column for it, so ``verify_lineage`` recomputes with the
+    default ``None`` (every stored digest is taken the same way).
+    """
+    payload = json.dumps(
+        {
+            "ticker": ticker,
+            "pipeline_type": pipeline_type,
+            "language": language,
+            "source_artifact_id": source_artifact_id,
+            "source_decision_hash": source_decision_hash,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True)
+class LineageVerdict:
+    """Whether a run's recorded input fingerprint still describes its inputs.
+
+    ``status`` is the whole point: ``"match"`` (the recorded digest equals the
+    one recomputed from the run's own stored fields), ``"mismatch"`` (they
+    diverge — the inputs changed after the digest was taken), or
+    ``"unavailable"`` (nothing to compare against: a legacy row whose column is
+    NULL, or no such run). ``unavailable`` is NEVER collapsed into ``"match"`` —
+    an honest unknown must not read as a clean bill of health, which is precisely
+    how a pre-fingerprint run would smuggle a stale lineage past a re-run gate.
+    ``recorded``/``current`` carry both digests so a caller can name what differs;
+    ``reason`` is the human-readable why.
+    """
+
+    status: Literal["match", "mismatch", "unavailable"]
+    recorded: str | None
+    current: str | None
+    reason: str | None = None
 
 
 class RunRecord(BaseModel):
@@ -130,6 +205,17 @@ class RunRecord(BaseModel):
             "Pipeline.execute(source_artifact_id=) and stamped onto the new "
             "artifact's meta.parent_artifact_id to build the version lineage "
             "the diff view follows. None for fresh runs / legacy rows."
+        ),
+    )
+    input_fingerprint: str | None = Field(
+        default=None,
+        description=(
+            "Digest of this run's input set (ticker/pipeline/language/source "
+            "artifact) stamped at creation by input_fingerprint(). "
+            "RunStore.verify_lineage re-derives it from these same stored fields "
+            "to prove the lineage a re-run inherits still describes these inputs. "
+            "None on legacy rows written before the column existed — that is "
+            "'unavailable', never a false 'match'."
         ),
     )
 
@@ -169,8 +255,9 @@ class RunStore:
                     await configure_connection(conn)
                     await conn.execute(_CREATE_RUNS)
                     # Column migrations BEFORE the CHECK rebuild: the rebuild
-                    # copies an explicit 12-column list, so a legacy table must
-                    # gain language/source_artifact_id first.
+                    # copies an explicit _RUN_SELECT_COLUMNS list, so a legacy
+                    # table must gain language/source_artifact_id/
+                    # input_fingerprint first.
                     await _apply_run_column_migrations(conn)
                     await _migrate_runs_status_check(conn)
                     await conn.execute(_CREATE_RUN_EVENTS)
@@ -197,24 +284,45 @@ class RunStore:
         try:
             run_id = f"run_{uuid.uuid4().hex[:12]}"
             created_at = _now()
+            norm_ticker = ticker.upper()
+            # Stamp the input digest at the ONE write point where a run row is
+            # born. Computed from the very values stored below (same casing
+            # included), so verify_lineage's re-derivation over the stored row
+            # is bit-identical whenever nothing altered the row afterwards.
+            fingerprint = input_fingerprint(
+                ticker=norm_ticker,
+                pipeline_type=pipeline_type,
+                language=language,
+                source_artifact_id=source_artifact_id,
+            )
             conn = await self._ensure_connection()
             await conn.execute(
                 """
                 INSERT INTO runs
-                    (run_id, pipeline_type, ticker, status, created_at, language, source_artifact_id)
-                VALUES (?, ?, ?, 'created', ?, ?, ?)
+                    (run_id, pipeline_type, ticker, status, created_at, language,
+                     source_artifact_id, input_fingerprint)
+                VALUES (?, ?, ?, 'created', ?, ?, ?, ?)
                 """,
-                (run_id, pipeline_type, ticker.upper(), created_at, language, source_artifact_id),
+                (
+                    run_id,
+                    pipeline_type,
+                    norm_ticker,
+                    created_at,
+                    language,
+                    source_artifact_id,
+                    fingerprint,
+                ),
             )
             await conn.commit()
             return RunRecord(
                 run_id=run_id,
                 pipeline_type=pipeline_type,
-                ticker=ticker.upper(),
+                ticker=norm_ticker,
                 status="created",
                 created_at=created_at,
                 language=language,
                 source_artifact_id=source_artifact_id,
+                input_fingerprint=fingerprint,
             )
         except aiosqlite.OperationalError:
             logger.exception("Failed to create run for %s/%s", pipeline_type, ticker)
@@ -268,6 +376,81 @@ class RunStore:
         async with conn.execute(
             f"SELECT {_RUN_SELECT_COLUMNS} FROM runs WHERE run_id = ?",
             (run_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+        if row is None:
+            return None
+        return _row_to_run(row)
+
+    async def verify_lineage(self, run_id: str) -> LineageVerdict:
+        """Re-derive this run's input digest and compare it to the recorded one.
+
+        The check a re-run needs before it inherits a version lineage: is the
+        run this report will be attributed to still the run the recorded lineage
+        describes? Recomputes ``input_fingerprint`` over the row's OWN stored
+        fields (ticker / pipeline_type / language / source_artifact_id) and
+        compares against the digest stamped at creation time.
+
+        A NULL recorded digest (a row written before the column existed) is
+        ``"unavailable"``, never ``"match"``: we cannot know what that run's
+        inputs were, and pretending we do is how a stale lineage gets inherited
+        silently. An unknown run id is ``"unavailable"`` for the same reason —
+        a lookup miss is not a mismatch. Only a real, recomputed divergence is
+        ``"mismatch"``.
+        """
+        record = await self.get_run(run_id)
+        if record is None:
+            return LineageVerdict(
+                status="unavailable",
+                recorded=None,
+                current=None,
+                reason=f"no run row for {run_id}",
+            )
+        current = _fingerprint_of(record)
+        if record.input_fingerprint is None:
+            return LineageVerdict(
+                status="unavailable",
+                recorded=None,
+                current=current,
+                reason=(
+                    "no input fingerprint recorded (row predates the column); "
+                    "cannot tell whether the lineage still describes these inputs"
+                ),
+            )
+        if current == record.input_fingerprint:
+            return LineageVerdict(
+                status="match",
+                recorded=record.input_fingerprint,
+                current=current,
+                reason=None,
+            )
+        return LineageVerdict(
+            status="mismatch",
+            recorded=record.input_fingerprint,
+            current=current,
+            reason=(
+                "the run's stored inputs no longer fingerprint to the digest recorded at creation"
+            ),
+        )
+
+    async def find_run_by_artifact_id(self, artifact_id: str) -> RunRecord | None:
+        """The run that produced a canonical artifact, or None when unlinked.
+
+        run_artifacts is the only run→artifact link this store holds, and it
+        links by the artifact's API path (``/api/artifacts/<id>``) — the same
+        identity ``remove_artifact_links`` deletes by. A re-run names only a
+        ``source_artifact_id``, so resolving the lineage it is about to inherit
+        means walking that link back to the producing run. Returns None for an
+        unknown id, an artifact no run recorded (legacy rows written before
+        add_artifact ran for every product), or a deleted one — callers MUST
+        treat None as "cannot tell" and proceed, never as a mismatch.
+        """
+        conn = await self._ensure_connection()
+        async with conn.execute(
+            f"SELECT {_RUN_SELECT_COLUMNS} FROM runs WHERE run_id = ("
+            "SELECT run_id FROM run_artifacts WHERE file_path = ? "
+            "ORDER BY created_at DESC LIMIT 1)",
+            (f"/api/artifacts/{artifact_id}",),
         ) as cursor:
             row = await cursor.fetchone()
         if row is None:
@@ -556,6 +739,22 @@ def _now() -> str:
     return datetime.now(tz=timezone.utc).isoformat()
 
 
+def _fingerprint_of(record: RunRecord) -> str:
+    """Recompute a run's input digest from its own stored fields.
+
+    The single re-derivation point behind ``verify_lineage``: identical field
+    selection + casing to ``create_run``'s stamp. ``source_decision_hash`` is
+    not stored on the row (no column), so recomputation uses the same ``None``
+    every stored digest was taken with.
+    """
+    return input_fingerprint(
+        ticker=record.ticker,
+        pipeline_type=record.pipeline_type,
+        language=record.language,
+        source_artifact_id=record.source_artifact_id,
+    )
+
+
 def _row_to_run(row: Any) -> RunRecord:
     result_raw = row[8]
     return RunRecord(
@@ -571,6 +770,7 @@ def _row_to_run(row: Any) -> RunRecord:
         error=row[9],
         language=row[10],
         source_artifact_id=row[11],
+        input_fingerprint=row[12],
     )
 
 

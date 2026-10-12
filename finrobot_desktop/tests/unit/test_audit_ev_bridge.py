@@ -19,6 +19,7 @@ from finrobot.engine.models.financial import (
     MarketData,
     ValuationMetrics,
 )
+from finrobot.engine.models.metric_authority import METRIC_REGISTRY_BY_NAME
 
 
 def _fd(
@@ -81,3 +82,24 @@ def test_no_ev_nothing_to_check():
     # EV was withheld upstream → no EV to verify, even with an unreported component.
     f = audit_ev_bridge(_fd(enterprise_value=None, preferred_stock=None))
     assert f == []
+
+
+def test_every_bridge_component_is_declared_in_the_metric_registry():
+    """The audit names a registry metric for each component it can flag; an
+    undeclared name would make the caveat fall back to 'unregistered' prose."""
+    for metric in ("preferred_stock", "noncontrolling_interest"):
+        assert METRIC_REGISTRY_BY_NAME[metric].producer_id is not None
+
+
+def test_evidence_names_the_declared_producer_of_record():
+    """The caveat is now citable: a reader can see WHICH owner is silent rather than
+    a bare "the provider did not report it" that invites assuming another caliber has
+    it. Asserted against the registry (derived), not against pinned prose."""
+    f = audit_ev_bridge(_fd(preferred_stock=None, noncontrolling_interest=0.0))
+    assert len(f) == 1
+    owner = METRIC_REGISTRY_BY_NAME["preferred_stock"].producer_id
+    assert owner is not None
+    assert owner in f[0].evidence
+    assert f[0].severity == "review"
+    # The original claim must survive the append — the caveat still says what it means.
+    assert "assumes 0" in f[0].evidence

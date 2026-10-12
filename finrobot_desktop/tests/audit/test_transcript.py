@@ -486,8 +486,13 @@ async def test_writer_rejects_traversal_session_id(tmp_session_dir: Path) -> Non
     tmp_session_dir.mkdir(parents=True, exist_ok=True)
     with pytest.raises(ValueError):
         TranscriptWriter("../../../../tmp/finagent_traversal_poc", base_dir=tmp_session_dir)
-    # And the escaped file was never created.
-    assert not (tmp_session_dir.parent.parent.parent.parent / "tmp").exists() or True
+    # The traversal target was never created. This assertion used to read
+    # `... or True`, which is always true — a green check that could not fail, so the
+    # escape it exists to catch would have gone unnoticed. Both halves are real now:
+    # the escaped path, and the base directory the writer was supposed to stay in.
+    escaped = tmp_session_dir.parents[3] / "tmp" / "finagent_traversal_poc.jsonl"
+    assert escaped.exists() is False
+    assert list(tmp_session_dir.glob("*.jsonl")) == []
 
 
 @pytest.mark.asyncio

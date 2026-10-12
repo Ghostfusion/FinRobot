@@ -44,6 +44,7 @@ from typing import Any
 import aiosqlite
 
 from finrobot.artifact.models import Artifact, ArtifactSummary, ArtifactType
+from finrobot.artifact.seal import seal_artifact, verify_seal
 from finrobot.engine.compute.operators.signal import Signal  # noqa: F401 — used in ArtifactSummary
 from finrobot.artifact.summary_extractor import (
     extract_entry_price,
@@ -371,6 +372,12 @@ class SqliteArtifactStore:
         return self._conn
 
     async def save(self, artifact: Artifact) -> str:
+        # Seal as the last mutation before the payload is serialized: both hashes cover
+        # the body minus the seal, so nothing may edit the artifact after this line.
+        # Re-saving the same run re-seals to the same hashes (idempotent) with a fresh
+        # sealed_at, which is what makes the upsert identity-stable rather than a second
+        # record of the same call.
+        artifact = seal_artifact(artifact)
         conn = await self._conn_ready()
         row = _artifact_to_row(artifact)
         await conn.execute(
@@ -431,6 +438,19 @@ class SqliteArtifactStore:
             await conn.execute("UPDATE artifacts SET archived = 1 WHERE id = ?", (artifact_id,))
             await conn.commit()
             return None
+        # Verify BEFORE any read-time mutation below (the lifecycle realignment, the
+        # narrative backfill) so the hash is checked against the payload exactly as it
+        # was stored. `no_seal` is a legacy/unpersisted state, not a failure — only a
+        # real mismatch is worth a warning, and never an error: a stored artifact of
+        # unknown age must open.
+        problems = [p for p in verify_seal(artifact) if p != "no_seal"]
+        if problems:
+            logger.warning(
+                "Artifact %s failed seal verification (%s) — the stored payload does not "
+                "match the hashes it was written with",
+                artifact_id,
+                ", ".join(problems),
+            )
         # The archived/last_viewed_at COLUMNS are authoritative — they are the
         # mutable lifecycle fields list_by_ticker/count read and that
         # archive_stale flips with a bare column UPDATE (no payload rewrite).

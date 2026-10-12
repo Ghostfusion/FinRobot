@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -224,6 +225,93 @@ def probe(provider: tuple[str, ...], as_json: bool) -> None:
     if as_json:
         argv.append("--json")
     raise SystemExit(probe_mod.main(argv))
+
+
+@cli.command("verify-audit")
+@click.option(
+    "--path",
+    "ledger_path",
+    default=None,
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Ledger file to check (default: ~/.finrobot/audit_chain.jsonl)",
+)
+def verify_audit(ledger_path: Path | None) -> None:
+    """Verify the machine audit ledger's hash chain.
+
+    The ledger is the tamper-evident record of what each saved report artifact
+    asserted (see finrobot/audit_chain.py). One line of verdict; a broken chain
+    exits 1 so a cron/CI wrapper can alert on it the same way `probe --json`
+    reports a dead provider. The default path is resolved at call time so a
+    relocated home directory is honoured.
+    """
+    from finrobot.audit_chain import default_ledger_path, verify_chain
+
+    path = ledger_path or default_ledger_path()
+    report = verify_chain(path)
+    if report.ok:
+        click.echo(f"OK: audit chain intact ({report.n_entries} entries) — {path}")
+        return
+    click.echo(
+        f"BROKEN: {report.reason} at seq {report.first_bad_seq} "
+        f"({report.n_entries} entries read) — {path}"
+    )
+    sys.exit(1)
+
+
+@cli.group()
+def pit() -> None:
+    """Inspect the point-in-time snapshot store."""
+
+
+@pit.command("show")
+@click.argument("symbol")
+@click.option(
+    "--as-of",
+    "as_of_raw",
+    default=None,
+    help="View date YYYY-MM-DD (default: today). Snapshots dated after it are invisible.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit the raw payload as JSON")
+def pit_show(symbol: str, as_of_raw: str | None, as_json: bool) -> None:
+    """Show what the engine knew about SYMBOL as of a date.
+
+    The read side of the PIT store, and the question a lookahead-safe replay depends on:
+    every run appends its provider snapshot under the date it was taken, and
+    ``read_as_of`` masks anything dated later — so this prints the view a run on that
+    date would have had, never a later one. A symbol with no qualifying snapshot is
+    reported as such and exits 1: an absent snapshot is not an empty one.
+    """
+    import json as _json
+    from datetime import date as _date
+
+    from finrobot.engine.data.pit_store import PitStore, default_pit_root
+
+    try:
+        view_date = _date.fromisoformat(as_of_raw) if as_of_raw else _date.today()
+    except ValueError:
+        click.echo(f"--as-of must be YYYY-MM-DD, got {as_of_raw!r}")
+        sys.exit(2)
+
+    store = PitStore(default_pit_root())
+    ticker = symbol.upper()
+    payload = store.read_as_of(ticker, view_date)
+    if payload is None:
+        click.echo(f"no snapshot for {ticker} on or before {view_date.isoformat()}")
+        sys.exit(1)
+
+    if as_json:
+        click.echo(_json.dumps(payload, indent=2, default=str))
+        return
+
+    membership = store.membership(ticker, view_date)
+    click.echo(f"{ticker} as of {view_date.isoformat()} — membership: {membership}")
+    for key in ("artifact_id", "type", "data_source"):
+        if key in payload:
+            click.echo(f"  {key}: {payload[key]}")
+    raw_keys = payload.get("raw_data")
+    if isinstance(raw_keys, dict):
+        click.echo(f"  raw_data sections: {', '.join(sorted(raw_keys)) or '(none)'}")
+    click.echo("  (--json for the full payload)")
 
 
 # --- Skill subcommands ---

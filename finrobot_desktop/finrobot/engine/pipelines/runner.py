@@ -6,9 +6,11 @@ import json
 import logging
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from finrobot.artifact.models import Artifact
     from finrobot.engine.deps import FinRobotDeps
     from finrobot.engine.skills.registry import SkillRegistry
 
@@ -18,18 +20,28 @@ from pydantic_ai import UnexpectedModelBehavior
 from pydantic_ai.exceptions import AgentRunError
 
 from finrobot.artifact.contract import enforce_artifact_contract
+from finrobot.artifact.seal import seal_artifact
+from finrobot.audit_chain import append_entry, default_ledger_path
 from finrobot.engine.compute.coordinators.news import (
     UNTRUSTED_NEWS_PROMPT_NOTE,
     render_news_for_prompt,
     sanitize_untrusted_block,
     sanitize_untrusted_text,
 )
+from finrobot.engine.compute.operators.narrative_integrity import (
+    TruncationReason,
+    detect_truncation,
+    mark_truncated,
+    truncation_warning,
+)
+from finrobot.engine.data.asof import clear_run_as_of, set_run_as_of
 from finrobot.engine.data.interface import ProviderError
 from finrobot.engine.data.normalize.contracts import (
     NormalizedFinancials,
     NormalizedPrice,
     financials_with_display_price,
 )
+from finrobot.engine.data.pit_store import PitStore, default_pit_root
 from finrobot.engine.data.types import DataType
 from finrobot.engine.models.financial import CatalystAnalysis, CatalystEvent, StepOutput
 from finrobot.engine.pipelines.protocols import ArtifactBuilder, ProgressCallback
@@ -317,6 +329,97 @@ def _compact_for_prompt(
     return str(value)
 
 
+def _record_run_evidence(artifact: Artifact) -> None:
+    """Append this run's point-in-time inputs and one tamper-evident ledger row.
+
+    Both side records happen AFTER the artifact is persisted and both are deliberately
+    non-fatal: the artifact IS the record, and an unwritable snapshot file or a broken
+    ledger must never turn a completed run into a failed one (the persist try-block maps
+    any escaping exception to "run failed", which would be the wrong verdict for a side
+    record). Each failure is logged with its exception and the run continues.
+
+    * The PIT snapshot is keyed by the run's own data date, so a later reader can
+      reconstruct exactly what this run knew (``pit_store.PitStore.read_as_of``).
+      Skipped for a cross-ticker artifact, which has no single symbol to key on.
+    * The ledger row carries the artifact's own seal hashes, which is what links the
+      append-only chain to the artifacts it describes — editing an artifact afterwards
+      breaks the seal, and the ledger row is what says which hash was written.
+    """
+    if artifact.ticker:
+        try:
+            PitStore(default_pit_root()).store_snapshot(
+                symbol=artifact.ticker,
+                as_of=artifact.inputs.data_fetched_at.date(),
+                payload={
+                    "artifact_id": artifact.id,
+                    "type": artifact.type,
+                    "data_source": artifact.inputs.data_source,
+                    "raw_data": artifact.inputs.raw_data,
+                },
+            )
+        except (OSError, ValueError):
+            logger.warning("PIT snapshot not written for %s", artifact.id, exc_info=True)
+
+    # ``save`` seals a COPY (it rebinds its own local), so the artifact in hand here may
+    # still be unsealed. Sealing locally is not a second source of truth: both hashes
+    # exclude the seal, so re-sealing reproduces byte-for-byte what the store wrote —
+    # without a read-back. (Found by tests/audit/test_run_evidence_wiring.py, which
+    # caught the row recording null hashes.)
+    seal = seal_artifact(artifact).seal
+    try:
+        append_entry(
+            default_ledger_path(),
+            {
+                "event": "artifact.saved",
+                "artifact_id": artifact.id,
+                "ticker": artifact.ticker,
+                "type": artifact.type,
+                "schema_version": artifact.schema_version,
+                "artifact_sha256": None if seal is None else seal.artifact_sha256,
+                "decision_hash": None if seal is None else seal.decision_hash,
+                "claim_status": artifact.outputs.structured.get("claim_status"),
+                "warnings": list(artifact.outputs.warnings),
+            },
+        )
+    except (OSError, ValueError):
+        logger.warning("audit-chain row not appended for %s", artifact.id, exc_info=True)
+
+
+def _truncated_structured_fields(
+    structured: object,
+) -> list[tuple[str, TruncationReason]]:
+    """Fields of a structured step output that look cut off, with the reason each one
+    was flagged.
+
+    ``StepOutput.text`` is only part of what a step produces: the thesis step's own
+    ``text`` is a one-line summary, while the long prose that can be cut at
+    max_tokens lives in ``ThesisResult.narrative`` / ``catalysts`` / ``risks``. So the
+    structured payload is probed per field rather than trusting the summary line.
+
+    Scope note: this walks one level of ``str`` / ``list[str]`` fields. A nested model
+    is not descended into — a real cut there would still surface through its own field
+    if the step exposes it, and a deeper walk would need per-model knowledge that
+    belongs in the model, not here.
+    """
+    if not isinstance(structured, BaseModel):
+        return []
+    flagged: list[tuple[str, TruncationReason]] = []
+    for name in type(structured).model_fields:
+        value = getattr(structured, name, None)
+        if isinstance(value, str):
+            reason = detect_truncation(value)
+            if reason is not None:
+                flagged.append((name, reason))
+        elif isinstance(value, (list, tuple)):
+            for index, item in enumerate(value):
+                if not isinstance(item, str):
+                    continue
+                reason = detect_truncation(item)
+                if reason is not None:
+                    flagged.append((f"{name}[{index}]", reason))
+    return flagged
+
+
 def _sanitize_catalyst_for_prompt(analysis: CatalystAnalysis) -> CatalystAnalysis:
     """Return a copy with every news headline flattened and untrusted-wrapped.
 
@@ -470,14 +573,24 @@ class Pipeline:
         # single-invocation CLI/SDK processes → nullcontext → no cap.
         semaphore = getattr(deps, "run_semaphore", None)
         async with semaphore if semaphore is not None else contextlib.nullcontext():
-            return await self._execute_steps(
-                deps,
-                ticker,
-                progress=progress,
-                lang=lang,
-                source_artifact_id=source_artifact_id,
-                **kwargs,
-            )
+            # Publish the run's as-of for the duration of the run: every dated read
+            # inside a step clamps to it (engine/data/asof.as_of), so a run cannot
+            # observe a value dated after the moment it started. Unset ⇒ the clamp is a
+            # no-op, so today's live runs behave exactly as before; the finally clears
+            # it so a later operation in this task is not silently clamped by a finished
+            # run.
+            set_run_as_of(datetime.now(UTC))
+            try:
+                return await self._execute_steps(
+                    deps,
+                    ticker,
+                    progress=progress,
+                    lang=lang,
+                    source_artifact_id=source_artifact_id,
+                    **kwargs,
+                )
+            finally:
+                clear_run_as_of()
 
     async def _execute_steps(
         self,
@@ -653,6 +766,7 @@ class Pipeline:
                 artifact = enforce_artifact_contract(artifact)
                 artifact_id = await _artifact_store.save(artifact)
                 pipeline_result.artifact_id = artifact_id
+                _record_run_evidence(artifact)
                 logger.info("Artifact persisted: %s", artifact_id)
             except (ValueError, TypeError, KeyError, AttributeError, OSError, RuntimeError):
                 logger.exception(
@@ -697,14 +811,34 @@ class Pipeline:
         structured_results: dict[str, object],
         run_warnings: list[str] | None = None,
     ) -> None:
-        """Parse step output and store text/structured data into the result dicts."""
+        """Parse step output and store text/structured data into the result dicts.
+
+        This is the single point where every step's output enters the run, so the
+        truncation guard lives here rather than in each step: a section the model cut
+        at max_tokens is otherwise indistinguishable from a complete one, and the
+        report would ship a thesis whose final argument is a dangling clause. The
+        marker is appended to the stored *text* (visible in the report); a structured
+        field is named in a warning instead of being rewritten, because the stored
+        model is the model's own output and editing it would be editing evidence.
+        """
         if isinstance(output, StepOutput):
-            results[step_name] = output.text
+            text = output.text
+            truncation_warnings: list[str] = []
+            reason = detect_truncation(text)
+            if reason is not None:
+                truncation_warnings.append(truncation_warning(step_name, reason))
+                text = mark_truncated(text)
+            results[step_name] = text
             if run_warnings is not None:
                 # Dedup across retries: a step re-attempted after a validation
                 # failure re-emits the same warnings; the artifact must not
                 # list them N times.
                 run_warnings.extend(w for w in output.warnings if w not in run_warnings)
+                for field, field_reason in _truncated_structured_fields(output.structured):
+                    truncation_warnings.append(
+                        truncation_warning(f"{step_name}.{field}", field_reason)
+                    )
+                run_warnings.extend(w for w in truncation_warnings if w not in run_warnings)
             if output.structured is not None:
                 structured_results[step_name] = output.structured
                 logger.info(
@@ -712,7 +846,12 @@ class Pipeline:
                     f"{type(output.structured).__name__}"
                 )
         elif isinstance(output, str):
-            results[step_name] = output
+            reason = detect_truncation(output)
+            if reason is not None and run_warnings is not None:
+                warning = truncation_warning(step_name, reason)
+                if warning not in run_warnings:
+                    run_warnings.append(warning)
+            results[step_name] = mark_truncated(output)
         else:
             results[step_name] = str(output)
 

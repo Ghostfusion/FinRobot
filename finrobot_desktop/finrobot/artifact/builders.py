@@ -37,10 +37,15 @@ from finrobot.artifact.models import (
     ArtifactMeta,
     ArtifactOutputs,
 )
+from finrobot.engine.compute.operators.audit.claim_anchor import (
+    anchor_claim_status,
+    claim_status_note,
+)
 from finrobot.engine.compute.operators.report_drift import (
     collect_numeric_leaves,
     detect_report_drift,
 )
+from finrobot.engine.models.claim_status import CLAIM_STATUS_DEFINITION_VERSION
 from finrobot.engine.models.reconcile_tolerances import (
     NARRATIVE_APPROXIMATION_BAND,
     NARRATIVE_DRIFT_TOLERANCE,
@@ -375,14 +380,31 @@ def _report_drift_flag(
     )
     if not text:
         return []
-    drift = detect_report_drift(
-        text,
-        collect_numeric_leaves({"structured": structured_out, "raw": raw_data}),
-    )
-    if not drift.unmatched_count:
-        return []
-    structured_out["report_drift"] = drift.model_dump(mode="json")
+    leaves = collect_numeric_leaves({"structured": structured_out, "raw": raw_data})
+    drift = detect_report_drift(text, leaves)
+    # Name the section's numeric standing (claim_status) from the drift verdict. The
+    # status is recorded even when the section is clean, because "grounded" is the
+    # answer a reader should be able to check — but only a *non-clean* status earns a
+    # warning line, or every clean report would train readers to skip the channel.
+    # `evidence_available` guards the empty-leaf case: with nothing to compare against,
+    # every citation looks unmatched, and calling that "unsupported" would blame the
+    # report for a check that never ran.
+    status = anchor_claim_status(drift, evidence_available=bool(leaves))
+    structured_out["claim_status"] = {
+        "status": status,
+        "definition_version": CLAIM_STATUS_DEFINITION_VERSION,
+        "total_dollar_amounts": drift.total_dollar_amounts,
+        "orphan_count": drift.orphan_count,
+        "approximate_count": drift.approximate_count,
+        "evidence_leaves": len(leaves),
+    }
     warnings: list[str] = []
+    status_note = claim_status_note(status, drift)
+    if status_note is not None:
+        warnings.append(f"[CLAIM-STATUS/{status}] {status_note}")
+    if not drift.unmatched_count:
+        return warnings
+    structured_out["report_drift"] = drift.model_dump(mode="json")
     if drift.orphan_tokens:
         for name in narrative_steps:
             step_text = result.steps.get(name)

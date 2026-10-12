@@ -27,6 +27,42 @@ ArtifactType = Literal[
     "ad_hoc",
 ]
 
+ARTIFACT_SCHEMA_VERSION = "1.0.0"
+"""Version of the *payload* shape itself.
+
+Until now the store versioned its surroundings — ``SUMMARY_PROJECTION_VERSION`` for the
+derived sidebar row, ``CANONICAL_CONTRACT_VERSION`` for the normalized input slot — and
+the payload had no declared version at all. That is the one version a future structural
+change to :class:`ArtifactOutputs` would need in order to migrate stored artifacts
+instead of guessing at their shape, so it is declared here and required from a version
+onward (see :func:`finrobot.artifact.seal.required_fields`) rather than being added to
+every consumer's validation."""
+
+
+class ArtifactSeal(BaseModel):
+    """Tamper-evidence and identity for a stored artifact.
+
+    Written by the store as the LAST step before persisting, which is why it is a nested
+    object: the two hashes cover the body *excluding* the seal, so re-sealing a re-read
+    artifact is stable instead of self-referential.
+
+    * ``artifact_sha256`` — the whole body (inputs, assumptions, compute version,
+      outputs, meta) minus the seal. A changed byte anywhere is detectable.
+    * ``decision_hash`` — only the *decision* subset (ticker, type, verdict, target,
+      target date). Two re-emits whose prose differs but whose call is identical share
+      this hash, which is what makes "same call" checkable without diffing prose.
+    * ``idempotency_key`` — ``meta.created_at`` based, so re-saving the same run yields
+      the same key (a re-emit is not a second signal) while a genuine re-run does not.
+    * ``expires_at`` — when the report stops being current (see
+      :func:`finrobot.artifact.seal.next_session_expiry`).
+    """
+
+    artifact_sha256: str
+    decision_hash: str
+    idempotency_key: str
+    sealed_at: datetime
+    expires_at: datetime
+
 
 class ArtifactInputs(BaseModel):
     """Data snapshot at time of computation. Frozen so it can be replayed."""
@@ -141,6 +177,24 @@ class Artifact(BaseModel):
     compute_version: ArtifactComputeVersion
     outputs: ArtifactOutputs
     meta: ArtifactMeta
+
+    schema_version: str = Field(
+        default=ARTIFACT_SCHEMA_VERSION,
+        description=(
+            "Payload contract version. Defaults to the current version so every writer "
+            "produces it; legacy stored artifacts (written before the field existed) "
+            "deserialize as the default, and `seal.required_fields` decides what a given "
+            "version must carry."
+        ),
+    )
+    seal: ArtifactSeal | None = Field(
+        default=None,
+        description=(
+            "Content hash, decision hash, idempotency key and expiry, added by the store "
+            "on save. None for legacy artifacts and for artifacts built in-process but "
+            "never persisted (a builder's return value, a test fixture)."
+        ),
+    )
 
 
 class ArtifactSummary(BaseModel):

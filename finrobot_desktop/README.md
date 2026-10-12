@@ -59,13 +59,15 @@ You never start anything by hand. Opening the app boots the backend; quitting it
 
 ### Agents
 
-Nine agents, each defined by a markdown instruction file in `finrobot/engine/agents/instructions/`:
+**Six** agents are constructed (one lead + five pipeline roles), plus one orchestration
+role; each is defined by a markdown instruction file in
+`finrobot/engine/agents/instructions/`:
 
 | Group | Agents | Role |
 |:---|:---|:---|
 | Pipeline | `data`, `analysis`, `modeling`, `synthesis`, `report` | The main research chain — gather, interpret, model, reconcile, write |
-| Debate | `bull`, `bear`, `judge` | Argue the long and short case, then adjudicate |
 | Orchestration | lead agent (`factory.py`, `orchestrator.py`) | Routes the request and sequences the rest |
+| *Unwired* | `bull`, `bear`, `judge` | Prompt assets for a long/short debate that **nothing loads** — there is no debate router or endpoint. Shipped as assets only; see `AGENT_ONBOARDING.md` ("phantom debate agents"). |
 
 Because instructions are plain markdown, changing an agent's behavior does not require touching Python.
 

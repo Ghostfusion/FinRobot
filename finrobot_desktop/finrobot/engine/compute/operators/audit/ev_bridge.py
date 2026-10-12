@@ -41,7 +41,33 @@ Which provider can fill it, probed against the live vendor APIs 2026-10-12:
 from __future__ import annotations
 
 from finrobot.engine.models.financial import FinancialData
+from finrobot.engine.models.metric_authority import resolve_metric
 from finrobot.engine.models.numeric_claim import Finding
+
+
+def _authority_note(metric: str) -> str:
+    """Name the declared owner of a bridge component that nobody supplied.
+
+    Before the metric-authority registry, this finding could only say "the provider
+    did not report it" — which reads as a vendor quirk and invites the reader to
+    assume some other caliber has the number. The registry turns it into a citable
+    statement: *who* owns the metric, which calibers could legitimately supply it, and
+    whether the registry has itself declined to own it. The severity is unchanged
+    (still ``review``): this adds provenance to an existing caveat, it does not change
+    what ships.
+    """
+    resolution = resolve_metric(metric, {})
+    row = resolution
+    if row.status == "declined":
+        return (
+            f" Metric authority: no producer of record — declined ({row.reason_code}): "
+            f"{row.citation}."
+        )
+    owner = row.producer_id or "unregistered"
+    return (
+        f" Metric authority: producer of record {owner!r} supplied no value, so no "
+        f"wired source states this number and the assumed 0 cannot be confirmed."
+    )
 
 
 def audit_ev_bridge(fin: FinancialData) -> list[Finding]:
@@ -51,9 +77,13 @@ def audit_ev_bridge(fin: FinancialData) -> list[Finding]:
         return []
 
     findings: list[Finding] = []
-    for value, label in (
-        (fin.balance.preferred_stock, "preferred stock"),
-        (fin.balance.noncontrolling_interest, "noncontrolling interest"),
+    for metric, label, value in (
+        ("preferred_stock", "preferred stock", fin.balance.preferred_stock),
+        (
+            "noncontrolling_interest",
+            "noncontrolling interest",
+            fin.balance.noncontrolling_interest,
+        ),
     ):
         # Reported (0.0 or a value) → already in EV via calculate_ev → nothing to
         # flag. None → provider didn't report it, EV assumed 0 → unverifiable.
@@ -67,6 +97,7 @@ def audit_ev_bridge(fin: FinancialData) -> list[Finding]:
                         f"{fin.ticker}: {label} not reported by the provider — EV "
                         f"assumes 0 for it. If the issuer carries {label}, this EV "
                         f"(and EV/EBITDA, EV/Revenue) is understated by that amount."
+                        + _authority_note(metric)
                     ),
                 )
             )
