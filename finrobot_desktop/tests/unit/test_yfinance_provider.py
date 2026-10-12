@@ -29,6 +29,8 @@ def _make_mock_ticker(
     history: pd.DataFrame | None = None,
     income_stmt: pd.DataFrame | None = None,
     cashflow: pd.DataFrame | None = None,
+    quarterly_balance_sheet: pd.DataFrame | None = None,
+    balance_sheet: pd.DataFrame | None = None,
 ):
     mock = MagicMock()
     mock.info = info
@@ -52,6 +54,12 @@ def _make_mock_ticker(
     if cashflow is None:
         cashflow = pd.DataFrame()
     mock.cashflow = cashflow
+    # Balance sheets default to EMPTY DataFrames (not MagicMock attrs) so the
+    # EV-bridge read is deterministic: empty sheet → no claims → (None, None).
+    mock.quarterly_balance_sheet = (
+        pd.DataFrame() if quarterly_balance_sheet is None else quarterly_balance_sheet
+    )
+    mock.balance_sheet = pd.DataFrame() if balance_sheet is None else balance_sheet
     return mock
 
 
@@ -137,6 +145,123 @@ class TestFetchFinancials:
         ):
             with pytest.raises(ProviderError, match="not found or returned no data"):
                 await provider.fetch("GHST", "financials")
+
+
+def _sheet(rows: dict[str, float], column: str = "2026-06-30") -> pd.DataFrame:
+    """One-period balance-sheet DataFrame shaped like yfinance's (newest first)."""
+    return pd.DataFrame({column: list(rows.values())}, index=list(rows))
+
+
+class TestEvBridgeClaims:
+    """Numeric-audit family 3: preferred equity and noncontrolling interest are
+    claims on the enterprise beside common equity, so ``calculate_ev`` folds them
+    into EV. yfinance's flat ``info`` snapshot carries neither, so this caliber
+    must take them off the statement DataFrames — otherwise EV silently omits
+    them (live WFC: 15.348B preferred + 2.133B NCI = 3.5% of enterprise value)
+    and the ev_bridge audit can only report the bridge as unverifiable.
+    """
+
+    @pytest.mark.asyncio
+    async def test_reads_preferred_and_nci_off_the_statement(self):
+        # Live shape, WFC quarterly 2026-06-30 (== the SEC XBRL facts to the dollar).
+        mock_ticker = _make_mock_ticker(
+            VALID_INFO,
+            quarterly_balance_sheet=_sheet(
+                {"Preferred Stock": 15_348_000_000.0, "Minority Interest": 2_133_000_000.0}
+            ),
+        )
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker", return_value=mock_ticker
+        ):
+            result = await YFinanceProvider().fetch("WFC", "financials")
+        assert result.data["preferred_stock"] == 15_348_000_000.0
+        assert result.data["noncontrolling_interest"] == 2_133_000_000.0
+
+    @pytest.mark.asyncio
+    async def test_reported_zero_is_a_claim_not_a_gap(self):
+        """INCY ships an explicit nil preferred balance → 0.0. Keeping the 0.0 is
+        what clears the ev_bridge caveat honestly: the vendor DID state the claim
+        and it is nil (SEC: 0 preferred shares issued/outstanding). Coercing it to
+        None would keep flagging a claim that does not exist."""
+        mock_ticker = _make_mock_ticker(
+            VALID_INFO,
+            quarterly_balance_sheet=_sheet({"Preferred Stock": 0.0, "Total Assets": 1.0}),
+        )
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker", return_value=mock_ticker
+        ):
+            result = await YFinanceProvider().fetch("INCY", "financials")
+        assert result.data["preferred_stock"] == 0.0
+        # The NCI row is absent for INCY → None, never a fabricated 0.
+        assert result.data["noncontrolling_interest"] is None
+
+    @pytest.mark.asyncio
+    async def test_absent_rows_and_nan_cells_stay_none(self):
+        """Yahoo omits the row for an issuer with no such claim (MSFT: no NCI row)
+        and can leave a cell NaN — neither is a reported zero, so EV must keep
+        flagging the bridge as unverifiable rather than assume nil."""
+        mock_ticker = _make_mock_ticker(
+            VALID_INFO,
+            quarterly_balance_sheet=_sheet(
+                {"Preferred Stock": float("nan"), "Minority Interest": float("nan")}
+            ),
+        )
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker", return_value=mock_ticker
+        ):
+            result = await YFinanceProvider().fetch("MSFT", "financials")
+        assert result.data["preferred_stock"] is None
+        assert result.data["noncontrolling_interest"] is None
+
+    @pytest.mark.asyncio
+    async def test_quarterly_sheet_wins_over_the_stale_annual_one(self):
+        """The flat snapshot's debt/cash legs are the FRESHEST quarter (FMP serves
+        period=quarter), so these instant items must be that period's. The annual
+        sheet still showed WFC's prior-year 16.608B against the quarterly 15.348B.
+        Also pins the ``Preferred Stock Equity`` row alias."""
+        mock_ticker = _make_mock_ticker(
+            VALID_INFO,
+            quarterly_balance_sheet=_sheet({"Preferred Stock Equity": 15_348_000_000.0}),
+            balance_sheet=_sheet({"Preferred Stock Equity": 16_608_000_000.0}),
+        )
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker", return_value=mock_ticker
+        ):
+            result = await YFinanceProvider().fetch("WFC", "financials")
+        assert result.data["preferred_stock"] == 15_348_000_000.0
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_the_annual_sheet(self):
+        mock_ticker = _make_mock_ticker(
+            VALID_INFO,
+            quarterly_balance_sheet=pd.DataFrame(),
+            balance_sheet=_sheet({"Minority Interest": 2_106_000_000.0}),
+        )
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker", return_value=mock_ticker
+        ):
+            result = await YFinanceProvider().fetch("KO", "financials")
+        assert result.data["noncontrolling_interest"] == 2_106_000_000.0
+
+    @pytest.mark.asyncio
+    async def test_statement_failure_degrades_instead_of_failing_the_fetch(self):
+        """These are completeness fields, not the reason the fetch exists: a
+        rate-limited statement must leave them None (the audit then reports the
+        gap) rather than take down the whole FINANCIALS fetch on the last-resort
+        provider."""
+        from yfinance.exceptions import YFRateLimitError
+
+        mock_ticker = _make_mock_ticker(VALID_INFO)
+        type(mock_ticker).quarterly_balance_sheet = property(
+            lambda self: (_ for _ in ()).throw(YFRateLimitError())
+        )
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker", return_value=mock_ticker
+        ):
+            result = await YFinanceProvider().fetch("AAPL", "financials")
+        assert result.data["revenue"] == 385_000_000_000
+        assert result.data["preferred_stock"] is None
+        assert result.data["noncontrolling_interest"] is None
 
 
 class TestFetchQuote:

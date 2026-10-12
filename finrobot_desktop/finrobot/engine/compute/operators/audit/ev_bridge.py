@@ -12,6 +12,30 @@ to the dollar.
 Flagged at ``review`` (not ``blocked_field``): the assumed-0 is usually correct, so
 surface the unverifiable bridge so the analyst can confirm rather than auto-withhold
 the whole valuation.
+
+Which provider can fill it, probed against the live vendor APIs 2026-10-12:
+
+* **FMP** — ``preferredStock`` / ``minorityInterest`` are balance-sheet schema
+  fields, so this caliber states an explicit 0 for an issuer carrying neither and
+  the check simply does not fire. (It is also rank-1 for fundamentals; the INCY
+  report that raised both findings was served by yfinance only because FMP was out
+  of quota — HTTP 429 on every symbol, breaker open.)
+* **yfinance** — its statement module DOES carry the rows (``Preferred Stock``,
+  ``Preferred Stock Equity``, ``Minority Interest``: live WFC 15.348B / 2.133B,
+  matching the SEC facts to the dollar) and the provider now reads them, but it
+  OMITS the row for an issuer that carries none — so a nil claim that the filer
+  does not tag either stays None here and keeps this finding.
+* **Tiingo** — carries no balance-sheet NCI or preferred data code at all; its
+  only NCI-shaped code is the income-statement flow to NCI.
+* **SEC XBRL** — ``PreferredStockValue`` / ``MinorityInterest`` are the filer's own
+  statement and the pipeline already fetches those facts for every run, so they are
+  the one remaining authoritative source for a nil claim. They are deliberately NOT
+  wired into the bridge: a fact can be years stale (JPM's ``PreferredStockValue``
+  was last filed 2009), ``_select_latest_fact`` has no recency gate, and TAG ABSENCE
+  is not proof of a nil claim (JPM files none despite carrying preferred) — so a
+  fill needs both a recency gate and an explicit decision that SEC outranks a vendor
+  caliber. Live: INCY tags preferred 0 across 30 facts through 2026-03-31 (a usable
+  reported zero) and has no ``MinorityInterest`` fact at all.
 """
 
 from __future__ import annotations

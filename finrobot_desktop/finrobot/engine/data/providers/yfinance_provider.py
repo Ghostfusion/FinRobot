@@ -93,6 +93,19 @@ _NWC_CHANGE_NAMES = [
     "Change In Working Capital",
     "Changes In Working Capital",
 ]
+# EV-bridge balance-sheet rows (numeric-audit family 3). Preferred equity and
+# noncontrolling (minority) interest are claims on the enterprise beside common
+# equity, so EV includes them (compute/operators/multiples.calculate_ev). FMP
+# carries both as schema fields on its balance-sheet payload; this path has to
+# read them off the statement DataFrame, which Yahoo populates per issuer:
+#   ``Preferred Stock``        carrying amount (live WFC 15.348B, INCY 0.0)
+#   ``Preferred Stock Equity`` the same concept on some issuers/periods
+#   ``Minority Interest``      the NCI carrying amount (live WFC 2.133B, KO 2.165B)
+# A row that is ABSENT (or NaN) stays None, never a fabricated 0 — Yahoo omits the
+# row entirely for an issuer with no such claim (MSFT has no NCI row) while
+# shipping an explicit 0.0 for one whose nil balance it does carry (INCY pref).
+_PREFERRED_STOCK_NAMES = ["Preferred Stock", "Preferred Stock Equity"]
+_MINORITY_INTEREST_NAMES = ["Minority Interest"]
 
 
 def _make_ticker(symbol: str) -> yf.Ticker:
@@ -309,7 +322,9 @@ class YFinanceProvider(DataProvider):
             if years_kwarg and years_kwarg > 1:
                 result = await self._fetch_historical_financials(ticker, info, t, years_kwarg)
             else:
-                result = self._fetch_financials(ticker, info)
+                result = self._fetch_financials(
+                    ticker, info, await self._ev_bridge_claims(ticker, t)
+                )
         elif data_type == DataType.PRICE:
             await asyncio.sleep(_CALL_DELAY)
             result = await self._fetch_price(ticker, t, info)
@@ -373,7 +388,55 @@ class YFinanceProvider(DataProvider):
             timestamp=datetime.now(tz=timezone.utc),
         )
 
-    def _fetch_financials(self, ticker: str, info: dict[str, Any]) -> DataResult:
+    async def _ev_bridge_claims(self, ticker: str, t: yf.Ticker) -> dict[str, float | None]:
+        """Preferred stock + NCI carrying amounts off the balance-sheet DataFrame.
+
+        The flat ``info`` snapshot this provider otherwise serves carries neither
+        field, so on a yfinance-sourced run EV silently omitted both claims and the
+        ev_bridge audit could only report them unverifiable — while the statement
+        module had them all along (live WFC quarterly: 15.348B preferred / 2.133B
+        NCI, matching the SEC XBRL facts to the dollar). Quarterly sheet first: the
+        flat snapshot's debt/cash legs are FMP's freshest quarter, so these instant
+        items must be that same period's, and it is the fresher sheet (WFC's annual
+        balance still carried the prior year's 16.608B).
+
+        Best-effort by construction: these are completeness fields, so an empty or
+        rate-limited statement read degrades to (None, None) — the audit then
+        reports the gap honestly — rather than failing the whole FINANCIALS fetch.
+        """
+        both_none: dict[str, float | None] = {
+            "preferred_stock": None,
+            "noncontrolling_interest": None,
+        }
+        try:
+            sheet = await asyncio.to_thread(lambda: t.quarterly_balance_sheet)
+            if sheet is None or sheet.empty:
+                sheet = await asyncio.to_thread(lambda: t.balance_sheet)
+        except (
+            YFRateLimitError,
+            YFException,
+            AttributeError,
+            KeyError,
+            TypeError,
+            ValueError,
+            RuntimeError,
+            OSError,
+        ) as e:
+            logger.warning(f"EV-bridge balance-sheet rows unavailable for {ticker}: {e}")
+            return both_none
+        if sheet is None or sheet.empty:
+            return both_none
+        # Columns are newest-first (verified live: quarterly col 0 = the latest
+        # reported quarter), matching every other statement read in this module.
+        latest = sheet.columns[0]
+        return {
+            "preferred_stock": _cell(_get_row(sheet, _PREFERRED_STOCK_NAMES), latest),
+            "noncontrolling_interest": _cell(_get_row(sheet, _MINORITY_INTEREST_NAMES), latest),
+        }
+
+    def _fetch_financials(
+        self, ticker: str, info: dict[str, Any], claims: dict[str, float | None]
+    ) -> DataResult:
         # dict.get() never raises; no try/except needed here
         data = {
             "revenue": info.get("totalRevenue"),
@@ -386,6 +449,12 @@ class YFinanceProvider(DataProvider):
             "shares_outstanding": info.get("sharesOutstanding"),
             "total_debt": info.get("totalDebt"),
             "total_cash": info.get("totalCash"),
+            # EV-bridge completeness (numeric-audit family 3), symmetric with
+            # FMP's ``preferredStock``/``minorityInterest``. None ≠ 0: a row the
+            # statement omits stays None, and ev_bridge reports the EV as
+            # unverifiable rather than pretending the claim is nil.
+            "preferred_stock": claims["preferred_stock"],
+            "noncontrolling_interest": claims["noncontrolling_interest"],
             "company_name": info.get("shortName") or info.get("longName"),
             # TTM cash-flow actuals for a real FCF = OCF − CapEx (computed
             # downstream, never LLM-estimated). yfinance `info` exposes TTM
@@ -467,10 +536,10 @@ class YFinanceProvider(DataProvider):
             logger.warning(
                 f"Historical data extraction failed for {ticker}, falling back to single-year: {e}"
             )
-            return self._fetch_financials(ticker, info)
+            return self._fetch_financials(ticker, info, await self._ev_bridge_claims(ticker, t))
 
         if income_stmt is None or income_stmt.empty:
-            return self._fetch_financials(ticker, info)
+            return self._fetch_financials(ticker, info, await self._ev_bridge_claims(ticker, t))
 
         yearly_data = _build_yearly_financials(income_stmt, cashflow, years)
 

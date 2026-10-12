@@ -75,7 +75,16 @@ _CANONICAL_FROM_TIINGO: dict[str, str] = {
     "sga_expense": "sga",
     "total_debt": "debt",
     "total_cash": "cashAndEq",
-    "noncontrolling_interest": "nonControllingInterests",
+    # NOTE: no NCI / preferred mapping. Tiingo's only NCI-shaped data code is
+    # ``nonControllingInterests``, and /fundamentals/definitions declares it an
+    # incomeStatement code — "the portion of income attributable to non-controlling
+    # interest shareholders, subtracted from consolidated net income". That is the
+    # period's FLOW to NCI, while ``noncontrolling_interest`` is the balance-sheet
+    # CARRYING AMOUNT of their equity claim that calculate_ev folds into EV (stock,
+    # not flow; verified against the 85-code definitions list, which carries no
+    # balanceSheet NCI code at all). Wiring them together put an arbitrary fraction
+    # of one year's earnings into EV as if it were an equity claim. The field stays
+    # absent (None) so ev_bridge reports the EV as unverifiable instead.
     "operating_cash_flow": "ncfo",
     "capital_expenditure": "capex",
     "book_value_per_share": "bvps",

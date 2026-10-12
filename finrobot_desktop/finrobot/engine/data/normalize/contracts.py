@@ -92,7 +92,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 # the FINANCIALS raw-slot bump (cache._RAW_SLOT_VERSION) so the rebuild refetches
 # and re-aggregates on the cadence-aware window rather than re-normalizing the
 # stale doubled raw row. Quarterly issuers are byte-identical (window stays 4).
-CANONICAL_CONTRACT_VERSION = 10
+# v11 — 2026-10-12: the yfinance FINANCIALS payload now emits preferred_stock /
+# noncontrolling_interest (the EV bridge — calculate_ev folds both into EV beside
+# common equity, and audit.ev_bridge flags an unreported one as unverifiable). Old
+# canonical snapshots carry both as None from that caliber, and the canonical slot
+# is read before the raw slot with a 24h TTL, so without this bump a
+# fresh-but-pre-fix snapshot would keep reporting the claims as unverifiable for a
+# day — the INCY report showed exactly that for an issuer whose preferred stock the
+# vendor states as 0. Pairs with the FINANCIALS raw-slot bump
+# (cache._RAW_SLOT_VERSION) so the rebuild refetches a payload that carries the
+# fields rather than re-normalizing a stale raw row.
+CANONICAL_CONTRACT_VERSION = 11
 
 # Degradation markers carried in ``Provenance.degraded``. Surfaced to the UI so
 # a fallback is visible rather than silent.

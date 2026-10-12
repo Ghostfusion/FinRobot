@@ -377,12 +377,12 @@ class TestRawSlotVersion:
         # renamed listing (VMW, old SQ); pre-bump rows lack it and must miss + refetch.
         # (v2, 2026-06-05, added candidate profiles for the value-chain role gate.)
         assert raw_slot_key(DataType.PEER_CANDIDATES) == "peer_candidates:v3"
-        # FINANCIALS bumped to v4 (2026-07-06): TTM aggregation window is now
-        # cadence-aware (semi-annual reporters sum 2 half-year rows, not 4 = two
-        # fiscal years); pre-bump rows carry doubled TTM and must miss + refetch.
-        # (v3, 2026-06-22, added DDM seed inputs; v2, 2026-06-14, added
+        # FINANCIALS bumped to v5 (2026-10-12): the payload now carries the EV-bridge
+        # claims (preferred_stock / noncontrolling_interest) on the yfinance caliber
+        # too; pre-bump rows omit both and must miss + refetch. (v4, 2026-07-06,
+        # cadence-aware TTM window; v3, 2026-06-22, DDM seed inputs; v2, 2026-06-14,
         # book_value_per_share.)
-        assert raw_slot_key(DataType.FINANCIALS) == "financials:v4"
+        assert raw_slot_key(DataType.FINANCIALS) == "financials:v5"
         # INSIDER_TRADES has no shape change → bare slot (the "others bare" case).
         assert raw_slot_key(DataType.INSIDER_TRADES) == "insider_trades"
 

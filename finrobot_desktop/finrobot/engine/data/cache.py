@@ -120,13 +120,22 @@ def canonical_key(data_type: str | DataType, provider: str | None = None) -> str
 #   TTL — they must miss + refetch to pick up the liveness signal. PEER_CANDIDATES is
 #   a RAW-only type (never fetched via fetch_canonical, see layer._CANONICAL_TYPES), so
 #   this is the ONLY layer to bump — CANONICAL_CONTRACT_VERSION must NOT move.
+#   financials v5 — 2026-10-12: the yfinance financials payload now carries
+#   preferred_stock / noncontrolling_interest, read off its balance-sheet DataFrame
+#   (the statement module's ``Preferred Stock`` / ``Minority Interest`` rows), and the
+#   Tiingo caliber no longer maps its INCOME-STATEMENT ``nonControllingInterests`` flow
+#   onto that balance-sheet field. Legacy yfinance rows omit both, so a run served from
+#   one reports the EV bridge as unverifiable (or, on Tiingo, folds a year of NCI
+#   earnings into EV as if it were an equity claim). Pairs with the
+#   CANONICAL_CONTRACT_VERSION v11 bump (the normalized slot, read ahead of this raw
+#   slot).
 _RAW_SLOT_VERSION: dict[str, int] = {
     DataType.PRICE.value: 3,
     DataType.PROXY_STATEMENT.value: 2,
     DataType.PEER_CANDIDATES.value: 3,
     DataType.SENTIMENT.value: 2,
     DataType.FORWARD_ESTIMATES.value: 2,
-    DataType.FINANCIALS.value: 4,
+    DataType.FINANCIALS.value: 5,
 }
 
 
