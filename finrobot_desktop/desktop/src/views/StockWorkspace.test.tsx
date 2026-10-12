@@ -376,6 +376,47 @@ describe('workspace dashboard contract (P3.2 — analyst dashboard)', () => {
     }
   })
 
+  it('Step 3b: a research run renders all nine steps, the credit row under its own label', async () => {
+    // The store's step-name mirror sat at 8 entries after credit_risk was inserted
+    // before thesis, so every row from 7 on carried the previous step's name (the
+    // credit step read as "Investment Thesis") and the last showed the bare
+    // "Step 9" placeholder (reported 2026-10-12). Order + labels + the absence of
+    // any placeholder are the contract.
+    mockRunState = makeRunState({
+      steps: [
+        { name: 'data_collection', status: 'running' },
+        { name: 'catalyst_analysis', status: 'pending' },
+        { name: 'peer_analysis', status: 'pending' },
+        { name: 'financial_modeling', status: 'pending' },
+        { name: 'ownership_governance_analysis', status: 'pending' },
+        { name: 'technical_analysis', status: 'pending' },
+        { name: 'credit_risk', status: 'pending' },
+        { name: 'thesis', status: 'pending' },
+        { name: 'report', status: 'pending' },
+      ],
+    })
+    renderWorkspace()
+    const panel = await screen.findByTestId('pipeline-progress-panel')
+    for (const name of [
+      'data_collection',
+      'catalyst_analysis',
+      'peer_analysis',
+      'financial_modeling',
+      'ownership_governance_analysis',
+      'technical_analysis',
+      'credit_risk',
+      'thesis',
+      'report',
+    ]) {
+      expect(screen.getByTestId(`pipeline-step-${name}`)).toBeInTheDocument()
+    }
+    expect(screen.getByTestId('pipeline-step-credit_risk')).toHaveTextContent(
+      'Credit & Default Risk',
+    )
+    expect(screen.getByTestId('pipeline-step-report')).toHaveTextContent('Report Assembly')
+    expect(panel).not.toHaveTextContent(/Step \d/)
+  })
+
   it('Step 4: AI zone shows latest artifact card + verdict block + version timeline when artifacts exist', async () => {
     renderWorkspace()
     // Hot state surfaces (mock timeline returns 3 NVDA artifacts incl 1 equity_research).

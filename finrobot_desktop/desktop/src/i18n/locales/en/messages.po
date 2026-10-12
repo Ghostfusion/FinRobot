@@ -1925,6 +1925,14 @@ msgid "workspace.pipeline.step.technicalAnalysis.help"
 msgstr "Monte Carlo + entry levels + price action"
 
 #. js-lingui-explicit-id
+msgid "workspace.pipeline.step.creditRisk.label"
+msgstr "Credit & Default Risk"
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.step.creditRisk.help"
+msgstr "Merton/KMV distance to default + implied spread"
+
+#. js-lingui-explicit-id
 msgid "workspace.pipeline.step.thesis.label"
 msgstr "Investment Thesis"
 
@@ -1938,7 +1946,7 @@ msgstr "Report Assembly"
 
 #. js-lingui-explicit-id
 msgid "workspace.pipeline.step.report.help"
-msgstr "13-chapter report + LLM narrative"
+msgstr "15-chapter report + LLM narrative"
 
 #. js-lingui-explicit-id
 msgid "workspace.market.zoneTitle"
@@ -2194,7 +2202,7 @@ msgstr "🤖 AI Research"
 
 #. js-lingui-explicit-id
 msgid "workspace.ai.zoneDesc"
-msgstr "AI research report · 13 chapters spanning investment thesis, valuation (DCF / comps / DDM), risks and catalysts — numbers computed in code, judgments from the LLM."
+msgstr "AI research report · 15 chapters spanning investment thesis, valuation (DCF / comps / DDM), risks and catalysts — numbers computed in code, judgments from the LLM."
 
 #. js-lingui-explicit-id
 msgid "workspace.ai.reportCount"
@@ -2254,7 +2262,7 @@ msgstr "Generate a"
 
 #. js-lingui-explicit-id
 msgid "workspace.ai.cold.descBold"
-msgstr "13-chapter investment-bank-grade report"
+msgstr "15-chapter investment-bank-grade report"
 
 #. js-lingui-explicit-id
 msgid "workspace.ai.cold.descSuffix"
@@ -2350,7 +2358,7 @@ msgstr "{ticker} run cancelled"
 
 #. js-lingui-explicit-id
 msgid "workspace.toast.reportDoneDesc"
-msgstr "The full 13-chapter report is ready — click \"Open full report\" in the AI panel on the right to view it"
+msgstr "The full 15-chapter report is ready — click \"Open full report\" in the AI panel on the right to view it"
 
 #. js-lingui-explicit-id
 msgid "workspace.toast.reportFailed"
@@ -2898,7 +2906,7 @@ msgstr "AI research report"
 
 #. js-lingui-explicit-id
 msgid "landing.dock.research.desc"
-msgstr "13-chapter IB-grade equity research with a BUY / HOLD / SELL call"
+msgstr "15-chapter IB-grade equity research with a BUY / HOLD / SELL call"
 
 #. js-lingui-explicit-id
 msgid "landing.dock.valuation.name"

@@ -133,9 +133,12 @@ interface RunStreamState {
 // diverge (it just briefly shows the stale name until the first event).
 const PIPELINE_STEP_NAMES: Record<string, string[]> = {
   // Mirror equity_research.py create_*_pipeline().steps EXACTLY (order + count).
-  // Backend reports total_steps=8 on run.started; a stale 6-entry list here made
+  // Backend reports total_steps=9 on run.started; a stale 6-entry list here made
   // the panel render "0/6" and silently drop the step.started events for steps
-  // 7-8 (ownership / technical), so two real steps never showed.
+  // 7-8 (ownership / technical), so two real steps never showed. The same drift
+  // recurred at 8 entries once credit_risk was inserted before thesis: every row
+  // from 7 on then carried the PREVIOUS step's name (the credit step read as
+  // "Investment Thesis") and the 9th rendered the bare "Step 9" placeholder.
   research: [
     'data_collection',
     'catalyst_analysis',
@@ -143,6 +146,7 @@ const PIPELINE_STEP_NAMES: Record<string, string[]> = {
     'financial_modeling',
     'ownership_governance_analysis',
     'technical_analysis',
+    'credit_risk',
     'thesis',
     'report',
   ],

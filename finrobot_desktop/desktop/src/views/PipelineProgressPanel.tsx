@@ -1,4 +1,4 @@
-// PipelineProgressPanel — live 8-step equity_research progress.
+// PipelineProgressPanel — live 9-step equity_research progress.
 // Reads the RunState from runStreamStore (fed by backend SSE events) and
 // renders a progress bar + one row per step. Step names/order MUST mirror
 // equity_research.py create_*_pipeline().steps; STEP_LABELS below maps each
@@ -24,6 +24,7 @@ const STEP_KEYS: Record<string, string> = {
   financial_modeling: 'financialModeling',
   ownership_governance_analysis: 'ownershipGovernance',
   technical_analysis: 'technicalAnalysis',
+  credit_risk: 'creditRisk',
   thesis: 'thesis',
   report: 'report',
 }

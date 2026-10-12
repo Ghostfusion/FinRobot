@@ -69,17 +69,41 @@ afterEach(() => {
 })
 
 describe('step drift (BUG-033)', () => {
-  it('renders ALL steps when backend total exceeds the hardcoded list', async () => {
-    // research hardcodes 8 labels; pretend backend grew to 9 steps.
+  it('names all nine research steps from the mirror, in backend order', async () => {
+    // The mirror must track equity_research.py exactly: when credit_risk was
+    // inserted before thesis, a stale 8-entry list shifted every row from 7 on
+    // (the credit step rendered as "Investment Thesis") and left the 9th as the
+    // bare "Step 9" placeholder — the drift the second test below bounds.
     const es = await startRun('research')
     es.emit('run.started', { total_steps: 9 })
 
     const run = stepsState()
-    expect(run.steps).toHaveLength(9)
-    // Known labels preserved...
+    expect(run.steps.map((s) => s.name)).toEqual([
+      'data_collection',
+      'catalyst_analysis',
+      'peer_analysis',
+      'financial_modeling',
+      'ownership_governance_analysis',
+      'technical_analysis',
+      'credit_risk',
+      'thesis',
+      'report',
+    ])
+  })
+
+  it('renders ALL steps when backend total exceeds the hardcoded list', async () => {
+    // A backend that grows past the mirror must still render every step, with a
+    // placeholder only where it has no name (the historical 6-vs-8 research bug
+    // dropped two real steps outright).
+    const es = await startRun('research')
+    es.emit('run.started', { total_steps: 11 })
+
+    const run = stepsState()
+    expect(run.steps).toHaveLength(11)
     expect(run.steps[0].name).toBe('data_collection')
-    // ...and the extra 9th step gets a placeholder, not dropped.
-    expect(run.steps[8].name).toBe('Step 9')
+    expect(run.steps[8].name).toBe('report')
+    expect(run.steps[9].name).toBe('Step 10')
+    expect(run.steps[10].name).toBe('Step 11')
   })
 
   it('a step event with an index beyond the known list still renders', async () => {
@@ -146,7 +170,7 @@ describe('artifact identity on completion (BUG-034/043)', () => {
 
   it('back-compat: run.completed without artifact fields leaves identity null', async () => {
     const es = await startRun('research')
-    es.emit('run.started', { total_steps: 8 })
+    es.emit('run.started', { total_steps: 9 })
     es.emit('run.completed', {
       run_id: 'run-test-1',
       ticker: TICKER,
@@ -322,8 +346,12 @@ describe('restart reattach (P1-30)', () => {
     expect(FakeEventSource.instances).toHaveLength(1)
     expect(FakeEventSource.instances[0].url).toContain('/api/runs/run-live-1/events')
     // …and the replayed event log (no Last-Event-ID → from seq 0) rebuilds steps.
-    FakeEventSource.instances[0].emit('run.started', { total_steps: 8 })
-    expect(useRunStreamStore.getState().runs['AAPL'].steps).toHaveLength(8)
+    FakeEventSource.instances[0].emit('run.started', { total_steps: 9 })
+    const replayed = useRunStreamStore.getState().runs['AAPL'].steps
+    // Rebuilt to the backend's COUNT, with the mirror's names in its order (the
+    // credit step is the 7th since it was inserted before thesis).
+    expect(replayed).toHaveLength(9)
+    expect(replayed[6].name).toBe('credit_risk')
   })
 
   it('skips terminal rows, debate runs, and tickers already tracked live', async () => {
@@ -397,11 +425,11 @@ describe('SSE error counting (BUG-044 sibling)', () => {
 
   it('an [error, event, error, event…] flapping connection still trips the limit', async () => {
     const es = await startRun('research')
-    es.emit('run.started', { total_steps: 8 })
+    es.emit('run.started', { total_steps: 9 })
     for (let i = 0; i < 8; i++) {
       expect(stepsState().status).toBe('running')
       triggerError(es)
-      es.emit('step.started', { step: 1, total: 8, name: 'data_collection' })
+      es.emit('step.started', { step: 1, total: 9, name: 'data_collection' })
     }
     expect(stepsState().status).toBe('failed')
     expect(es.closed).toBe(true)
@@ -409,11 +437,11 @@ describe('SSE error counting (BUG-044 sibling)', () => {
 
   it('a genuinely recovered stream (stable successes) forgives past errors', async () => {
     const es = await startRun('research')
-    es.emit('run.started', { total_steps: 8 })
+    es.emit('run.started', { total_steps: 9 })
     for (let i = 0; i < 7; i++) triggerError(es)
     expect(stepsState().status).toBe('running')
     for (let i = 0; i < 3; i++) {
-      es.emit('step.started', { step: 1, total: 8, name: 'data_collection' })
+      es.emit('step.started', { step: 1, total: 9, name: 'data_collection' })
     }
     for (let i = 0; i < 7; i++) triggerError(es)
     expect(stepsState().status).toBe('running')
@@ -425,7 +453,7 @@ describe('SSE error counting (BUG-044 sibling)', () => {
 describe('run cancellation (P2: stop button for money-burning pipelines)', () => {
   it('cancelRun marks cancelling; the run.cancelled SSE event lands the terminal state', async () => {
     const es = await startRun('research')
-    es.emit('run.started', { total_steps: 8 })
+    es.emit('run.started', { total_steps: 9 })
 
     // Second fetch call is the cancel POST — backend says the task is unwinding.
     vi.stubGlobal(
@@ -451,7 +479,7 @@ describe('run cancellation (P2: stop button for money-burning pipelines)', () =>
 
   it('an orphan finalised directly by the endpoint (status: cancelled) lands immediately', async () => {
     const es = await startRun('research')
-    es.emit('run.started', { total_steps: 8 })
+    es.emit('run.started', { total_steps: 9 })
 
     vi.stubGlobal(
       'fetch',

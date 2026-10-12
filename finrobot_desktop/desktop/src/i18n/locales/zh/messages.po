@@ -1925,6 +1925,14 @@ msgid "workspace.pipeline.step.technicalAnalysis.help"
 msgstr "蒙特卡洛 + 入场点位 + 价格走势"
 
 #. js-lingui-explicit-id
+msgid "workspace.pipeline.step.creditRisk.label"
+msgstr "信用与违约风险"
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.step.creditRisk.help"
+msgstr "Merton/KMV 违约距离 + 隐含信用利差"
+
+#. js-lingui-explicit-id
 msgid "workspace.pipeline.step.thesis.label"
 msgstr "投资论点"
 
@@ -1938,7 +1946,7 @@ msgstr "整合报告"
 
 #. js-lingui-explicit-id
 msgid "workspace.pipeline.step.report.help"
-msgstr "13 章研报 + LLM 叙事"
+msgstr "15 章研报 + LLM 叙事"
 
 #. js-lingui-explicit-id
 msgid "workspace.market.zoneTitle"
@@ -2194,7 +2202,7 @@ msgstr "🤖 AI 研报"
 
 #. js-lingui-explicit-id
 msgid "workspace.ai.zoneDesc"
-msgstr "AI 投研报告 · 投资论点、估值分析（DCF / 同业 / DDM）、风险催化剂等 13 章节，数字由代码算出，判断由 LLM 给出。"
+msgstr "AI 投研报告 · 投资论点、估值分析（DCF / 同业 / DDM）、风险催化剂等 15 章节，数字由代码算出，判断由 LLM 给出。"
 
 #. js-lingui-explicit-id
 msgid "workspace.ai.reportCount"
@@ -2254,7 +2262,7 @@ msgstr "生成一份"
 
 #. js-lingui-explicit-id
 msgid "workspace.ai.cold.descBold"
-msgstr "13 章投行级研报"
+msgstr "15 章投行级研报"
 
 #. js-lingui-explicit-id
 msgid "workspace.ai.cold.descSuffix"
@@ -2350,7 +2358,7 @@ msgstr "{ticker} 任务已取消"
 
 #. js-lingui-explicit-id
 msgid "workspace.toast.reportDoneDesc"
-msgstr "完整 13 章研报已生成，点击右侧 AI 区\"打开完整研报\"查看"
+msgstr "完整 15 章研报已生成，点击右侧 AI 区\"打开完整研报\"查看"
 
 #. js-lingui-explicit-id
 msgid "workspace.toast.reportFailed"
@@ -2898,7 +2906,7 @@ msgstr "AI 投研报告"
 
 #. js-lingui-explicit-id
 msgid "landing.dock.research.desc"
-msgstr "13 章投行级 equity research，给出 BUY / HOLD / SELL"
+msgstr "15 章投行级 equity research，给出 BUY / HOLD / SELL"
 
 #. js-lingui-explicit-id
 msgid "landing.dock.valuation.name"
