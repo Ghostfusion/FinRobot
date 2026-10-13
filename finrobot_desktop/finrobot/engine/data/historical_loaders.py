@@ -238,6 +238,67 @@ def extract_shares_from_yearly(
     return None
 
 
+async def resolve_band_shares(
+    ticker: str,
+    yearly: list[tuple[YearlyFinancials, float | None]],
+    data_layer: DataLayer,
+    *,
+    override: float | None = None,
+    allow_fetch: bool = False,
+) -> tuple[float | None, str | None]:
+    """Shares outstanding for a historical band, plus a disclosure when it is a
+    fallback.
+
+    Per-year rows are the honest input (each year's multiple on that year's own
+    count), but only FMP's yearly builder emits a shares key at all — and only for
+    the newest year; the yfinance and SEC companyfacts builders emit none. So
+    whenever FMP is unavailable that path is None and the bands were withheld
+    ENTIRELY: measured on NFLX 2026-10-12, this killed the P/E band AND both
+    Football-Field reverse multiples (``fetch_reverse_multiple_band`` runs through
+    the same function), even though the canonical TTM share count was sitting one
+    call away at 4.16B.
+
+    The current count is a real, dated number, so it is used as a DISCLOSED
+    fallback: a buyback or issuance history makes the earlier years' multiples
+    approximate, which is a smaller and clearly-stated error than emitting no band
+    at all. It is never invented — ``(None, None)`` leaves the leaf's own
+    "unavailable" path intact.
+
+    WHERE THE COUNT COMES FROM is the caller's decision, because a band call must
+    not add I/O a caller did not ask for:
+      * ``override`` — the count the caller ALREADY holds (the pipeline passes the
+        DCF's own share count). No fetch, and it is the same number the report's
+        other panels use.
+      * ``allow_fetch`` — opt-in for callers whose whole job is to fetch (the
+        standalone /historical-bands route).
+    With neither, this returns ``(None, None)`` and behaviour is byte-identical to
+    before the fallback existed.
+    """
+    shares = extract_shares_from_yearly(yearly)
+    if shares is not None:
+        return shares, None
+    # Runtime-guard the override: a test double (MagicMock) must not be compared.
+    if override is not None and isinstance(override, int | float) and override > 0:
+        current, source = float(override), "the run's own share count"
+    elif allow_fetch:
+        try:
+            canonical = await data_layer.fetch_canonical(DataType.FINANCIALS, ticker)
+        except (ProviderError, ValueError, KeyError) as exc:
+            logger.info("band share-count fallback failed for %s: %s", ticker, exc)
+            return None, None
+        fetched = _pos_or_none(getattr(canonical, "shares_outstanding", None))
+        if fetched is None:
+            return None, None
+        current, source = fetched, "the current share count"
+    else:
+        return None, None
+    return current, (
+        f"per-year share counts are unavailable from the serving providers, so the "
+        f"historical band is computed on {source} ({current:,.0f}); a buyback or "
+        "issuance history makes the earlier multiples approximate."
+    )
+
+
 async def compute_bands_via_data_layer(
     ticker: str,
     metric: HistoricalMetricName,
@@ -245,6 +306,8 @@ async def compute_bands_via_data_layer(
     data_layer: DataLayer,
     *,
     current_override: float | None = None,
+    shares_override: float | None = None,
+    allow_share_fetch: bool = False,
 ) -> HistoricalBand:
     """End-to-end: fetch financials + price, hand off to the compute leaf.
 
@@ -255,14 +318,23 @@ async def compute_bands_via_data_layer(
     """
     yearly = await load_yearly_financials(ticker, data_layer, years=max(years, 5))
     prices = await load_price_history(ticker, data_layer, years=years)
-    shares = extract_shares_from_yearly(yearly)
-    return compute_historical_band(
+    shares, disclosure = await resolve_band_shares(
+        ticker, yearly, data_layer, override=shares_override, allow_fetch=allow_share_fetch
+    )
+    if disclosure is not None:
+        logger.info("historical bands for %s: %s", ticker, disclosure)
+    band = compute_historical_band(
         metric=metric,
         yearly=[y for y, _ in yearly],
         prices=prices,
         shares_outstanding=shares or 0.0,
         current_override=current_override,
     )
+    # Only on a band that actually computed: on the empty path the leaf's own
+    # "shares_outstanding unavailable" warning already tells the reader why.
+    if disclosure is not None and band.sample_count > 0:
+        band.warnings.append(disclosure)
+    return band
 
 
 # Minimum price-multiple samples behind a historical band before it may price a

@@ -628,7 +628,15 @@ async def historical_bands(
     async def _build() -> dict[str, Any]:
         override = await _current_ev_ebitda_override(ticker, data_layer, metric)
         band = await compute_bands_via_data_layer(
-            ticker, metric, years, data_layer, current_override=override
+            ticker,
+            metric,
+            years,
+            data_layer,
+            current_override=override,
+            # This route's whole job is to fetch, so it may resolve the share count
+            # itself when the per-year rows lack one; the pipeline path passes the
+            # count it already holds instead (no extra I/O).
+            allow_share_fetch=True,
         )
         classification = classify_band(band)
         payload = HistoricalBandResponse(

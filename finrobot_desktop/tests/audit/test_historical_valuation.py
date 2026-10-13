@@ -73,7 +73,7 @@ class TestLeafIsolation:
 
 
 def _yearly(
-    fy: int, *, ebitda: float | None = 30, fcf: float | None = 20, debt: float = 0
+    fy: int, *, ebitda: float | None = 30, fcf: float | None = 20, debt: float | None = 0
 ) -> YearlyFinancials:
     return YearlyFinancials(
         fiscal_date=date(fy, 12, 31),
@@ -85,6 +85,51 @@ def _yearly(
 
 def _price(d: date, close: float) -> PricePoint:
     return PricePoint(sample_date=d, close=close)
+
+
+class TestWithheldBandReason:
+    """A withheld band must name the input that is actually missing.
+
+    Live 2026-10-12 on NFLX the EV/EBITDA band was withheld while EBITDA AND free
+    cash flow were both present — every year's net debt was None (the yfinance
+    yearly path emitted no debt/cash legs). The old copy ("check whether EBITDA /
+    FCF is disclosed") sent the reader looking for a disclosure that was right
+    there in the data.
+    """
+
+    def test_missing_net_debt_is_named_and_ebitda_is_not_blamed(self) -> None:
+        yearly = [_yearly(2024, ebitda=25, debt=None), _yearly(2025, ebitda=30, debt=None)]
+        band = compute_historical_band(
+            metric="ev_ebitda",
+            yearly=yearly,
+            prices=[_price(date(2025, 6, 1), 110.0)],
+            shares_outstanding=10,
+        )
+        assert band.sample_count == 0
+        assert len(band.warnings) == 1
+        assert "net debt" in band.warnings[0]
+        assert "EBITDA" not in band.warnings[0]
+
+    def test_missing_ebitda_is_named(self) -> None:
+        band = compute_historical_band(
+            metric="ev_ebitda",
+            yearly=[_yearly(2025, ebitda=None)],
+            prices=[_price(date(2025, 6, 1), 110.0)],
+            shares_outstanding=10,
+        )
+        assert band.sample_count == 0
+        assert "EBITDA" in band.warnings[0]
+
+    def test_p_fcf_band_names_free_cash_flow(self) -> None:
+        """p_fcf needs no net debt, so its missing input must be named as FCF."""
+        band = compute_historical_band(
+            metric="p_fcf",
+            yearly=[_yearly(2025, fcf=None)],
+            prices=[_price(date(2025, 6, 1), 110.0)],
+            shares_outstanding=10,
+        )
+        assert band.sample_count == 0
+        assert "free cash flow" in band.warnings[0]
 
 
 class TestEvEbitdaBand:

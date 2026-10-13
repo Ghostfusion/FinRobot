@@ -54,6 +54,18 @@ _CALL_DELAY = 1.0  # seconds between the info fetch and subsequent calls
 _REVENUE_NAMES = ["Total Revenue", "Revenue", "Net Revenue"]
 _GROSS_PROFIT_NAMES = ["Gross Profit"]
 _EBITDA_NAMES = ["EBITDA", "Normalized EBITDA"]
+
+# Balance-sheet rows for the per-year NET DEBT the historical valuation bands need
+# (EV = market cap + net debt). yfinance's `balance_sheet` carries both legs per
+# fiscal year; the yearly dict read only income_stmt + cashflow, so `total_debt` /
+# `total_cash` were absent and every EV-based sample was unmeasurable — measured on
+# NFLX 2026-10-12, where all five years had net_debt None and the EV/EBITDA band plus
+# BOTH Football-Field reverse multiples were withheld even though the multiples'
+# numerator was one DataFrame away. Complete-debt rows ONLY: falling back to a
+# long-term-debt leg would understate debt and skew the multiple LOW for a levered
+# issuer, which is worse than an absent band.
+_TOTAL_DEBT_NAMES = ["Total Debt", "Total Debt And Capital Lease Obligation"]
+_CASH_NAMES = ["Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments"]
 _OPERATING_INCOME_NAMES = ["Operating Income", "Total Operating Profit Loss"]
 _NET_INCOME_NAMES = [
     "Net Income",
@@ -159,18 +171,26 @@ def _cell(row: pd.Series | None, col: Any) -> float | None:
 
 
 def _build_yearly_financials(
-    income_stmt: pd.DataFrame, cashflow: pd.DataFrame | None, max_years: int
+    income_stmt: pd.DataFrame,
+    cashflow: pd.DataFrame | None,
+    balance_sheet: pd.DataFrame | None,
+    max_years: int,
 ) -> list[dict[str, Any]]:
-    """Transform yfinance income_stmt + cashflow DataFrames into the canonical
-    per-year normalized dict (same schema FMP emits), newest-first.
+    """Transform yfinance income_stmt + cashflow + balance_sheet DataFrames into the
+    canonical per-year normalized dict (same schema FMP emits), newest-first.
 
     Emits None (not 0.0) for missing cells — the historical_extractor consumer
     owns the None→0.0 fill and the revenue-NaN year filtering, so this stays a
     pure provider-shape→normalized-dict translation. CapEx is sign-flipped to a
     positive magnitude (FCF formula convention); D&A is reported positive.
+
+    ``balance_sheet`` supplies the debt/cash legs the historical bands build EV
+    from; a missing frame (or a missing row in it) leaves those keys None rather
+    than inventing a debt-free year (see ``_TOTAL_DEBT_NAMES``).
     """
     cols = list(income_stmt.columns[:max_years])
     has_cf = cashflow is not None and not cashflow.empty
+    has_bs = balance_sheet is not None and not balance_sheet.empty
 
     rev_row = _get_row(income_stmt, _REVENUE_NAMES)
     gp_row = _get_row(income_stmt, _GROSS_PROFIT_NAMES)
@@ -186,6 +206,9 @@ def _build_yearly_financials(
     da_row = _get_row(cashflow, _DA_NAMES) if has_cf else None
     capex_row = _get_row(cashflow, _CAPEX_NAMES) if has_cf else None
     nwc_row = _get_row(cashflow, _NWC_CHANGE_NAMES) if has_cf else None
+
+    debt_row = _get_row(balance_sheet, _TOTAL_DEBT_NAMES) if has_bs else None
+    cash_row = _get_row(balance_sheet, _CASH_NAMES) if has_bs else None
 
     yearly: list[dict[str, Any]] = []
     for col in cols:
@@ -211,6 +234,11 @@ def _build_yearly_financials(
                 "depreciation_amortization": _cell(da_row, col),
                 "capital_expenditure": abs(capex_raw) if capex_raw is not None else None,
                 "change_in_working_capital": _cell(nwc_row, col),
+                # Net debt legs (the historical band's EV numerator). None when the
+                # balance sheet is absent or the row is missing — a fabricated 0
+                # here reads as a debt-free year and skews the multiple low.
+                "total_debt": _cell(debt_row, col),
+                "total_cash": _cell(cash_row, col),
             }
         )
     return yearly
@@ -828,7 +856,17 @@ class YFinanceProvider(DataProvider):
         if income_stmt is None or income_stmt.empty:
             return self._fetch_financials(ticker, info, await self._ev_bridge_claims(ticker, t))
 
-        yearly_data = _build_yearly_financials(income_stmt, cashflow, years)
+        # Tolerant: the balance sheet only supplies the net-debt legs, so its absence
+        # must not cost the income/cashflow years (it would send a multi-year fetch
+        # down the single-year fallback). Without it the EV-based bands stay withheld
+        # with their own warning, exactly as before.
+        try:
+            balance_sheet = await asyncio.to_thread(lambda: t.balance_sheet)
+        except (AttributeError, KeyError, ValueError, TypeError) as e:
+            logger.info(f"yfinance balance sheet unavailable for {ticker}: {e}")
+            balance_sheet = None
+
+        yearly_data = _build_yearly_financials(income_stmt, cashflow, balance_sheet, years)
 
         return DataResult(
             data={"yearly_data": yearly_data},

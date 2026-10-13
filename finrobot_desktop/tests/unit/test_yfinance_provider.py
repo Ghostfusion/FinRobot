@@ -673,6 +673,87 @@ class TestFetchHistoricalFinancials:
         }
         return pd.DataFrame(data)
 
+    @staticmethod
+    def _build_balance_sheet(years: int = 3, *, with_complete_debt: bool = True) -> pd.DataFrame:
+        """Balance sheet aligned to ``_build_income_stmt`` / ``_build_cashflow``.
+
+        Carries the two legs the historical valuation bands form EV from;
+        ``with_complete_debt=False`` models a frame with no complete-debt row, which
+        must leave debt unknown rather than borrowing a partial leg.
+        """
+        columns = pd.to_datetime([f"{2024 - i}-09-30" for i in range(years)])
+        # Same orientation as _build_cashflow: outer key = fiscal-year-end column,
+        # inner keys = statement row names.
+        data: dict[object, dict[str, float]] = {
+            col: {"Cash And Cash Equivalents": (30 - i * 2) * 1e9} for i, col in enumerate(columns)
+        }
+        if with_complete_debt:
+            for i, col in enumerate(columns):
+                data[col]["Total Debt"] = (120 - i * 5) * 1e9
+        return pd.DataFrame(data)
+
+    @pytest.mark.asyncio
+    async def test_multi_year_includes_the_debt_and_cash_legs(self):
+        """The bands build EV = market cap + net debt, so the yearly dict must carry
+        the debt/cash legs. They were missing entirely, which withheld every EV-based
+        band (and both Football-Field reverse multiples) whenever FMP was rate-limited
+        — live 2026-10-12 on NFLX, all five years had net_debt None."""
+        mock_ticker = _make_mock_ticker(
+            VALID_INFO,
+            income_stmt=self._build_income_stmt(3),
+            cashflow=self._build_cashflow(3),
+            balance_sheet=self._build_balance_sheet(3),
+        )
+        provider = YFinanceProvider()
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker",
+            return_value=mock_ticker,
+        ):
+            result = await provider.fetch("AAPL", "financials", years=3)
+
+        yearly = result.data["yearly_data"]
+        assert yearly[0]["total_debt"] == 120e9
+        assert yearly[0]["total_cash"] == 30e9
+        assert yearly[2]["total_debt"] == 110e9  # 120 - 2*5
+        assert yearly[2]["total_cash"] == 26e9  # 30 - 2*2
+
+    @pytest.mark.asyncio
+    async def test_missing_balance_sheet_leaves_debt_unknown_not_zero(self):
+        """None ≠ 0: a fabricated 0 reads as a debt-free year and skews EV/EBITDA low."""
+        mock_ticker = _make_mock_ticker(
+            VALID_INFO, income_stmt=self._build_income_stmt(2), cashflow=self._build_cashflow(2)
+        )
+        provider = YFinanceProvider()
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker",
+            return_value=mock_ticker,
+        ):
+            result = await provider.fetch("AAPL", "financials", years=2)
+
+        yearly = result.data["yearly_data"]
+        assert yearly[0]["total_debt"] is None
+        assert yearly[0]["total_cash"] is None
+
+    @pytest.mark.asyncio
+    async def test_partial_balance_sheet_does_not_invent_debt(self):
+        """A frame with no complete-debt row keeps debt unknown while cash, which IS
+        reported, still comes through."""
+        mock_ticker = _make_mock_ticker(
+            VALID_INFO,
+            income_stmt=self._build_income_stmt(2),
+            balance_sheet=self._build_balance_sheet(2, with_complete_debt=False),
+        )
+        provider = YFinanceProvider()
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker",
+            return_value=mock_ticker,
+        ):
+            result = await provider.fetch("AAPL", "financials", years=2)
+
+        yearly = result.data["yearly_data"]
+        assert yearly[0]["total_debt"] is None
+        assert yearly[0]["total_cash"] == 30e9
+
     @pytest.mark.asyncio
     async def test_multi_year_returns_yearly_data(self):
         """When years > 1, result.data['yearly_data'] has N entries."""

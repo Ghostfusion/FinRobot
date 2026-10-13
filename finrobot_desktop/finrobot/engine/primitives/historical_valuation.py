@@ -137,9 +137,27 @@ def compute_historical_band(
         samples.append((point.sample_date, multiple))
 
     if not samples:
-        return _empty(
-            metric, ["no sample could compute a multiple — check whether EBITDA / FCF is disclosed"]
+        # Name WHICH input is missing instead of guessing "EBITDA / FCF": the live
+        # NFLX case (2026-10-12) had both while net debt was absent on every year,
+        # and the old wording sent the reader looking for a disclosure that was
+        # right there in the band's own payload.
+        missing: list[str] = []
+        if metric == "ev_ebitda":
+            if any(fy.ebitda is None or fy.ebitda <= 0 for fy in fiscals):
+                missing.append("EBITDA")
+            if all(fy.net_debt is None for fy in fiscals):
+                missing.append("net debt")
+            elif any(fy.net_debt is None for fy in fiscals):
+                missing.append("net debt for some years")
+        elif any(fy.free_cash_flow is None or fy.free_cash_flow <= 0 for fy in fiscals):
+            missing.append("free cash flow")
+        detail = (
+            f"the serving provider reports no usable {', '.join(missing)} for the "
+            "aligned fiscal years"
+            if missing
+            else "no price/financial pair produced a positive multiple"
         )
+        return _empty(metric, [f"no sample could compute a multiple — {detail}"])
 
     if skipped_no_financial:
         warnings.append(

@@ -13,12 +13,17 @@ the same-currency (US issuer) path is left untouched.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 
-from finrobot.engine.data.historical_loaders import load_yearly_financials
-from finrobot.engine.data.interface import DataResult
+from finrobot.engine.data.historical_loaders import (
+    load_yearly_financials,
+    resolve_band_shares,
+)
+from finrobot.engine.data.interface import DataResult, ProviderError
+from finrobot.engine.primitives.historical_valuation import PricePoint, YearlyFinancials
 
 
 class _FXStubLayer:
@@ -88,6 +93,140 @@ async def test_load_yearly_financials_no_fx_for_same_currency():
     yf, _ = out[0]
     assert yf.ebitda == pytest.approx(2_752_481_885_000)  # untouched (rate not applied)
     assert layer.rate_calls == []
+
+
+class _SharesFallbackLayer:
+    """Yearly rows WITHOUT a shares key, plus a canonical FINANCIALS payload.
+
+    That is the production shape whenever FMP is unavailable: only FMP's yearly
+    builder emits ``shares_outstanding`` (newest year only), so yfinance's and the
+    SEC companyfacts builder's rows are shares-less and the band used to be
+    withheld entirely. Live 2026-10-12 on NFLX: P/E bands AND both Football-Field
+    reverse multiples dropped although the canonical count (4.16B) was one call
+    away.
+    """
+
+    def __init__(self, *, canonical_shares: float | None) -> None:
+        self._canonical_shares = canonical_shares
+        self.canonical_calls = 0
+
+    async def fetch_canonical(self, data_type, ticker):  # type: ignore[no-untyped-def]
+        self.canonical_calls += 1
+        if self._canonical_shares is None:
+            raise ProviderError("canonical financials unavailable")
+        return SimpleNamespace(shares_outstanding=self._canonical_shares)
+
+
+def _yearly_with(shares: float | None) -> list[tuple[YearlyFinancials, float | None]]:
+    return [
+        (
+            YearlyFinancials(
+                fiscal_date=date(2024, 12, 31),
+                ebitda=10_000_000.0,
+                free_cash_flow=8_000_000.0,
+                net_debt=0.0,
+            ),
+            shares,
+        )
+    ]
+
+
+async def test_band_shares_prefers_the_per_year_count():
+    """A per-year count is the honest input: no fallback call, no disclosure."""
+    layer = _SharesFallbackLayer(canonical_shares=9_000_000_000.0)
+    shares, disclosure = await resolve_band_shares("VZ", _yearly_with(4_200_000_000.0), layer)
+
+    assert shares == 4_200_000_000.0
+    assert disclosure is None
+    assert layer.canonical_calls == 0
+
+
+async def test_band_shares_does_not_fetch_without_optin():
+    """A band call must not add I/O the caller did not ask for: the preloaded
+    pipeline context asserts the layer is never touched, so the canonical lookup is
+    opt-in (`allow_fetch`) or supplied by the caller (`override`). Without either,
+    the band keeps its pre-fallback behaviour — withheld, warning intact."""
+    layer = _SharesFallbackLayer(canonical_shares=4_163_939_676.0)
+    shares, disclosure = await resolve_band_shares("NFLX", _yearly_with(None), layer)
+
+    assert (shares, disclosure) == (None, None)
+    assert layer.canonical_calls == 0
+
+
+async def test_band_shares_prefers_the_callers_own_count_without_fetching():
+    """The pipeline passes the DCF's share count: same number as the report's other
+    panels, no fetch, and the approximation is still disclosed."""
+    layer = _SharesFallbackLayer(canonical_shares=9_999_999_999.0)
+    shares, disclosure = await resolve_band_shares(
+        "NFLX", _yearly_with(None), layer, override=4_163_939_676.0
+    )
+
+    assert shares == pytest.approx(4_163_939_676.0)
+    assert layer.canonical_calls == 0
+    assert disclosure is not None
+    assert "the run's own share count" in disclosure
+
+
+async def test_band_shares_ignores_a_non_numeric_override():
+    """A test double (MagicMock) must not be compared or trusted as a count."""
+    layer = _SharesFallbackLayer(canonical_shares=4_163_939_676.0)
+    shares, disclosure = await resolve_band_shares(
+        "NFLX",
+        _yearly_with(None),
+        layer,
+        override=object(),  # type: ignore[arg-type]
+    )
+
+    assert (shares, disclosure) == (None, None)
+    assert layer.canonical_calls == 0
+
+
+async def test_band_shares_fetches_only_when_the_caller_opts_in():
+    layer = _SharesFallbackLayer(canonical_shares=4_163_939_676.0)
+    shares, disclosure = await resolve_band_shares(
+        "NFLX", _yearly_with(None), layer, allow_fetch=True
+    )
+
+    assert shares == pytest.approx(4_163_939_676.0)
+    assert layer.canonical_calls == 1
+    # The reader must see WHICH count priced the band, and why it is approximate.
+    assert "4,163,939,676" in disclosure
+    assert "current share count" in disclosure
+    assert "buyback or issuance history makes the earlier multiples approximate" in disclosure
+
+
+async def test_band_shares_gives_up_when_the_fetch_finds_nothing():
+    layer = _SharesFallbackLayer(canonical_shares=None)
+    shares, disclosure = await resolve_band_shares(
+        "ZZZZ", _yearly_with(None), layer, allow_fetch=True
+    )
+
+    assert shares is None
+    assert disclosure is None
+
+
+async def test_bands_compute_on_the_supplied_count_and_disclose_it(monkeypatch):
+    """The NFLX shape end to end: shares-less yearly rows + the caller's count must
+    produce a band (not an empty one) that carries the disclosure — with no fetch."""
+    from finrobot.engine.data import historical_loaders as loaders
+
+    async def fake_yearly(ticker, data_layer, years):
+        return _yearly_with(None)
+
+    async def fake_prices(ticker, data_layer, years):
+        return [PricePoint(sample_date=date(2024, 12, 31), close=100.0)]
+
+    monkeypatch.setattr(loaders, "load_yearly_financials", fake_yearly)
+    monkeypatch.setattr(loaders, "load_price_history", fake_prices)
+
+    layer = _SharesFallbackLayer(canonical_shares=4_163_939_676.0)
+    band = await loaders.compute_bands_via_data_layer(
+        "NFLX", "ev_ebitda", 5, layer, shares_override=4_163_939_676.0
+    )
+
+    assert band.sample_count > 0
+    assert layer.canonical_calls == 0
+    assert any("share count" in w for w in band.warnings), band.warnings
 
 
 class _FXFailLayer(_FXStubLayer):

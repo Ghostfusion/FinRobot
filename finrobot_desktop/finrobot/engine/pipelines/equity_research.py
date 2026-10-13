@@ -1085,6 +1085,10 @@ async def _execute_technical_analysis(
         has_anchor_target=has_anchor_target,
         current_ev_ebitda=current_ev_ebitda_value,
         price_fx_to_usd=price_fx_to_usd,
+        # The DCF's own share count: the band needs one to build EV, the per-year
+        # rows only carry it when FMP is the source, and passing it here keeps the
+        # band on the report's caliber without adding a data-layer call.
+        shares_outstanding=dcf.inputs.shares_outstanding,
     )
 
     summary_parts: list[str] = []

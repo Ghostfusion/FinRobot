@@ -137,6 +137,7 @@ async def build_technical_analysis(
     has_anchor_target: bool = True,
     current_ev_ebitda: float | None = None,
     price_fx_to_usd: float = 1.0,
+    shares_outstanding: float | None = None,
 ) -> TechnicalAnalysis:
     """Run MC + Sniper + Bands and assemble the payload.
 
@@ -175,7 +176,12 @@ async def build_technical_analysis(
         ticker, current_price, dcf_target, prices, warnings, has_anchor_target=has_anchor_target
     )
     historical_bands = await _safe_historical_bands(
-        ticker, data_layer, band_years, warnings, current_ev_ebitda=current_ev_ebitda
+        ticker,
+        data_layer,
+        band_years,
+        warnings,
+        current_ev_ebitda=current_ev_ebitda,
+        shares_override=shares_outstanding,
     )
 
     return TechnicalAnalysis(
@@ -261,10 +267,16 @@ async def _safe_historical_bands(
     warnings: list[str],
     *,
     current_ev_ebitda: float | None = None,
+    shares_override: float | None = None,
 ) -> HistoricalBandSnapshot | None:
     try:
         band = await compute_bands_via_data_layer(
-            ticker, "ev_ebitda", years, data_layer, current_override=current_ev_ebitda
+            ticker,
+            "ev_ebitda",
+            years,
+            data_layer,
+            current_override=current_ev_ebitda,
+            shares_override=shares_override,
         )
     except (ValueError, RuntimeError) as exc:
         logger.warning("Historical bands failed for %s: %s", ticker, exc)
