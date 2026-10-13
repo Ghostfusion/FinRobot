@@ -131,6 +131,19 @@ _PIPELINE_SPECS: tuple[PipelineSpec, ...] = (
         ),
     ),
     PipelineSpec(
+        key="fund_research",
+        import_path="finrobot.engine.pipelines.fund_research:create_fund_research_pipeline",
+        tool_name="run_fund_research",
+        tool_description=(
+            "Run investment-fund research (ETF / mutual fund / closed-end fund).\n"
+            "Uses a multi-step enforced pipeline with deterministic NAV, expense-ratio\n"
+            "and portfolio-composition math.\n"
+            "Use when the user asks about: ETFs, mutual funds, closed-end funds, index\n"
+            "funds, NAV, net asset value, expense ratio, fund holdings, portfolio\n"
+            "composition, what does this fund hold, fund yield, fund distribution."
+        ),
+    ),
+    PipelineSpec(
         key="ic-memo",
         import_path="finrobot.engine.pipelines.ic_memo:create_ic_memo_pipeline",
         tool_name="run_ic_memo",

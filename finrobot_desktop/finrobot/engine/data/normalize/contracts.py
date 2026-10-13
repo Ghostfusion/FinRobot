@@ -102,7 +102,20 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 # vendor states as 0. Pairs with the FINANCIALS raw-slot bump
 # (cache._RAW_SLOT_VERSION) so the rebuild refetches a payload that carries the
 # fields rather than re-normalizing a stale raw row.
-CANONICAL_CONTRACT_VERSION = 11
+# v12 — 2026-10-12: FINANCIALS now carries ``quote_type`` (Yahoo EQUITY / ETF /
+# MUTUALFUND), and that field is a ROUTING input, not a note:
+# ``engine.data.instrument.is_fund_quote_type`` reads it to send a fund to the fund
+# pipeline and to make the equity path refuse it with an actionable message. A
+# pre-change snapshot deserializes ``quote_type`` as None → classified UNKNOWN →
+# the guard does NOT fire and a fund dies with the old, misleading "Missing or zero
+# revenue for IEI". This is why the BUG-038 precedent (an added optional field is
+# read-compatible ⇒ no bump) does NOT apply here: there, stale and fresh collapsed
+# onto the same downstream path; here stale vs fresh route differently, which is
+# exactly the "old cached payload unsafe to trust" case this constant exists for.
+# Bumping invalidates every FINANCIALS canonical slot once, so the next read
+# refetches a payload carrying the field. Observed: an IEI canonical cached earlier
+# the same day reproduced the old error path until the bump.
+CANONICAL_CONTRACT_VERSION = 12
 
 # Degradation markers carried in ``Provenance.degraded``. Surfaced to the UI so
 # a fallback is visible rather than silent.
@@ -381,6 +394,14 @@ class NormalizedFinancials(BaseModel):
     industry: str | None = None
     sector: str | None = None
     country: str | None = None
+    # The provider's own statement of what the security IS (Yahoo ``quoteType``:
+    # EQUITY / ETF / MUTUALFUND; EODHD ``General.Type``). Read by
+    # ``engine.data.instrument.classify_instrument`` to route a symbol to the
+    # equity or the fund pipeline, instead of letting a fund die downstream as
+    # "Missing or zero revenue". None = the provider said nothing — callers must
+    # never read that as "proven an operating company". Optional → read-compatible
+    # with cached canonical payloads (BUG-038 precedent), so no version bump.
+    quote_type: str | None = None
     # FMP /profile isAdr structural flag (True = confirmed ADR). Lets the family-1
     # foreign_issuer_usd_tags acceptor suppress its USD/USD review banner for a
     # confirmed ADR. None on the yfinance path (.info has no isAdr) = "unknown",
@@ -464,3 +485,100 @@ class NormalizedForwardEstimates(BaseModel):
         """The ``{"rows": [...]}`` shape the red-line leaf consumes
         (``get_forward_financials`` / ``get_forward_revenue_growth``)."""
         return {"rows": self.rows}
+
+
+class FundHolding(BaseModel):
+    """One reported portfolio position (fraction of net assets, not notional)."""
+
+    model_config = ConfigDict(frozen=False)
+
+    symbol: str | None = None
+    name: str | None = None
+    weight: float | None = Field(
+        default=None, description="Fraction of net assets (0.0431 = 4.31%)"
+    )
+
+
+class NormalizedFundProfile(BaseModel):
+    """Canonical investment-fund profile (ETF / mutual fund / closed-end fund).
+
+    Why a contract of its own: a fund files no income statement, so
+    ``NormalizedFinancials`` — whose every lane is a company line item — comes
+    back as a validated-looking record of ``None``s (measured: IEI and VTSAX both
+    return revenue / ebitda / net_income / market_cap / total_debt = ``None``).
+    The measures that DO define a fund are NAV per share against market price,
+    the expense ratio, total net assets, distribution yield and the portfolio's
+    composition, and they need their own units and their own provenance.
+
+    Unit convention (the trap this contract exists to close): **every ratio,
+    return and yield here is a FRACTION** — ``0.0015`` = 15 bp of expense,
+    ``0.0382`` = 3.82% yield. Vendors disagree per field (Yahoo reports
+    ``netExpenseRatio`` 0.15 and ``ytdReturn`` −2.55 meaning *percent*, while its
+    ``yield`` 0.0382 and ``threeYearAverageReturn`` 0.035 mean *fractions*), so
+    the provider arm converts to the contract's convention at the edge and this
+    model stores one unit. ``asset_classes`` / ``sector_weights`` /
+    ``region_weights`` / ``bond_ratings`` are fractions summing to ≈1.
+
+    ``instrument`` is not carried: the existence of this object IS the fund
+    classification (``engine.data.instrument`` decides whether we get here).
+    """
+
+    model_config = ConfigDict(frozen=False)
+
+    ticker: str
+    # ── identity ──────────────────────────────────────────────────────────
+    name: str | None = None
+    fund_family: str | None = None
+    legal_type: str | None = None  # vendor legal form ("Exchange Traded Fund")
+    category: str | None = None  # vendor style/category ("Large Blend")
+    quote_type: str | None = None  # the provider's raw classification
+    inception_date: date | None = None
+    currency: str = "USD"
+    as_of: datetime = Field(description="Semantic time (= latest NAV date when known)")
+    # ── size + pricing ────────────────────────────────────────────────────
+    total_net_assets: float | None = None  # USD
+    nav_per_share: float | None = None
+    market_price: float | None = None  # None when the fund is NAV-priced only
+    shares_outstanding: float | None = None
+    # ── cost ──────────────────────────────────────────────────────────────
+    net_expense_ratio: float | None = None  # fraction of net assets / year
+    gross_expense_ratio: float | None = None
+    # The vendor's peer-category average fee for the same measure — the yardstick
+    # that turns "0.15%" into "cheap for this category". Yahoo serves it beside the
+    # fund's own figure (fund_operations' second column: IEI 0.005287 vs its own
+    # 0.0015); EODHD publishes no category average, so its arm leaves this None.
+    category_avg_expense_ratio: float | None = None
+    turnover: float | None = None  # annual holdings turnover, fraction
+    # ── income + performance ──────────────────────────────────────────────
+    distribution_yield: float | None = None
+    ytd_return: float | None = None
+    return_3m: float | None = None
+    return_1y: float | None = None
+    return_3y_annual: float | None = None
+    return_5y_annual: float | None = None
+    beta_3y: float | None = None
+    # ── allocation ────────────────────────────────────────────────────────
+    asset_classes: dict[str, float] = Field(default_factory=dict)
+    sector_weights: dict[str, float] = Field(default_factory=dict)
+    region_weights: dict[str, float] = Field(default_factory=dict)
+    bond_ratings: dict[str, float] = Field(default_factory=dict)
+    bond_duration: float | None = Field(default=None, description="Years")
+    bond_maturity: float | None = Field(default=None, description="Years")
+    equity_pe: float | None = None
+    top_holdings: list[FundHolding] = Field(default_factory=list)
+
+    provenance: Provenance
+    warnings: list[str] = Field(default_factory=list)
+
+    def allocation_total(self) -> float | None:
+        """Sum of the reported asset-class weights, or None when unreported.
+
+        A fund's asset mix must reconcile: the weights are shares of one
+        portfolio, so a sum that is materially off 1.0 means the provider
+        published a partial breakdown. Callers surface that as a warning rather
+        than silently renormalizing (renormalizing would invent the missing
+        slice).
+        """
+        if not self.asset_classes:
+            return None
+        return math.fsum(self.asset_classes.values())

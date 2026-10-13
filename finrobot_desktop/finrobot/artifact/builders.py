@@ -797,6 +797,91 @@ def build_ddm_artifact(
 
 
 # ---------------------------------------------------------------------------
+# Fund research (ETF / mutual fund / closed-end fund)
+# ---------------------------------------------------------------------------
+
+
+def build_fund_research_artifact(
+    result: "PipelineResult",
+    ticker: str,
+    deps: "FinRobotDeps",
+) -> "Artifact":
+    """Build an Artifact from a completed fund research pipeline result.
+
+    The structured payload is the fund profile (identity / size / cost /
+    allocation) overlaid with the deterministic assessment (returns, risk,
+    premium/discount to NAV, expense cost drag, portfolio concentration). Both
+    halves are code-computed; the LLM steps only narrate, and
+    ``_report_drift_flag`` scans them for ungrounded $-amounts.
+    """
+    from finrobot.engine.models.fund import FundAssessment, FundData
+
+    fund_data = result.structured_data.get("fund_data")
+    fund_assessment = result.structured_data.get("fund_assessment")
+
+    data_source = "unknown"
+    fetched_at = _now()
+    raw_data: dict[str, Any] = {}
+    if isinstance(fund_data, FundData):
+        data_source = fund_data.provenance.provider
+        fetched_at = fund_data.provenance.fetched_at
+        raw_data = fund_data.model_dump(mode="json")
+
+    structured_out: dict[str, Any] = _safe_dump(fund_data)
+    warnings_out: list[str] = list(fund_data.warnings) if isinstance(fund_data, FundData) else []
+    if isinstance(fund_assessment, FundAssessment):
+        assessment_dump = _safe_dump(fund_assessment)
+        # The assessment owns the computed metrics; overlay them so the pinned
+        # top-level keys (returns / volatility / max_drawdown / sharpe /
+        # premium_discount / cost_drag / concentration / duration_sensitivity)
+        # sit beside the profile fields. Warnings are merged, not overwritten.
+        for key, value in assessment_dump.items():
+            if key == "warnings":
+                continue
+            structured_out[key] = value
+        warnings_out.extend(fund_assessment.warnings)
+    structured_out["warnings"] = warnings_out
+
+    if isinstance(fund_data, FundData) and fund_data.nav_dates and fund_data.nav_closes:
+        # Dated NAV/price series for the report chart. FundData carries the two
+        # halves as parallel arrays; the artifact ships ready-to-plot points so
+        # the client never has to zip them.
+        structured_out["nav_series"] = [
+            {"date": day.isoformat(), "close": close}
+            for day, close in zip(fund_data.nav_dates, fund_data.nav_closes, strict=False)
+        ]
+
+    drift_warnings = _report_drift_flag(structured_out, raw_data, result, "fund_narrative")
+
+    return Artifact(
+        id=_make_artifact_id(ticker, "fund_research"),
+        ticker=ticker.upper(),
+        type="fund_research",
+        inputs=ArtifactInputs(
+            data_source=data_source,
+            data_fetched_at=fetched_at,
+            raw_data=raw_data,
+        ),
+        assumptions=ArtifactAssumptions(parameters={}),
+        compute_version=_make_base_compute_version("fund_nav_metrics_v1"),
+        outputs=ArtifactOutputs(
+            structured=structured_out,
+            summary_text=_summary_text(
+                result,
+                structured_out,
+                deps,
+                summary_steps=("fund_assessment", "fund_narrative"),
+            ),
+            warnings=_collect_warnings(result) + drift_warnings,
+        ),
+        meta=ArtifactMeta(
+            created_at=_now(),
+            source="pipeline:fund_research",
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Earnings
 # ---------------------------------------------------------------------------
 

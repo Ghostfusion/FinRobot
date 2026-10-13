@@ -5,8 +5,9 @@
 // window.__FINROBOT_REPORT__ (artifact + version timeline + a dehydrated
 // react-query cache + locale), rehydrates the query cache so the chapters' data
 // hooks resolve from inlined data WITHOUT any network, and renders the exact
-// same body the app uses (ReportExportBody → the 15-chapter ReportChapters for
-// equity_research, the CompactArtifactViewer for dcf / ddm / lbo / comps / …) —
+// same body the app uses (ReportExportBody → the multi-chapter ReportChapters:
+// 15 equity chapters for equity_research, the fund spine for fund_research, and
+// the CompactArtifactViewer for dcf / ddm / lbo / comps / …) —
 // Recharts tooltips, heatmap and football field all live, fully offline.
 
 import { StrictMode } from 'react'

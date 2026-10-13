@@ -126,6 +126,12 @@ def normalize_financials(result: DataResult) -> NormalizedFinancials:
         trailing_eps=_f(data.get("trailing_eps")),
         industry=data.get("industry"),
         sector=data.get("sector"),
+        # The provider's own security type (EQUITY / ETF / MUTUALFUND). Enumerated
+        # explicitly because this normalizer maps a known key list — a provider key
+        # it does not name here is silently dropped, and a dropped quote_type makes
+        # ``is_fund_quote_type`` classify UNKNOWN, i.e. a fund routes to the equity
+        # path and dies with "Missing or zero revenue" instead of being routed.
+        quote_type=data.get("quote_type"),
         country=country,
         is_adr=is_adr,
         beta=_f(data.get("beta")),

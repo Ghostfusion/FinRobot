@@ -3,10 +3,18 @@
 
 import type { CSSProperties, ReactNode } from 'react'
 import { useI18n } from '../../../i18n'
-import { chapterLabel, type ChapterId } from './labels'
+import {
+  chapterLabel,
+  fundChapterLabel,
+  isFundChapterId,
+  type ChapterId,
+  type FundChapterId,
+} from './labels'
 
 interface ChapterProps {
-  id: ChapterId
+  /** Equity chapter id or fund-report chapter id. The two id sets are disjoint and
+   *  each resolves its own label table (01–15 vs 01–05). */
+  id: ChapterId | FundChapterId
   /** Optional override — usually omit; the title is read from chapterLabel(id, locale). */
   num?: string
   title?: string
@@ -22,7 +30,7 @@ export function Chapter({
   children,
 }: ChapterProps): React.ReactElement {
   const { locale } = useI18n()
-  const label = chapterLabel(id, locale)
+  const label = isFundChapterId(id) ? fundChapterLabel(id, locale) : chapterLabel(id, locale)
   const num = numOverride ?? label.num
   const title = titleOverride ?? label.title
   const sub = subOverride ?? label.sub

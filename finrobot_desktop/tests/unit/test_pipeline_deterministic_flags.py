@@ -33,6 +33,7 @@ from finrobot.engine.pipelines.equity_research import (
     _execute_catalyst_analysis,
     create_equity_research_pipeline,
 )
+from finrobot.engine.pipelines.fund_research import create_fund_research_pipeline
 from finrobot.engine.pipelines.ic_memo import create_ic_memo_pipeline
 from finrobot.engine.pipelines.lbo import create_lbo_pipeline
 
@@ -42,6 +43,7 @@ _PIPELINE_FACTORIES = [
     create_ddm_pipeline,
     create_earnings_analysis_pipeline,
     create_equity_research_pipeline,
+    create_fund_research_pipeline,
     create_ic_memo_pipeline,
     create_lbo_pipeline,
 ]

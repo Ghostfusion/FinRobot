@@ -18,10 +18,12 @@ from finrobot.engine.data.provider_health import ProviderHealth, ProviderState
 from finrobot.engine.data.normalize import (
     NormalizedFinancials,
     NormalizedForwardEstimates,
+    NormalizedFundProfile,
     NormalizedPrice,
     PriceBar,
     normalize_financials,
     normalize_forward_estimates,
+    normalize_fund_profile,
     normalize_price,
 )
 from finrobot.engine.data.categories import PRIORITY, category_of
@@ -65,8 +67,18 @@ def _serves(provider: DataProvider, data_type: str | DataType) -> bool:
 # Union of the typed contracts the canonical gate can serve. FORWARD_ESTIMATES
 # joined PRICE / FINANCIALS in 2026-06 (hard single-source for the DCF-seed
 # entries); every other data_type remains raw-fetch only.
-CanonicalSnapshot = NormalizedPrice | NormalizedFinancials | NormalizedForwardEstimates
-_CANONICAL_TYPES = (DataType.PRICE, DataType.FINANCIALS, DataType.FORWARD_ESTIMATES)
+CanonicalSnapshot = (
+    NormalizedPrice | NormalizedFinancials | NormalizedForwardEstimates | NormalizedFundProfile
+)
+_CANONICAL_TYPES = (
+    DataType.PRICE,
+    DataType.FINANCIALS,
+    DataType.FORWARD_ESTIMATES,
+    # FUND_PROFILE (2026-10-12): an investment fund has no income statement, so
+    # its profile is a canonical contract of its own rather than a FINANCIALS
+    # variant (see engine.data.instrument and NormalizedFundProfile).
+    DataType.FUND_PROFILE,
+)
 
 
 class DataLayer:
@@ -466,6 +478,10 @@ class DataLayer:
     ) -> NormalizedForwardEstimates: ...
     @overload
     async def fetch_canonical(
+        self, data_type: Literal[DataType.FUND_PROFILE], ticker: str
+    ) -> NormalizedFundProfile: ...
+    @overload
+    async def fetch_canonical(
         self, data_type: str | DataType, ticker: str
     ) -> CanonicalSnapshot: ...
 
@@ -497,7 +513,8 @@ class DataLayer:
         data_type = DataType(data_type)
         if data_type not in _CANONICAL_TYPES:
             raise ValueError(
-                f"fetch_canonical supports only PRICE / FINANCIALS / FORWARD_ESTIMATES, "
+                f"fetch_canonical supports only PRICE / FINANCIALS / FORWARD_ESTIMATES / "
+                f"FUND_PROFILE, "
                 f"got {data_type}. Other types have no canonical contract — use fetch()."
             )
 
@@ -568,6 +585,8 @@ class DataLayer:
             normalized = normalize_price(raw)
         elif data_type == DataType.FORWARD_ESTIMATES:
             normalized = normalize_forward_estimates(raw)
+        elif data_type == DataType.FUND_PROFILE:
+            normalized = normalize_fund_profile(raw)
         else:
             normalized = normalize_financials(raw)
         # Carry the raw fetch's warnings (incl. cross_validate discrepancies)
@@ -760,7 +779,8 @@ class DataLayer:
         data_type = DataType(data_type)
         if data_type not in _CANONICAL_TYPES:
             raise ValueError(
-                f"read_canonical_cached supports only PRICE / FINANCIALS / FORWARD_ESTIMATES, "
+                f"read_canonical_cached supports only PRICE / FINANCIALS / FORWARD_ESTIMATES / "
+                f"FUND_PROFILE, "
                 f"got {data_type}."
             )
         # Stale-while-revalidate paint must show the LAST-KNOWN snapshot, even
@@ -799,6 +819,8 @@ class DataLayer:
             obj = NormalizedPrice.model_validate_json(payload_json)
         elif data_type == DataType.FORWARD_ESTIMATES:
             obj = NormalizedForwardEstimates.model_validate_json(payload_json)
+        elif data_type == DataType.FUND_PROFILE:
+            obj = NormalizedFundProfile.model_validate_json(payload_json)
         else:
             obj = NormalizedFinancials.model_validate_json(payload_json)
         obj.provenance.from_cache = from_cache

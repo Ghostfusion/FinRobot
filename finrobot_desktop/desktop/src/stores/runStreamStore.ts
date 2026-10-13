@@ -150,6 +150,11 @@ const PIPELINE_STEP_NAMES: Record<string, string[]> = {
     'thesis',
     'report',
   ],
+  // fund_research.py create_fund_research_pipeline().steps EXACTLY (order + count).
+  // A fund files no income statement, so the equity step vocabulary (financial
+  // modeling / thesis / report) does not apply: the run fetches the fund profile,
+  // scores it, writes the narrative and assembles the report.
+  fund_research: ['fund_data', 'fund_assessment', 'fund_narrative', 'fund_report'],
   'ic-memo': ['data_collection', 'financial_analysis', 'memo_drafting', 'report'],
   earnings: ['data_collection', 'earnings_extraction', 'thesis', 'report'],
   dcf: ['data_collection', 'financial_modeling', 'report'],

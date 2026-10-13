@@ -11,3 +11,16 @@
 export function isEquityResearch(type: string): boolean {
   return type === 'equity_research'
 }
+
+/** Types that render as a MULTI-CHAPTER long-scroll report (rail + numbered
+ *  sections) instead of the compact single-computation viewer.
+ *
+ *  `fund_research` joins `equity_research` here: a fund (ETF / mutual fund /
+ *  closed-end fund) files no income statement, so it renders its own five-chapter
+ *  report — profile → cost → holdings & allocation → risk & return → narrative —
+ *  rather than the equity spine (a fund has no thesis, DCF, valuation band or SEC
+ *  filings, so the equity chapters would all be empty shells). Both report
+ *  flavours share the page chrome; only the section manifest differs. */
+export function isReportArtifact(type: string): boolean {
+  return type === 'equity_research' || type === 'fund_research'
+}

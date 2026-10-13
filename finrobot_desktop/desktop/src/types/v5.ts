@@ -13,6 +13,7 @@ export type ArtifactType =
   | 'earnings'
   | 'ic_memo'
   | 'equity_research'
+  | 'fund_research'
   | 'peer_research'
   | 'ad_hoc'
 

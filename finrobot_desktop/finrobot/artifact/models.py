@@ -21,6 +21,7 @@ ArtifactType = Literal[
     "comps",
     "ddm",
     "earnings",
+    "fund_research",
     "ic_memo",
     "equity_research",
     "peer_research",

@@ -21,7 +21,16 @@ from finrobot.engine.pipelines.registry import (
 
 # The canonical pipeline set. If a pipeline is added/removed, this list (and the
 # registry) change together — that is the whole point of the consolidation.
-EXPECTED_KEYS = {"research", "comps", "dcf", "ddm", "lbo", "earnings", "ic-memo"}
+EXPECTED_KEYS = {
+    "research",
+    "comps",
+    "dcf",
+    "ddm",
+    "lbo",
+    "earnings",
+    "fund_research",
+    "ic-memo",
+}
 
 
 class TestSpecShape:

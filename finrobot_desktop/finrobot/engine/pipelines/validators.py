@@ -24,6 +24,7 @@ from finrobot.engine.models.financial import (
     DCFResult,
     ThesisResult,
 )
+from finrobot.engine.models.fund import FundAssessment, FundData
 
 logger = logging.getLogger(__name__)
 
@@ -720,3 +721,49 @@ def validate_ddm_output(output: str) -> ValidationResult:
         passed=False,
         error=f"Expected at least 3 DDM components, found {found}",
     )
+
+
+# ---------------------------------------------------------------------------
+# Fund validators (ETF / mutual fund / closed-end fund)
+# ---------------------------------------------------------------------------
+
+
+def validate_fund_profile(data: object) -> ValidationResult:
+    """Fund-profile step validator: a real fund snapshot, not an empty shell.
+
+    Structural only — the step degrades on a fetch that returned a fund with no
+    size / pricing / cost data (which would produce a hollow report). The
+    individual missing fields are legitimately ``None`` for some funds (a
+    NAV-priced mutual fund has no separate NAV quote), so at least one of the
+    anchor fields must be present.
+    """
+    if not isinstance(data, FundData):
+        return ValidationResult(passed=False, error=f"Expected FundData, got {type(data).__name__}")
+    if not data.ticker:
+        return ValidationResult(passed=False, error="Fund profile is missing its ticker")
+    anchors = (
+        data.total_net_assets,
+        data.nav_per_share,
+        data.market_price,
+        data.net_expense_ratio,
+    )
+    if all(value is None for value in anchors):
+        return ValidationResult(
+            passed=False,
+            error=(
+                f"Fund profile for {data.ticker} carries no size, pricing or cost data "
+                "(total_net_assets / nav_per_share / market_price / net_expense_ratio all absent)"
+            ),
+        )
+    return ValidationResult(passed=True)
+
+
+def validate_fund_assessment(assessment: object) -> ValidationResult:
+    """Fund-assessment step validator: the deterministic metrics object is present."""
+    if not isinstance(assessment, FundAssessment):
+        return ValidationResult(
+            passed=False, error=f"Expected FundAssessment, got {type(assessment).__name__}"
+        )
+    if not assessment.ticker:
+        return ValidationResult(passed=False, error="Fund assessment is missing its ticker")
+    return ValidationResult(passed=True)

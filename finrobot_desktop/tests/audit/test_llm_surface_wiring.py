@@ -51,6 +51,7 @@ FINROBOT = ROOT / "finrobot"
 FACTORY = FINROBOT / "engine" / "agents" / "factory.py"
 INSTRUCTIONS = FINROBOT / "engine" / "agents" / "instructions"
 EQUITY_PIPELINE = FINROBOT / "engine" / "pipelines" / "equity_research.py"
+FUND_PIPELINE = FINROBOT / "engine" / "pipelines" / "fund_research.py"
 CLI = FINROBOT / "cli.py"
 # The desktop mirrors the equity-research step order for pre-SSE progress labels;
 # its own comment requires the list to match ``create_equity_research_pipeline``
@@ -304,6 +305,42 @@ class TestEquityPipelineStepWiring:
         assert any("empty" in v for v in violations)
         assert not step_name_violations([(1, "a"), (2, "b")], "x.py")
         assert parse_ts_step_names("research: ['a', 'b'],", "research") == ["a", "b"]
+
+
+class TestFundPipelineStepWiring:
+    """The fund pipeline's four steps are well-formed and the desktop mirror agrees.
+
+    Same contract as the equity pin above, with one extra hazard: the fund run's
+    step vocabulary (fund_data / fund_assessment / fund_narrative / fund_report)
+    shares no name with the equity spine and lives under its OWN registry key
+    (``fund_research``, which is also the artifact type), so a mirror keyed
+    ``research`` would label a fund run with the equity steps — and the panel
+    would silently render names for steps that never ran.
+    """
+
+    def test_step_names_are_unique_and_non_empty(self) -> None:
+        source = FUND_PIPELINE.read_text(encoding="utf-8")
+        named, unnamed = parse_pipeline_step_names(source)
+        where = _rel(FUND_PIPELINE)
+        assert not unnamed, (
+            f"{where}:{unnamed[0]}: PipelineStep call with no literal name — every step must "
+            "carry a name (it is the progress/SSE label and the mirror key)"
+        )
+        assert named, f"{where}: no PipelineStep(name=...) found in the fund pipeline"
+        violations = step_name_violations(named, where)
+        assert not violations, "\n".join(violations)
+
+    def test_desktop_step_mirror_matches_python_order(self) -> None:
+        if not RUN_STREAM_STORE.exists():
+            pytest.skip(f"{_rel(RUN_STREAM_STORE)} not present in this checkout")
+        named, _ = parse_pipeline_step_names(FUND_PIPELINE.read_text(encoding="utf-8"))
+        actual = [name for _, name in named]
+        mirror = parse_ts_step_names(RUN_STREAM_STORE.read_text(encoding="utf-8"), "fund_research")
+        assert mirror == actual, (
+            f"{_rel(RUN_STREAM_STORE)} mirrors the fund step order for pre-SSE progress "
+            f"labels; it lists {mirror} but the pipeline registers {actual} — a shorter "
+            "mirror drops a real step and mislabels the rest"
+        )
 
 
 # ---------------------------------------------------------------------------

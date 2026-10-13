@@ -816,3 +816,97 @@ export interface ArtifactStructured {
   // until the rail's spot caption read it.
   price_session?: PriceSessionShape
 }
+
+// ── Fund research (fund_research) ─────────────────────────────────────────────
+//
+// `outputs.structured` for a fund artifact is FLAT: the fund pipeline writes these
+// keys at the top level (there is no `fund_profile` sub-object to nest under, and
+// none of the equity section keys exist). Every ratio / return / yield / weight
+// below is a FRACTION — 0.0015 = 15 bp of expense, 0.0687 = a 6.87% position.
+
+/** One dated point of a fund's trailing NAV / traded-close series (oldest →
+ *  newest). For a NAV-priced mutual fund the close IS the fund's NAV. */
+export interface FundNavPointShape {
+  date: string
+  close: number
+}
+
+/** The fee's arithmetic cost over a holding horizon, as disclosed by the run. */
+export interface FundCostDragShape {
+  /** Fee paid per $10,000 invested over `horizon_years`. */
+  expense_drag_usd_per_10k?: number | null
+  /** Fee as a fraction of the GROSS return the portfolio earned. */
+  fee_share_of_gross_return?: number | null
+  horizon_years?: number | null
+}
+
+/** Trailing returns, all fractions. `cagr_3y` / `cagr_5y` are annualised. */
+export interface FundReturnsShape {
+  cagr_1y?: number | null
+  cagr_3y?: number | null
+  cagr_5y?: number | null
+  ytd?: number | null
+  return_3m?: number | null
+}
+
+/** Portfolio concentration. `hhi` is the Herfindahl index (0–1); `effective_n` is
+ *  its reciprocal — the number of equal-sized positions the mix behaves like. */
+export interface FundConcentrationShape {
+  top10_weight?: number | null
+  hhi?: number | null
+  effective_n?: number | null
+}
+
+export interface FundHoldingShape {
+  symbol?: string | null
+  name?: string | null
+  /** FRACTION of the portfolio (0.068748 = 6.87%). */
+  weight?: number | null
+}
+
+export interface FundStructuredShape {
+  ticker?: string | null
+  /** Display name of the fund (e.g. "iShares 3-7 Year Treasury Bond ETF"). */
+  name?: string | null
+  /** `"fund"` — the classifier's instrument tag (the object itself only exists
+   *  for a fund, so this is a provenance echo, never the discriminator). */
+  instrument?: string | null
+  category?: string | null
+  fund_family?: string | null
+  legal_type?: string | null
+  inception_date?: string | null
+  /** Fund currency (ISO code), when the run stamped one. Defaults to USD. */
+  currency?: string | null
+  total_net_assets?: number | null
+  nav_per_share?: number | null
+  /** null for a NAV-priced-only fund → no premium/discount can exist. */
+  market_price?: number | null
+  /** Market price vs NAV. Sign convention: positive = trades ABOVE NAV (a
+   *  premium), negative = below (a discount). */
+  premium_discount?: number | null
+  net_expense_ratio?: number | null
+  gross_expense_ratio?: number | null
+  category_avg_expense_ratio?: number | null
+  /** Annual holdings turnover, fraction. */
+  turnover?: number | null
+  cost_drag?: FundCostDragShape | null
+  distribution_yield?: number | null
+  returns?: FundReturnsShape | null
+  volatility?: number | null
+  max_drawdown?: number | null
+  sharpe?: number | null
+  /** label → fraction of the portfolio. */
+  asset_classes?: Record<string, number> | null
+  sector_weights?: Record<string, number> | null
+  region_weights?: Record<string, number> | null
+  bond_ratings?: Record<string, number> | null
+  /** Years. null/absent for an equity fund (no bonds → no duration). */
+  bond_duration?: number | null
+  bond_maturity?: number | null
+  equity_pe?: number | null
+  top_holdings?: FundHoldingShape[] | null
+  concentration?: FundConcentrationShape | null
+  /** Trailing NAV / traded-close series. Key omitted when the fund has no bars. */
+  nav_series?: FundNavPointShape[] | null
+  warnings?: string[]
+}

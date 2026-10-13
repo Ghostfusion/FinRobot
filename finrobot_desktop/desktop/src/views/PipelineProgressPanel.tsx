@@ -27,6 +27,13 @@ const STEP_KEYS: Record<string, string> = {
   credit_risk: 'creditRisk',
   thesis: 'thesis',
   report: 'report',
+  // fund_research pipeline (registry.py key `fund_research`) — its own vocabulary:
+  // a fund has no financial model to build and no thesis to write, it has a
+  // profile to fetch, a cost/holdings assessment and a narrative.
+  fund_data: 'fundData',
+  fund_assessment: 'fundAssessment',
+  fund_narrative: 'fundNarrative',
+  fund_report: 'fundReport',
 }
 
 // Steps that only appear in non-research pipelines (dcf/lbo/ddm/comps/earnings/
@@ -469,6 +476,8 @@ function labelForPipeline(pipelineType: string): string {
       return tSync('workspace.pipeline.type.comps')
     case 'dcf':
       return tSync('workspace.pipeline.type.dcf')
+    case 'fund_research':
+      return tSync('workspace.pipeline.type.fundResearch')
     default:
       return pipelineType
   }

@@ -100,6 +100,8 @@ export function ReportToolbar({
   function reportTypeToPipelineType(type: string): string {
     const MAP: Record<string, string> = {
       equity_research: 'research',
+      // The fund pipeline registers under its own key (== the artifact type).
+      fund_research: 'fund_research',
       earnings: 'earnings',
       dcf: 'dcf',
       lbo: 'lbo',

@@ -13,7 +13,20 @@ from finrobot.engine.skills.registry import SkillRegistry
 
 INSTRUCTIONS_DIR = Path(__file__).parent / "instructions"
 
-SUB_AGENT_ROLES: tuple[str, ...] = ("data", "analysis", "modeling", "synthesis", "report")
+SUB_AGENT_ROLES: tuple[str, ...] = (
+    "data",
+    "analysis",
+    "modeling",
+    "synthesis",
+    "report",
+    # Fund-specific report editor. A fund has no income statement, no enterprise
+    # value and no price target, so the equity report instructions make the model
+    # write company-shaped sections for it ("Peer Analysis — none provided", a
+    # "price target: none" block) — honest, but an equity template with holes. This
+    # role carries the fund report shape instead (cost, composition, duration,
+    # distribution, NAV vs market price) and forbids the company sections outright.
+    "fund_report",
+)
 
 
 def create_sub_agents(

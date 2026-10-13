@@ -11,6 +11,7 @@ import pandas as pd
 import yfinance as yf
 from yfinance.exceptions import YFException, YFRateLimitError
 
+from finrobot.engine.data.instrument import is_fund_quote_type
 from finrobot.engine.data.interface import (
     DataProvider,
     DataResult,
@@ -35,6 +36,11 @@ _SUPPORTED = [
     DataType.PRICE_RANGE,
     DataType.QUOTE,
     DataType.NEWS,
+    # Investment-fund profile. Yahoo serves `funds_data` (NAV, expense ratio,
+    # TNA, holdings, asset/sector mix, bond duration + credit quality) for
+    # ~20k US funds, which is why this provider is the always-on tail of the
+    # FUND_DATA chain rather than an optional extra.
+    DataType.FUND_PROFILE,
 ]
 _CALL_DELAY = 1.0  # seconds between the info fetch and subsequent calls
 
@@ -210,6 +216,167 @@ def _build_yearly_financials(
     return yearly
 
 
+# ---------------------------------------------------------------------------
+# Fund-profile reading (DataType.FUND_PROFILE).
+#
+# Yahoo mixes PERCENT and FRACTION in one payload, so every field is converted
+# here to the canonical contract's single convention (a FRACTION = 0.0015 for
+# 15 bp) using OBSERVED values as the unit evidence — probed live 2026-10-12 on
+# IEI (bond ETF) and VTSAX (mutual fund), cross-checked against each fund's
+# published expense ratio / yield:
+#
+#   info.netExpenseRatio            0.15   = 0.15%    PERCENT  → ÷100
+#   info.annualReportExpenseRatio   0.0004 = 0.04%    fraction → as-is
+#   info.yield                      0.0382 = 3.82%    fraction → as-is
+#   info.ytdReturn                 -2.55   = -2.55%   PERCENT  → ÷100
+#   info.trailingThreeMonthReturns -2.48   = -2.48%   PERCENT  → ÷100
+#   info.threeYearAverageReturn     0.0352 = 3.52%    fraction → as-is
+#   info.annualHoldingsTurnover     0.03   = 3%       fraction → as-is
+#   funds_data.top_holdings[NVDA]   0.0687 = 6.87%    fraction → as-is
+#
+# The expense ratio PREFERS funds_data.fund_operations ("Annual Report Expense
+# Ratio": 0.0015 for IEI, 0.0004 for VTSAX = the as-filed figures) over
+# info.netExpenseRatio, because that frame is already a fraction and matches the
+# fund's own report; its neighbouring "Category Average" column is the peer cost
+# yardstick the pipeline compares against.
+# ---------------------------------------------------------------------------
+_ASSET_CLASS_KEYS: dict[str, str] = {
+    "cashPosition": "cash",
+    "stockPosition": "stock",
+    "bondPosition": "bond",
+    "preferredPosition": "preferred",
+    "convertiblePosition": "convertible",
+    "otherPosition": "other",
+}
+_TOP_HOLDINGS_NAME = "Name"
+_TOP_HOLDINGS_WEIGHT = "Holding Percent"
+
+
+def _finite(value: Any) -> float | None:
+    """Finite float, or None. A ``NaN`` / ``<NA>`` cell must never become a number."""
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return None
+    return num if math.isfinite(num) else None
+
+
+def _pct(value: Any) -> float | None:
+    """Vendor PERCENT scalar → fraction (absent stays absent, never a fake 0)."""
+    num = _finite(value)
+    return None if num is None else num / 100.0
+
+
+def _safe_fund_attr(funds: Any, attr: str) -> Any:
+    """Read a ``funds_data`` attribute, or None.
+
+    ``FundsData`` raises ``YFDataException`` ("No Fund data found") LAZILY, per
+    attribute — the object itself constructs fine for an equity (verified on
+    AAPL), so every read must be guarded rather than the construction.
+    """
+    if funds is None:
+        return None
+    try:
+        return getattr(funds, attr, None)
+    except (YFException, ValueError, KeyError, TypeError, AttributeError, OSError, RuntimeError):
+        return None
+
+
+def _fund_cell(frame: Any, label: str, column: int = 0) -> float | None:
+    """One labelled cell of a Yahoo fund frame, or None.
+
+    These frames put the row label in the index and the FUND's own column FIRST
+    (``Duration / 3.54 / <NA>``: column 0 = the fund, column 1 = category
+    average), so ``column`` defaults to the fund's.
+    """
+    if not isinstance(frame, pd.DataFrame) or frame.empty:
+        return None
+    try:
+        if label not in frame.index:
+            return None
+        row = frame.loc[label]
+        return _finite(row.iloc[column]) if hasattr(row, "iloc") else _finite(row)
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+
+
+def _fund_asset_classes(raw: Any) -> dict[str, float]:
+    """Yahoo's camelCase asset mix → the contract's labels (fractions as reported).
+
+    IEI: ``{cash: 0.0085, bond: 0.9915}`` — a full breakdown. A missing class is
+    OMITTED rather than zero-filled, so "unreported" never reads as "no
+    exposure".
+    """
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, float] = {}
+    for vendor_key, contract_key in _ASSET_CLASS_KEYS.items():
+        value = _finite(raw.get(vendor_key))
+        if value is not None:
+            out[contract_key] = value
+    return out
+
+
+def _fund_numeric_map(raw: Any) -> dict[str, float]:
+    """``{label: finite float}`` from a vendor mapping (sector weights / ratings)."""
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, float] = {}
+    for key, value in raw.items():
+        num = _finite(value)
+        label = str(key).strip()
+        if num is not None and label:
+            out[label] = num
+    return out
+
+
+def _fund_holdings(frame: Any) -> list[dict[str, Any]]:
+    """Top-holdings frame (index = symbol) → ``[{"symbol","name","weight"}]``.
+
+    Weights are passed through exactly as Yahoo reports them (VTSAX NVDA 0.0687 =
+    6.87%) — no rescaling, so a mis-unit cannot masquerade as a portfolio weight.
+    A position with no weight carries no portfolio information and is dropped.
+    """
+    if not isinstance(frame, pd.DataFrame) or frame.empty:
+        return []
+    out: list[dict[str, Any]] = []
+    for symbol, row in frame.iterrows():
+        weight = _finite(row.get(_TOP_HOLDINGS_WEIGHT))
+        if weight is None or weight < 0:
+            continue
+        name = row.get(_TOP_HOLDINGS_NAME)
+        label = str(symbol).strip() if symbol is not None else ""
+        out.append(
+            {
+                "symbol": label or None,
+                "name": str(name).strip() if isinstance(name, str) and name.strip() else None,
+                "weight": weight,
+            }
+        )
+    return out
+
+
+def _fund_equity_pe(frame: Any) -> tuple[float | None, str | None]:
+    """A P/E (or None) from Yahoo's fund "Price/Earnings" row, plus a note.
+
+    That row is an EARNINGS YIELD, not a P/E: probed 2026-10-12, VTSAX reports
+    0.04118 while the same ticker's ``info.trailingPE`` is 24.51 —
+    ``1/0.04118 = 24.28``, i.e. the frame carries E/P. Publishing it as a P/E
+    would understate the multiple ~600×, so it is inverted (and the inversion is
+    stated in a warning) or dropped when it cannot be an earnings yield.
+    """
+    earnings_yield = _fund_cell(frame, "Price/Earnings")
+    if earnings_yield is None or not 0 < earnings_yield < 1:
+        return None, None
+    return (
+        1.0 / earnings_yield,
+        "Yahoo's fund-level Price/Earnings row is an earnings yield (E/P), not a "
+        f"P/E; inverted to {1.0 / earnings_yield:.2f}× (1/x).",
+    )
+
+
 class YFinanceProvider(DataProvider):
     """DataProvider backed by yfinance. Free, no API key required."""
 
@@ -331,6 +498,9 @@ class YFinanceProvider(DataProvider):
         elif data_type == DataType.NEWS:
             await asyncio.sleep(_CALL_DELAY)
             result = await self._fetch_news(ticker, t)
+        elif data_type == DataType.FUND_PROFILE:
+            await asyncio.sleep(_CALL_DELAY)
+            result = await self._fetch_fund_profile(ticker, info, t)
         else:
             raise ProviderError(
                 f"data_type '{data_type}' is in _SUPPORTED but no fetch branch handles it. "
@@ -338,6 +508,119 @@ class YFinanceProvider(DataProvider):
             )
 
         return result
+
+    async def _fetch_fund_profile(
+        self, ticker: str, info: dict[str, Any], t: yf.Ticker
+    ) -> DataResult:
+        """Fund profile + portfolio composition (ETF / mutual fund / CEF).
+
+        A fund's ``info`` payload carries the profile fields and
+        ``Ticker.funds_data`` carries the portfolio (asset classes, sector
+        weights, top holdings, bond duration/credit quality, the as-filed expense
+        ratio and its category average). Both come off the SAME Ticker object the
+        caller already fetched ``info`` from.
+
+        Raises ``ProviderError`` for a positively non-fund symbol: a fund profile
+        requested for an operating company is a caller error, not a data gap, and
+        must fall through the chain rather than return a hollow "fund".
+        """
+        quote_type = info.get("quoteType")
+        if not is_fund_quote_type(quote_type):
+            raise ProviderError(
+                f"'{ticker}' is not an investment fund (quoteType={quote_type!r}); "
+                "FUND_PROFILE describes ETFs / mutual funds / closed-end funds."
+            )
+
+        warnings: list[str] = []
+        try:
+            funds: Any = await asyncio.to_thread(lambda: t.funds_data)
+        except (
+            YFException,
+            ValueError,
+            KeyError,
+            TypeError,
+            AttributeError,
+            OSError,
+            RuntimeError,
+        ) as exc:
+            # A priced fund with no funds_data page still has a usable profile
+            # from `info` alone — degrade with a warning, never fail the fetch.
+            funds = None
+            warnings.append(
+                f"Yahoo's fund detail page is unavailable ({type(exc).__name__}: {exc}); "
+                "the profile carries quote-level fields only (no holdings/allocation)."
+            )
+
+        overview = _safe_fund_attr(funds, "fund_overview")
+        overview = overview if isinstance(overview, dict) else {}
+        operations = _safe_fund_attr(funds, "fund_operations")
+        equity_pe, pe_note = _fund_equity_pe(_safe_fund_attr(funds, "equity_holdings"))
+        if pe_note:
+            warnings.append(pe_note)
+
+        # As-filed expense ratio (fraction) first, the quoted percent as fallback.
+        reported_expense = _fund_cell(operations, "Annual Report Expense Ratio")
+        net_expense = (
+            reported_expense if reported_expense is not None else _pct(info.get("netExpenseRatio"))
+        )
+        reported_turnover = _fund_cell(operations, "Annual Holdings Turnover")
+        turnover = (
+            reported_turnover
+            if reported_turnover is not None
+            else _finite(info.get("annualHoldingsTurnover"))
+        )
+
+        data: dict[str, Any] = {
+            "quote_type": quote_type,
+            "name": info.get("longName") or info.get("shortName"),
+            "fund_family": overview.get("family") or info.get("fundFamily"),
+            "legal_type": overview.get("legalType") or info.get("legalType"),
+            # `info.category` is absent for several mutual funds (VTSAX) while
+            # fund_overview.categoryName carries "Large Blend" — prefer the page.
+            "category": overview.get("categoryName") or info.get("category"),
+            "inception_date": info.get("fundInceptionDate"),
+            "currency": info.get("currency") or "USD",
+            "total_net_assets": _finite(info.get("totalAssets")),
+            "nav_per_share": _finite(info.get("navPrice")),
+            # Mutual funds have no separate NAV quote (VTSAX navPrice is None);
+            # the traded/closing price is then the only market price available.
+            "market_price": _finite(
+                info.get("regularMarketPrice")
+                or info.get("currentPrice")
+                or info.get("previousClose")
+            ),
+            "shares_outstanding": _finite(info.get("sharesOutstanding")),
+            "net_expense_ratio": net_expense,
+            "gross_expense_ratio": _finite(info.get("annualReportExpenseRatio")),
+            # Column 1 of fund_operations is the "Category Average" — the peer
+            # yardstick for the fee (IEI 0.005287 vs its own 0.0015).
+            "category_avg_expense_ratio": _fund_cell(
+                operations, "Annual Report Expense Ratio", column=1
+            ),
+            "turnover": turnover,
+            "distribution_yield": _finite(info.get("yield")),
+            "ytd_return": _pct(info.get("ytdReturn")),
+            "return_3m": _pct(info.get("trailingThreeMonthReturns")),
+            "return_3y_annual": _finite(info.get("threeYearAverageReturn")),
+            "return_5y_annual": _finite(info.get("fiveYearAverageReturn")),
+            "beta_3y": _finite(info.get("beta3Year")),
+            "asset_classes": _fund_asset_classes(_safe_fund_attr(funds, "asset_classes")),
+            "sector_weights": _fund_numeric_map(_safe_fund_attr(funds, "sector_weightings")),
+            "bond_ratings": _fund_numeric_map(_safe_fund_attr(funds, "bond_ratings")),
+            "bond_duration": _fund_cell(_safe_fund_attr(funds, "bond_holdings"), "Duration"),
+            "bond_maturity": _fund_cell(_safe_fund_attr(funds, "bond_holdings"), "Maturity"),
+            "equity_pe": equity_pe,
+            "top_holdings": _fund_holdings(_safe_fund_attr(funds, "top_holdings")),
+        }
+
+        return DataResult(
+            data=data,
+            provider=self.name,
+            ticker=ticker,
+            data_type=DataType.FUND_PROFILE,
+            timestamp=datetime.now(tz=timezone.utc),
+            warnings=warnings,
+        )
 
     async def _fetch_quote(self, ticker: str) -> DataResult:
         """Lightweight current price via ``fast_info`` — no ``.info`` round-trip.
@@ -470,6 +753,10 @@ class YFinanceProvider(DataProvider):
             # Industry/sector for valuation model routing (DDM vs DCF)
             "industry": info.get("industry"),
             "sector": info.get("sector"),
+            # What the security actually IS (EQUITY / ETF / MUTUALFUND). Routed
+            # by engine.data.instrument so a fund is sent to the fund pipeline
+            # instead of dying downstream as "Missing or zero revenue".
+            "quote_type": info.get("quoteType"),
             # Dividend data for DDM valuation
             "dividend_per_share": info.get("dividendRate"),
             "dividend_yield": info.get("dividendYield"),

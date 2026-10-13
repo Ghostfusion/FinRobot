@@ -34,7 +34,7 @@ import { markArtifactViewed } from '../api/client'
 import { queryClient } from '../api/queryClient'
 import { saveTextFile } from '../lib/tauri'
 import { reportFileStem } from '../lib/exportReport'
-import { isEquityResearch } from '../lib/artifactKind'
+import { isEquityResearch, isReportArtifact } from '../lib/artifactKind'
 import { missingExportBlocksMessage, type ReportExportBlockId } from '../export/reportExportQueries'
 
 import { ReportToolbar } from './artifact-detail/shell/ReportToolbar'
@@ -46,7 +46,11 @@ import {
   layerComputeWarnings,
   parseSurfacedContractFindings,
 } from './artifact-detail/reportData'
-import { isReportSectionId, reportSectionEntries } from './artifact-detail/reportSections'
+import {
+  fundSectionEntries,
+  isReportSectionId,
+  reportSectionEntries,
+} from './artifact-detail/reportSections'
 import { auditBannerContent } from './artifact-detail/chapters'
 import { hasComputeWarnings } from './artifact-detail/ComputeWarningsPanel'
 import { priorVersions } from '../lib/artifactVersions'
@@ -170,6 +174,9 @@ export function ArtifactDetailPage(): React.ReactElement {
   }
 
   const isResearch = isEquityResearch(data.type)
+  // A fund artifact is a multi-chapter report too (its own five-section spine),
+  // so it keeps the rail + scroll-spy layout; only its section manifest differs.
+  const isFundReport = data.type === 'fund_research'
 
   // Chapter data + the values the surrounding chrome needs (toolbar target
   // price + version label, right-rail WACC, diff headline). deriveReportData is
@@ -273,11 +280,11 @@ export function ArtifactDetailPage(): React.ReactElement {
     }
   }
 
-  // ── Non-research artifacts: compact single-column viewer ──────────────────
+  // ── Non-report artifacts: compact single-column viewer ───────────────────
   // No 15-chapter TOC, no Version Timeline rail, no
   // chapter scroll-spy status bar. Just the toolbar (type-aware) + the focused
   // compact body that shows the artifact's real inputs / result / audit trail.
-  if (!isResearch) {
+  if (!isReportArtifact(data.type)) {
     return (
       <div data-testid="artifact-detail-page" style={{ position: 'relative', minHeight: '100vh' }}>
         <div
@@ -314,18 +321,25 @@ export function ArtifactDetailPage(): React.ReactElement {
   // agree on (reportSections.ts). Presence comes from the SAME predicates the
   // sections themselves render by, so the TOC can never list a section the body
   // drops — nor hide one it renders.
+  //
+  // A fund artifact has its own spine and no optional sections (every fund chapter
+  // always renders, showing its own "not reported" notes), so its manifest needs
+  // no presence gate and never consults the equity predicates below.
   const warnings = report.outputs.warnings ?? []
   const layeredWarnings = layerComputeWarnings(warnings)
-  const sections = reportSectionEntries(locale, {
-    versionDiff: priorVersions(timeline, data.type, artifactId).length > 0,
-    audit: auditBannerContent(report.numericAudit, parseSurfacedContractFindings(warnings)).visible,
-    summary: (report.outputs.summary_text ?? '').trim().length > 0,
-    warnings: hasComputeWarnings(
-      layeredWarnings.caveats,
-      layeredWarnings.methodologyNotes,
-      report.compute_version?.formula_warnings ?? [],
-    ),
-  })
+  const sections = isFundReport
+    ? fundSectionEntries(locale)
+    : reportSectionEntries(locale, {
+        versionDiff: priorVersions(timeline, data.type, artifactId).length > 0,
+        audit: auditBannerContent(report.numericAudit, parseSurfacedContractFindings(warnings))
+          .visible,
+        summary: (report.outputs.summary_text ?? '').trim().length > 0,
+        warnings: hasComputeWarnings(
+          layeredWarnings.caveats,
+          layeredWarnings.methodologyNotes,
+          report.compute_version?.formula_warnings ?? [],
+        ),
+      })
 
   return (
     <div

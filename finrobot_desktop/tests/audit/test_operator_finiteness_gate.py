@@ -24,6 +24,13 @@ from typing import Any, Callable
 import pytest
 
 from finrobot.engine.compute.operators.data_processor import calculate_cagr
+from finrobot.engine.compute.operators.fund_metrics import (
+    duration_rate_sensitivity,
+    expense_cost_analysis,
+    nav_series_statistics,
+    portfolio_concentration,
+    premium_discount,
+)
 from finrobot.engine.compute.operators.fx_normalize import (
     normalize_company_to_usd,
     normalize_financialdata_to_usd,
@@ -142,6 +149,53 @@ for bad in NON_FINITE:
             (
                 f"fcf_yield-market_cap-{tag}",
                 lambda bad=bad: fcf_yield(1e9, bad),
+                "none",
+            ),
+            (
+                f"premium_discount-nav-{tag}",
+                lambda bad=bad: premium_discount(bad, 100.0),
+                "none",
+            ),
+            (
+                f"premium_discount-market-{tag}",
+                lambda bad=bad: premium_discount(100.0, bad),
+                "none",
+            ),
+            (
+                f"duration_rate_sensitivity-duration-{tag}",
+                lambda bad=bad: duration_rate_sensitivity(bad, 100.0),
+                "none",
+            ),
+            (
+                f"duration_rate_sensitivity-nav-{tag}",
+                lambda bad=bad: duration_rate_sensitivity(3.5, bad),
+                "none",
+            ),
+            # Dict-returning fund operators: the injected non-finite input must
+            # leave the affected key None (the gate reads the key, since the
+            # operator's rejection is per-field, not a whole-object None).
+            (
+                f"expense_cost_analysis-net_expense-{tag}",
+                lambda bad=bad: expense_cost_analysis(bad, None, 0.04, 5, None)[
+                    "expense_drag_usd_per_10k"
+                ],
+                "none",
+            ),
+            (
+                f"expense_cost_analysis-nav_cagr-{tag}",
+                lambda bad=bad: expense_cost_analysis(0.0015, None, bad, 5, None)[
+                    "expense_drag_usd_per_10k"
+                ],
+                "none",
+            ),
+            (
+                f"portfolio_concentration-weight-{tag}",
+                lambda bad=bad: portfolio_concentration({"A": bad})["hhi"],
+                "none",
+            ),
+            (
+                f"nav_series_statistics-close-{tag}",
+                lambda bad=bad: nav_series_statistics([100.0, bad])["max_drawdown"],
                 "none",
             ),
         ]

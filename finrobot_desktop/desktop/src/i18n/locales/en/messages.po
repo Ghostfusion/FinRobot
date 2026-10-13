@@ -3159,3 +3159,365 @@ msgstr "At a fixed {growth}% growth, ${target} falls outside the 1–{maxHorizon
 #. js-lingui-explicit-id
 msgid "valuation.implied.reason.gordonUndefined"
 msgstr "At a fixed {growth}% growth, terminal growth {tg}% is not below WACC {wacc}% — the Gordon model is undefined, so no horizon can be solved."
+
+# ── Fund research (fund_research) ─────────────────────────────────────────────
+# The fund report's copy: its pipeline labels + its five chapters. Every numeric
+# template here prints a figure the artifact already carries in the unit the
+# chapter chose (fractions are rendered as percentages upstream), so no key is
+# responsible for a conversion.
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.type.fundResearch"
+msgstr "Fund Research"
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.step.fundData.label"
+msgstr "Fund Profile Data"
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.step.fundData.help"
+msgstr "NAV / expense ratio / holdings / allocation"
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.step.fundAssessment.label"
+msgstr "Fund Assessment"
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.step.fundAssessment.help"
+msgstr "Cost drag + portfolio composition read"
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.step.fundNarrative.label"
+msgstr "Fund Narrative"
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.step.fundNarrative.help"
+msgstr "Write profile / cost / portfolio into prose"
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.step.fundReport.label"
+msgstr "Fund Report Assembly"
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.step.fundReport.help"
+msgstr "Five-chapter fund report"
+
+#. js-lingui-explicit-id
+msgid "report.fund.notReported"
+msgstr "Not reported"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.identityTitle"
+msgstr "Fund profile"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.name"
+msgstr "Name"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.family"
+msgstr "Fund family"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.legalType"
+msgstr "Legal type"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.category"
+msgstr "Category"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.inception"
+msgstr "Inception"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.sizePricingTitle"
+msgstr "Size & pricing"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.perShareMeta"
+msgstr "Per share · {currency}"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.netAssets"
+msgstr "Total net assets"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.nav"
+msgstr "NAV per share"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.marketPrice"
+msgstr "Market price"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.premiumDiscount"
+msgstr "Premium / discount"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.premium"
+msgstr "Premium to NAV"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.discount"
+msgstr "Discount to NAV"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.atNav"
+msgstr "At NAV"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.navPriced"
+msgstr "NAV-priced — no market price"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.premiumDiscountNote"
+msgstr "Premium / discount compares the market price with the fund's NAV: a positive figure means the fund trades ABOVE its NAV (a premium), a negative figure BELOW it (a discount)."
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.costIncomeTitle"
+msgstr "Cost & income"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.netExpense"
+msgstr "Net expense ratio"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.grossExpense"
+msgstr "Gross expense ratio"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.categoryAvgExpense"
+msgstr "Category average expense ratio"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.turnover"
+msgstr "Turnover"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.distributionYield"
+msgstr "Distribution yield"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.expenseVsCategory"
+msgstr "{delta} percentage points against the vendor's category average of {category}"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.expenseVsCategoryMissing"
+msgstr "The fund's own expense ratio and the vendor's category average are not both reported, so no comparison is drawn between them."
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.dragTitle"
+msgstr "Cost drag"
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.dragMeta"
+msgstr "USD per $10,000 invested"
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.dragPer10k"
+msgstr "Fee paid per $10,000 invested"
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.overYears"
+msgstr "over {years} years"
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.feeShare"
+msgstr "Fee share of gross return"
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.arithmeticTitle"
+msgstr "How the drag is read"
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.arithmetic"
+msgstr "Net expense ratio {ratio} of $10,000 = {annual} a year; over {years} years = {total}."
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.arithmeticPerYear"
+msgstr "Net expense ratio {ratio} of $10,000 = {annual} a year."
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.arithmeticUnavailable"
+msgstr "This run reported no net expense ratio, so the fee per $10,000 cannot be reconstructed from the artifact's own inputs."
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.arithmeticNote"
+msgstr "The line above is the simple, undiscounted product of the disclosed rate and the $10,000 base — shown so a reader can check it by hand. Quote the artifact's own cost-drag figure: the two differ when the run compounds the fee or charges it on a declining balance."
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.feeShareNote"
+msgstr "The fee share of gross return is the part of the portfolio's return BEFORE costs that the fee consumed: 0.123 means 12.3% of what the holdings earned went to the fund's fee."
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.allocationTitle"
+msgstr "Asset-class mix"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.allocationHead"
+msgstr "Asset class"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.noAllocation"
+msgstr "No asset-class breakdown is reported for this run."
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.sectorsTitle"
+msgstr "Sector weights"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.sectorsHead"
+msgstr "Sector"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.noSectors"
+msgstr "No sector breakdown is reported. A portfolio with no equity exposure — a bond fund, for instance — has no sectors to weight, so this is the measure being inapplicable rather than data being missing."
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.regionsTitle"
+msgstr "Region weights"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.regionsHead"
+msgstr "Region"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.creditTitle"
+msgstr "Bond credit quality & duration"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.creditHead"
+msgstr "Credit quality"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.noCredit"
+msgstr "No credit-quality breakdown is reported. An equity fund holds no bonds, so it has no ratings mix, no duration and no maturity — the measure is inapplicable rather than the data being missing."
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.bondMeasuresTitle"
+msgstr "Bond & portfolio measures"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.yearsMeta"
+msgstr "Years"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.duration"
+msgstr "Duration (years)"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.maturity"
+msgstr "Maturity (years)"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.equityPe"
+msgstr "Portfolio P/E"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.topHoldingsTitle"
+msgstr "Top holdings"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.nameHead"
+msgstr "Holding"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.symbolHead"
+msgstr "Symbol"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.weightHead"
+msgstr "Weight"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.noHoldings"
+msgstr "No top-holdings list is reported for this run."
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.concentrationTitle"
+msgstr "Concentration"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.top10"
+msgstr "Top-10 weight"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.hhi"
+msgstr "HHI (0–1)"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.effectiveN"
+msgstr "Effective N"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.concentrationNote"
+msgstr "Top-10 weight is the share of the portfolio sitting in its ten largest positions. The HHI is the sum of the squared position weights (0–1): the higher it is, the more the portfolio leans on a few names. Effective N is its reciprocal — the number of equally-sized positions the portfolio behaves like."
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.returnsTitle"
+msgstr "Trailing returns"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.cagr1y"
+msgstr "1 year"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.cagr3y"
+msgstr "3 years (annualised)"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.cagr5y"
+msgstr "5 years (annualised)"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.ytd"
+msgstr "Year to date"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.r3m"
+msgstr "3 months"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.annualisedMeta"
+msgstr "Net of fees · trailing"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.returnsNote"
+msgstr "Returns are the fund's own trailing record, net of the expense ratio. The annualised figures are per-year compounded rates, not cumulative totals, so they are not comparable with the year-to-date or 3-month columns."
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.measuresTitle"
+msgstr "Risk measures"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.volatility"
+msgstr "Volatility (annualised)"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.maxDrawdown"
+msgstr "Max drawdown (loss from peak)"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.sharpe"
+msgstr "Sharpe ratio"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.chartTitle"
+msgstr "NAV / price"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.noSeries"
+msgstr "This artifact carries no NAV or price series, so no price history is charted."
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.chartCaption"
+msgstr "Trailing NAV / traded close ({currency} per share)"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.chartNote"
+msgstr "The line is the fund's own per-share NAV — or, for an exchange-traded fund, the traded close of a share in it. It is not a company's revenue, earnings or cash flow: a fund has none of those."
+
+#. js-lingui-explicit-id
+msgid "report.fund.narrative.empty"
+msgstr "This run wrote no narrative. The figures above are the complete record of what the pipeline found."

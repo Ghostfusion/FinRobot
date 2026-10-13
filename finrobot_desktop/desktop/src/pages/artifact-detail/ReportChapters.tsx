@@ -1,5 +1,7 @@
-// The report body — 15 numbered chapters plus the auxiliary sections (audit
-// banner, engine summary, compute caveats) rendered from a single artifact.
+// The report body — routed by artifact type: the equity_research 15 numbered
+// chapters plus its auxiliary sections (audit banner, engine summary, compute
+// caveats), or the fund_research five-chapter spine (FundReportChapters). Both
+// are rendered from a single artifact.
 // Shared by the in-app detail page (ArtifactDetailPage) and the standalone HTML
 // export viewer (src/export/viewer.tsx) so both render byte-identical chapter
 // content, interactions included (Recharts tooltips, heatmap, football field).
@@ -20,6 +22,7 @@ import type { ArtifactSummaryV5 } from '../../types/v5'
 import { useI18n } from '../../i18n'
 import { deriveReportData, parseSurfacedContractFindings, layerComputeWarnings } from './reportData'
 import { ComputeWarningsPanel } from './ComputeWarningsPanel'
+import { FundReportChapters } from './FundReportChapters'
 import {
   ChapterAnalysisSummary,
   ChapterAuditBanner,
@@ -40,7 +43,11 @@ import {
   ChapterDisclaimer,
 } from './chapters'
 
-export function ReportChapters({
+/** The equity_research 15-chapter body (the report this file was written for).
+ *  NOT exported: ReportChapters below routes by artifact type — see the note on
+ *  the fund branch about why the branch lives ABOVE the chapters rather than
+ *  inside them. */
+function EquityReportChapters({
   artifact,
   timeline,
 }: {
@@ -247,5 +254,29 @@ export function ReportChapters({
         formulaWarnings={d.compute_version?.formula_warnings ?? []}
       />
     </div>
+  )
+}
+
+/** The report body, routed by artifact type.
+ *
+ *  `fund_research` renders its own five-chapter spine (FundReportChapters) instead
+ *  of the equity fifteen. The routing lives HERE, above both bodies, rather than in
+ *  per-chapter conditionals: a fund has no thesis, DCF, filings or ownership, so
+ *  threading fifteen `if (isFund)` guards through the equity chapters would leave
+ *  every one of them able to render an empty shell — and one of them eventually
+ *  would. Both bodies set their own <section id>s, each matching its own section
+ *  manifest (reportSections.ts), which is what the rail, the deep-link validator
+ *  and ReportChapters.sections.test.tsx agree on. */
+export function ReportChapters({
+  artifact,
+  timeline,
+}: {
+  artifact: ArtifactDetail
+  timeline: ArtifactSummaryV5[]
+}): React.ReactElement {
+  return artifact.type === 'fund_research' ? (
+    <FundReportChapters artifact={artifact} />
+  ) : (
+    <EquityReportChapters artifact={artifact} timeline={timeline} />
   )
 }

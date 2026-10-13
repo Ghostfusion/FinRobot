@@ -125,14 +125,14 @@ value unless the owner also wants it in `.env`. Default behaviour: read
 
 ### 5.1 Category model
 
-The table defines **33 categories** across two groups — a fallback group and a
+The table defines **34 categories** across two groups — a fallback group and a
 single-vendor group. These are *not* the existing `DataType` values, so we add a
 first-class `Category` enum and a `DataType → Category` map.
 
 ```mermaid
 flowchart LR
   C[Consumer: pipelines/routes] --> DT[DataType]
-  DT --> CAT["Category (33)"]
+  DT --> CAT["Category (34)"]
   CAT --> P["PRIORITY[category]<br/>ordered provider ids"]
   P --> L[DataLayer walk]
   L --> OK[first healthy provider wins]
@@ -150,6 +150,7 @@ financials/quote source, and the pre-existing chain-order tests encode that).
 | `core_stock_apis` | fmp > eodhd > moomoo > yfinance > tiingo > twelvedata > stockdata > benzinga |
 | `news_data` | eodhd > benzinga > moomoo > yfinance > alpha_vantage > stockdata > newsapi |
 | `fundamental_data` | fmp > moomoo > yfinance > tiingo > alpha_vantage |
+| `fund_data` | eodhd > moomoo > yfinance |
 | `analyst_ratings` | moomoo > finnhub > yfinance > benzinga |
 | `earnings_calendar` | moomoo > finnhub > yfinance > benzinga |
 | `technical_indicators` | moomoo > yfinance > alpha_vantage |
@@ -160,6 +161,20 @@ financials/quote source, and the pre-existing chain-order tests encode that).
 | `prediction_markets` | polymarket > moomoo |
 | `corporate_actions` | eodhd > moomoo > benzinga |
 | `news_sentiment` | eodhd > alpha_vantage > gdelt |
+
+**`fund_data` (owner policy, 2026-10-12).** Investment-fund profiles (ETF /
+mutual fund / closed-end fund) ride their own chain — `eodhd > moomoo >
+yfinance` — because a fund files no income statement and so cannot be served by
+the `fundamental_data` chain. EODHD's Fundamentals feed does carry the
+`ETF_Data` / `MutualFund_Data` section this contract mirrors, but the current
+key's plan has no Fundamentals entitlement: probed 2026-10-12,
+`https://eodhd.com/api/fundamentals/{IEI.US,VTSAX.US,SWPPX.US,AAPL.US}` all
+return HTTP 403 `Forbidden` — AAPL included, so it is a plan gate rather than a
+symbol or endpoint problem. The chain therefore falls through to moomoo's
+gateway and on to the free tail; moomoo declares no fund-profile capability (see
+its provider module for the tested verdict), so Yahoo serves in practice. The
+order is kept so EODHD takes over the moment the plan includes the feed, with no
+code change.
 
 Single-vendor (no fallback):
 

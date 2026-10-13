@@ -17,6 +17,13 @@ export { ChapterCompetitive, CompetitiveBody } from './ChapterCompetitive'
 export { DcfForecastTable } from './DcfForecastTable'
 export { DdmBody } from './DdmPanel'
 export { LboBody } from './LboPanel'
+// Fund research (fund_research) chapter spine — rendered by FundReportChapters in
+// the fund report body's reading order.
+export { FundProfileChapter } from './FundProfileChapter'
+export { FundCostChapter } from './FundCostChapter'
+export { FundHoldingsChapter } from './FundHoldingsChapter'
+export { FundRiskChapter } from './FundRiskChapter'
+export { FundNarrativeChapter } from './FundNarrativeChapter'
 export { ChapterFinancialData } from './ChapterFinancialData'
 export { ChapterOwnershipGovernance } from './ChapterOwnershipGovernance'
 export { ChapterDisclaimer } from './ChapterDisclaimer'
@@ -55,6 +62,12 @@ export type {
   SecFilingSectionShape,
   XbrlFactShape,
   XbrlFactsSnapshotShape,
+  FundStructuredShape,
+  FundNavPointShape,
+  FundCostDragShape,
+  FundReturnsShape,
+  FundConcentrationShape,
+  FundHoldingShape,
   NumericAuditShape,
   NumericAuditFinding,
   NumericAuditSeverity,

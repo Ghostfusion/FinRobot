@@ -83,3 +83,10 @@ class DataType(StrEnum):
     # own board-managed DPS record is the honest, traceable growth measure. The
     # provider ships aggregated annual DPS; the CAGR is a pure operator (ddm_seed).
     DIVIDENDS = "dividends"
+    # Investment-fund profile (ETF / mutual fund / CEF): NAV, total net assets,
+    # expense ratio, distribution yield, trailing returns, asset-class + sector
+    # mix, credit quality/duration and top holdings. A fund files no income
+    # statement, so this is a contract of its own rather than a FINANCIALS
+    # variant — see ``engine.data.instrument`` for the classification that
+    # decides which pipeline a symbol is routed to.
+    FUND_PROFILE = "fund_profile"

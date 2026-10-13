@@ -540,6 +540,33 @@ def ddm(ticker: str, model: str | None, lang: str | None) -> None:
     type=click.Choice(["en", "zh"]),
     help="Output language (en=English, zh=Chinese)",
 )
+def fund(ticker: str, model: str | None, lang: str | None) -> None:
+    """Run investment-fund research pipeline (ETF / mutual fund / closed-end fund).
+
+    Computes NAV risk/return statistics, expense-ratio cost drag, premium/discount
+    to NAV and portfolio concentration from real provider data. Use it for ETFs,
+    mutual funds and closed-end funds — a fund files no income statement, so the
+    equity pipelines cannot value it.
+    """
+    ticker = _validate_ticker_arg(ticker)
+    deps = _build_deps(model)
+
+    pipeline = _build_pipeline("fund_research", deps)
+
+    result = asyncio.run(pipeline.execute(deps, ticker, progress=CliProgress(), lang=lang))
+    click.echo(result.format_summary())
+    click.echo(_HTML_REPORT_NOTE)
+
+
+@cli.command()
+@click.argument("ticker")
+@click.option("--model", default=None, help="Override model, e.g. anthropic:claude-sonnet-4-6")
+@click.option(
+    "--lang",
+    default=None,
+    type=click.Choice(["en", "zh"]),
+    help="Output language (en=English, zh=Chinese)",
+)
 def lbo(ticker: str, model: str | None, lang: str | None) -> None:
     """Run LBO (leveraged buyout) analysis pipeline.
 

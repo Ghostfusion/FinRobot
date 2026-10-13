@@ -64,6 +64,33 @@ _MISSING = frozenset({"", "n/a", "na", "null", "none", "-", "--"})
 #: Categories this provider serves. Transcribed from the owner's priority table
 #: (``docs/DATA_PROVIDERS_V3_DESIGN.md`` §5.2): the moomoo-owned single-vendor
 #: rows plus the fallback rows where it appears.
+#:
+#: ``fund_data`` is deliberately ABSENT: moomoo cannot serve a fund PROFILE for
+#: an arbitrary fund. Verdict tested 2026-10-12, from the documented API surface
+#: (https://openapi.moomoo.com/moomoo-api-doc) because no OpenD gateway is
+#: reachable here and the ``moomoo-api`` SDK is NOT installed, so live probing is
+#: impossible:
+#:   * the quote API's 65-interface list has no fund profile / holding call for a
+#:     given fund. The only fund-specific quote methods are ARK-scoped
+#:     (``get_ark_fund_holding`` / ``get_ark_active_transaction`` /
+#:     ``get_ark_stock_dynamic``); ``get_ark_fund_holding`` takes NO symbol and
+#:     returns ARK ETFs' aggregate holdings, not one fund's position list.
+#:   * ``get_market_snapshot`` does carry ``trust_*`` fields (``trust_netAssetValue``,
+#:     ``trust_aum``, ``trust_dividend_yield``, ``trust_outstanding_units``), but
+#:     mutual funds are not in the QUOTE security space at all: the quote table
+#:     lists only stocks, ETFs, warrants, CBBCs, options, futures, indices,
+#:     plates, REITs and DLCs, and open-end funds appear only as the HK/US
+#:     *trading* markets ``HKFUND`` / ``USFUND`` — which no quote code prefix
+#:     (``_MARKETS``) reaches. Those fields therefore exist only for already
+#:     quotable listed trusts, never for an arbitrary fund.
+#:   * nothing in the API exposes an expense ratio, fund family/category, a return
+#:     series, asset-class/sector/region weighting, credit quality or duration,
+#:     and the few ``trust_*`` scalars have undocumented units (per-share vs
+#:     total, percent vs fraction, currency) that could only be pinned by a live
+#:     probe. Mapping them blind would mean inventing scales.
+#: Declaring ``fund_data`` here would be a fake arm rather than a partial profile,
+#: so the FUND_DATA chain correctly skips moomoo (EODHD → moomoo absent →
+#: yfinance).
 _CATEGORIES: tuple[Category, ...] = (
     Category.CORE_STOCK_APIS,
     Category.TECHNICAL_INDICATORS,

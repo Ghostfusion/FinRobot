@@ -12,6 +12,7 @@ receive raw ``DataResult`` slices from ``fetch_historical`` wrap them with
 ``normalize_financials / normalize_price`` at the call site before passing here.
 """
 
+from finrobot.engine.data.instrument import FundInstrumentError, is_fund_quote_type
 from finrobot.engine.data.normalize.contracts import NormalizedFinancials, NormalizedPrice
 from finrobot.engine.models.financial import (
     FIELD_WARN_EV_MISSING_NET_DEBT,
@@ -112,6 +113,16 @@ def extract_financial_data(
     in FinancialData.warnings so the caller can surface them to the user.
     """
     ticker = fin.ticker
+
+    # Fail fast on a positively identified FUND before the missing-revenue branch
+    # below: a fund's FINANCIALS fetch succeeds *without raising* and returns a
+    # contract whose company lanes are all None (IEI / VTSAX: revenue, EBITDA,
+    # net_income, market_cap all None), so it would otherwise die as
+    # "Missing or zero revenue for IEI" — a category error reported as a missing
+    # number, after the LLM pipeline had already been paid for. Route the caller
+    # to the fund pipeline instead.
+    if is_fund_quote_type(fin.quote_type):
+        raise FundInstrumentError(ticker, fin.quote_type)
 
     revenue = fin.revenue
     market_cap = fin.market_cap

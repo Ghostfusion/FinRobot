@@ -27,7 +27,14 @@
 // suite instead of silently mis-numbering the report.
 
 import type { Locale } from '../../i18n'
-import { CHAPTER_ORDER, chapterLabel, type ChapterId } from './chapters/labels'
+import {
+  CHAPTER_ORDER,
+  FUND_CHAPTER_ORDER,
+  chapterLabel,
+  fundChapterLabel,
+  type ChapterId,
+  type FundChapterId,
+} from './chapters/labels'
 
 /** Sections that are part of the report but not numbered chapters. */
 export const AUX_SECTION_IDS = [
@@ -47,9 +54,10 @@ export type ReportSectionKind = 'chapter' | 'aux'
  *  Membership is static; whether an aux section actually RENDERS still depends on
  *  the artifact (see ReportSectionPresence), so a hash naming an absent aux
  *  section resolves to nothing without being called a typo. */
-export function isReportSectionId(id: string): id is ChapterId | AuxSectionId {
+export function isReportSectionId(id: string): id is ChapterId | FundChapterId | AuxSectionId {
   return (
     (CHAPTER_ORDER as readonly string[]).includes(id) ||
+    (FUND_CHAPTER_ORDER as readonly string[]).includes(id) ||
     (AUX_SECTION_IDS as readonly string[]).includes(id)
   )
 }
@@ -131,4 +139,24 @@ export function reportSectionEntries(
     })
   }
   return entries
+}
+
+/** The fund research report's sections, in page order (fundSectionEntries).
+ *
+ *  A fund has no thesis / DCF / filings, so none of the equity spine's chapters
+ *  or aux sections apply — the report is exactly its five numbered chapters, all
+ *  of which always render (each shows its own "not reported" note for a field the
+ *  artifact omits). No presence gate: there is no optional fund section, so the
+ *  rail can never list one the body drops. */
+export function fundSectionEntries(locale: Locale): ReportSectionEntry[] {
+  return FUND_CHAPTER_ORDER.map((id) => {
+    const label = fundChapterLabel(id, locale)
+    return {
+      id,
+      num: label.num,
+      title: label.title,
+      sub: label.sub,
+      kind: 'chapter' as const,
+    }
+  })
 }

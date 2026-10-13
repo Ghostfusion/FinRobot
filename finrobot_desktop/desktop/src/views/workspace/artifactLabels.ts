@@ -14,6 +14,7 @@ export const ARTIFACT_TYPE_LABEL: Record<string, { zh: string; en: string }> = {
   earnings: { zh: '财报质量', en: 'Earnings Quality' },
   ic_memo: { zh: '投委会备忘录', en: 'IC Memo' },
   peer_research: { zh: '同业研究', en: 'Peer Research' },
+  fund_research: { zh: '基金研究', en: 'Fund Research' },
   ad_hoc: { zh: '即席分析', en: 'Ad-hoc Analysis' },
 }
 

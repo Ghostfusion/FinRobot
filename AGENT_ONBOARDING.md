@@ -195,6 +195,22 @@ Only steps 2, 7, 8 (plus LLM peer *selection*) involve the LLM; steps 4/5/6 igno
   `historical_metrics.years`) — **never the browser clock**. `chartAdapters.mergeDcfBaseRow`
   drops the DCF base row only when the historical series already carries that year, so the axis
   stays contiguous (last reported FY → FY+1E … FY+NE) instead of skipping the current year.
+- **Instrument routing:** `engine/data/instrument.py` is the ONE place that maps a
+  provider's own `quote_type` (Yahoo `EQUITY`/`ETF`/`MUTUALFUND`, EODHD
+  `Common Stock`/`ETF`/`FUND`) onto the internal vocabulary. A fund goes to the
+  `fund_research` pipeline; an equity pipeline handed a fund fails fast with a
+  fund-specific message instead of the old, misleading `Missing or zero revenue
+  for IEI`. `quote_type=None` classifies as `unknown`, never as "proven a
+  company" — the ticker gate stays syntactic by design.
+- **Fund profile:** `artifact`-safe fund numbers live on
+  `NormalizedFundProfile` (`DataType.FUND_PROFILE`, chain `fund_data` =
+  eodhd → moomoo → yfinance). **Every ratio/return/yield/weight in it is a
+  FRACTION** (0.0015 = 15 bp, 0.0382 = 3.82%): the vendors mix percent and
+  fraction inside one payload (Yahoo `netExpenseRatio` 0.15 is percent while
+  `annualReportExpenseRatio` 0.0004 is a fraction), so each field's unit is
+  pinned by probe evidence in the provider arm. A fund has no revenue, EBITDA,
+  FCF or enterprise value — DCF/EV/multiples/LBO are undefined for it, which is
+  why it gets its own pipeline rather than a branch inside the equity one.
 
 **Implicit (follow the pattern):**
 
@@ -230,6 +246,8 @@ a bare `uv sync` removes installed extras; `run_semaphore=None` means "no conten
 | A **REST endpoint** | `routes/*.py`, `server.py` | frontend fetch client | router prefixes; SSE contract; auth middleware | `tests/routes/*` |
 | A **UI chapter/page** | `desktop/src/pages/artifact-detail/ReportChapters.tsx`, `src/stores/` | React only | client-side chapter composition; Zustand vs TanStack split | `*.test.tsx` + `npm test` |
 | A **report chart's year axis** | `desktop/src/utils/chartAdapters.ts` | `ChapterFinancialAnalysis` (anchor + base-row merge) | anchor from the artifact's `assumption_current_actuals_fy`, **never** `new Date()`; base row kept only when history lags | `src/utils/__tests__/chartAdapters.test.ts`, `ChapterFinancialAnalysis.test.tsx` |
+| An **instrument's type** (fund vs company) | `engine/data/instrument.py` | `extract_financial_data` (fail-fast), pipeline routing | `quote_type=None` is `unknown`, never `company`; the ticker gate stays syntactic | `tests/unit/test_fund_pipeline.py` |
+| A **fund's numbers** (NAV, fee, holdings) | `engine/data/normalize/contracts.py::NormalizedFundProfile`, `engine/pipelines/fund_research.py` | `fetch_canonical(DataType.FUND_PROFILE)`; `docs/DATA_PROVIDERS_V3_DESIGN.md` §5.2 | one unit (fraction) for every ratio; `None` ≠ 0; a fund is never valued with DCF/EV | `tests/unit/test_fund_metrics.py`, `tests/unit/test_eodhd_fund_profile.py` |
 | The **Tauri sidecar/token** | `desktop/src-tauri/src/{lib,sidecar}.rs`, `sidecar/build_sidecar.py` | auth middleware, `/health` echo | token via env not argv; loopback binding; `/health` exempt | Rust build + `tests/unit/test_auth_capability.py` |
 | V1 **narrative text** | `core/src/modules/text_generator_agents.py` | (NOT `equity_agents/`) | direct OpenAI client path | `core/tests/` (mostly non-signal) |
 | V1 **data/reporting** | `core/src/modules/market_data_api.py`, `html_renderer.py`, `professional_pdf_report.py` | web_app flow | FMP contract | `core/tests/` |
@@ -288,7 +306,7 @@ propagate these claims.
 | V0 "`test_module.py` is a data-source smoke test" | **false** | It is a backtrader `TestStrategy` with no assertions. |
 | V0 `SingleAssistantShadow` gets an "expanded toolkit" | **false** | It passes `toolkits=[]` and is mis-wired. |
 | "237 test files" | **accurate** (backend) | 237 `test_*.py` under `finrobot_desktop/tests/`; +86 frontend vitest files. |
-| Counts: 7 pipelines, 32 operators (26+6), 7 coordinators, 56 skills | **accurate** | Verified against source. |
+| Counts: 8 pipelines, 29 operator modules (+7 under `audit/`), 9 coordinators, 102 `SKILL.md` | **re-measured 2026-10-12** | Basis: 8 keys in the pipeline registry; a file listing over `engine/compute/operators/` (top level and `audit/`) and `engine/compute/coordinators/`; `find skills -name SKILL.md`. The row read "7 pipelines, 32 operators (26+6), 7 coordinators, 56 skills" before fund support landed (which added the `fund_research` pipeline, `fund_metrics`, `fund_profile` and `test_fund_*`), and the skills figure counts something other than `SKILL.md` files. |
 | Version numbers | **inconsistent** | root `setup.py` 0.1.5 · V2 `pyproject.toml` 2.0.0 · `desktop/package.json` + `tauri.conf.json` 0.1.0 · `__init__` fallback `0.0.0.dev0`. |
 | `finrobot` distribution name | **collision risk** | root `setup.py` publishes `FinRobot` and V2 publishes `finrobot`; PyPI normalizes both to `finrobot`. |
 

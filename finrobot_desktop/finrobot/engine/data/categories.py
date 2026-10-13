@@ -39,6 +39,12 @@ class Category(StrEnum):
     PREDICTION_MARKETS = "prediction_markets"
     CORPORATE_ACTIONS = "corporate_actions"
     NEWS_SENTIMENT = "news_sentiment"
+    # Investment-fund profile/analytics (ETF / mutual fund / CEF). Owner policy:
+    # EODHD first, moomoo second, then the free tail — EODHD's Fundamentals feed
+    # carries an ETF_Data / MutualFund_Data section, but the CURRENT key's plan
+    # gates it (403 on every symbol incl. AAPL, probed 2026-10-12), so the chain
+    # degrades to the next capable provider rather than inventing a profile.
+    FUND_DATA = "fund_data"
 
     # ── single-vendor groups ──────────────────────────────────────────────
     SEC_FILINGS = "sec_filings"
@@ -97,6 +103,13 @@ PRIORITY: dict[Category, tuple[str, ...]] = {
     Category.MACRO_DATA: ("fred", "moomoo"),
     Category.PREDICTION_MARKETS: ("polymarket", "moomoo"),
     Category.CORPORATE_ACTIONS: ("eodhd", "moomoo", "benzinga"),
+    # Owner policy (2026-10-12): EODHD first, moomoo second. EODHD's Fundamentals
+    # feed has the ETF_Data / MutualFund_Data section this contract mirrors, but
+    # the key's current plan 403s every fundamentals request (probed 2026-10-12,
+    # AAPL included) so the chain falls through to moomoo's gateway and then to
+    # the free tail. Ordering is capability-honest: no provider here is listed
+    # after one that can actually serve the type.
+    Category.FUND_DATA: ("eodhd", "moomoo", "yfinance"),
     Category.NEWS_SENTIMENT: ("eodhd", "alpha_vantage", "gdelt"),
     Category.SEC_FILINGS: ("sec_edgar",),
     Category.RISK_FREE_CURVE: ("federal_reserve",),
@@ -156,6 +169,7 @@ DATATYPE_CATEGORY: dict[DataType, Category] = {
     DataType.FORWARD_ESTIMATES: Category.ANALYST_RATINGS,
     DataType.PEER_CANDIDATES: Category.FUNDAMENTAL_DATA,
     DataType.DIVIDENDS: Category.CORPORATE_ACTIONS,
+    DataType.FUND_PROFILE: Category.FUND_DATA,
 }
 
 

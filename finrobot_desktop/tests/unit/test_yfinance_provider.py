@@ -88,7 +88,17 @@ class TestYFinanceProviderMeta:
 
     def test_capabilities(self):
         caps = YFinanceProvider().capabilities()
-        assert set(caps) == {"financials", "price", "price_range", "quote", "news"}
+        assert set(caps) == {
+            "financials",
+            "price",
+            "price_range",
+            "quote",
+            "news",
+            # Investment-fund profile (ETF / mutual fund / CEF): Yahoo serves
+            # `funds_data` for ~20k US funds, which is why this provider is the
+            # always-on tail of the FUND_DATA chain.
+            "fund_profile",
+        }
 
 
 class TestFetchFinancials:

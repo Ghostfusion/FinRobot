@@ -57,6 +57,60 @@ export const CHAPTER_ORDER = [
 
 export type ChapterId = (typeof CHAPTER_ORDER)[number]
 
+// ── Fund research (fund_research) ────────────────────────────────────────────
+//
+// A fund files no income statement: no thesis, no DCF, no peer comps, no SEC
+// filings, no ownership. Forcing it through the equity spine would render fifteen
+// empty shells, so `fund_research` carries its own five-section report. Same
+// label contract as CHAPTER_ORDER (the rail, the chapter headers and the section
+// manifest all read from here), separate array — the equity numbering 01–15 and
+// its tests must not shift when the fund report is added.
+export const FUND_CHAPTER_ORDER = [
+  'fund-profile',
+  'fund-cost',
+  'fund-holdings',
+  'fund-risk',
+  'fund-narrative',
+] as const
+
+export type FundChapterId = (typeof FUND_CHAPTER_ORDER)[number]
+
+const FUND_ZH: Record<FundChapterId, Omit<ChapterLabel, 'num'>> = {
+  'fund-profile': { title: '基金概况', sub: '名称 · 家族 · 类别 · 净资产与净值' },
+  'fund-cost': { title: '费用成本', sub: '费率 · 成本拖累 · 与同类平均对比' },
+  'fund-holdings': { title: '持仓与配置', sub: '资产配置 · 行业 · 信用质量 · 重仓' },
+  'fund-risk': { title: '风险与收益', sub: '区间收益 · 波动率 · 最大回撤 · 夏普' },
+  'fund-narrative': { title: '分析叙述', sub: '引擎记录' },
+}
+
+const FUND_EN: Record<FundChapterId, Omit<ChapterLabel, 'num'>> = {
+  'fund-profile': { title: 'Fund Profile', sub: 'Name · Family · Category · NAV' },
+  'fund-cost': { title: 'Cost', sub: 'Expense Ratio · Cost Drag · Category Average' },
+  'fund-holdings': {
+    title: 'Holdings & Allocation',
+    sub: 'Allocation · Sectors · Credit · Top Holdings',
+  },
+  'fund-risk': { title: 'Risk & Return', sub: 'Trailing Returns · Volatility · Drawdown · Sharpe' },
+  'fund-narrative': { title: 'Narrative', sub: 'Engine record' },
+}
+
+export function fundChapterNum(id: FundChapterId): string {
+  const idx = FUND_CHAPTER_ORDER.indexOf(id)
+  return String(idx + 1).padStart(2, '0')
+}
+
+export function fundChapterLabel(id: FundChapterId, locale: Locale): ChapterLabel {
+  const table = locale === 'en' ? FUND_EN : FUND_ZH
+  return { num: fundChapterNum(id), ...table[id] }
+}
+
+/** Is this section id one of the fund report's chapters? The discriminator the
+ *  Chapter primitive uses to pick the right label table (the two id sets are
+ *  disjoint, so a plain membership test is exact). */
+export function isFundChapterId(id: string): id is FundChapterId {
+  return (FUND_CHAPTER_ORDER as readonly string[]).includes(id)
+}
+
 const ZH: Record<ChapterId, Omit<ChapterLabel, 'num'>> = {
   cover: { title: '封面', sub: '研报基本信息' },
   thesis: { title: '投资论点', sub: '多空论证 · 估值依据 · 市场隐含' },

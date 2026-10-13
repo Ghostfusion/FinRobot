@@ -378,3 +378,34 @@ def test_pricebar_construction_invariant_rejects_non_finite_close():
     # Optional OHLCV fields coerce non-finite → None (close-only bar stays legal).
     bar = PriceBar(date=date(2026, 6, 10), close=100.0, open=float("nan"), volume=float("inf"))
     assert bar.open is None and bar.volume is None and bar.close == 100.0
+
+
+def test_financials_carries_quote_type_through_normalization():
+    """A provider's ``quote_type`` must survive normalization — it ROUTES.
+
+    ``engine.data.instrument.is_fund_quote_type`` reads it to send a fund to the
+    fund pipeline and to make the equity path refuse one actionably. This
+    normalizer maps an explicit key list, so a key it does not name is dropped
+    SILENTLY; the dropped field made ``quote_type`` None → classified UNKNOWN →
+    a fund ran the equity path and died with the old "Missing or zero revenue"
+    (observed live 2026-10-12 on IEI and VTSAX through the real layer, while the
+    fund unit tests passed because they construct NormalizedFinancials directly
+    and never crossed this boundary).
+    """
+    assert normalize_financials(_fin_result(quote_type="ETF")).quote_type == "ETF"
+    assert normalize_financials(_fin_result(quote_type="MUTUALFUND")).quote_type == "MUTUALFUND"
+    assert normalize_financials(_fin_result(quote_type="EQUITY")).quote_type == "EQUITY"
+
+
+def test_financials_quote_type_absent_stays_none_never_a_company_default():
+    """An unstated provider key stays None: "not stated" must not read EQUITY.
+
+    A default of "EQUITY" here would silently promise "this is an operating
+    company" for every provider that publishes no type, which is precisely how a
+    fund would get mis-routed again.
+    """
+    from finrobot.engine.data.instrument import InstrumentType, classify_instrument
+
+    snapshot = normalize_financials(_fin_result())
+    assert snapshot.quote_type is None
+    assert classify_instrument(snapshot.quote_type) is InstrumentType.UNKNOWN

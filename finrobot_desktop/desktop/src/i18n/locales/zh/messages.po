@@ -3159,3 +3159,363 @@ msgstr "在固定 {growth}% 增长下，${target} 超出 1–{maxHorizon}y 的�
 #. js-lingui-explicit-id
 msgid "valuation.implied.reason.gordonUndefined"
 msgstr "在固定 {growth}% 增长下，终值增长 {tg}% 未低于 WACC {wacc}%——Gordon 模型无定义，无法求解年限。"
+
+# ── Fund research (fund_research) ─────────────────────────────────────────────
+# 基金研报文案:流水线步骤标签 + 五个章节。所有带数字的模板都只打印本件已按约定
+# 单位给出的数值(比例在上游已转成百分比),键本身不做任何换算。
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.type.fundResearch"
+msgstr "基金研究"
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.step.fundData.label"
+msgstr "基金资料获取"
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.step.fundData.help"
+msgstr "净值 / 费率 / 持仓 / 配置"
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.step.fundAssessment.label"
+msgstr "基金评估"
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.step.fundAssessment.help"
+msgstr "费用拖累 + 组合构成解读"
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.step.fundNarrative.label"
+msgstr "基金叙述撰写"
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.step.fundNarrative.help"
+msgstr "把概况、费用与组合写成叙述"
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.step.fundReport.label"
+msgstr "基金研报组装"
+
+#. js-lingui-explicit-id
+msgid "workspace.pipeline.step.fundReport.help"
+msgstr "五章基金研报"
+
+#. js-lingui-explicit-id
+msgid "report.fund.notReported"
+msgstr "未报告"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.identityTitle"
+msgstr "基金概况"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.name"
+msgstr "名称"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.family"
+msgstr "基金家族"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.legalType"
+msgstr "法律形式"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.category"
+msgstr "类别"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.inception"
+msgstr "成立日期"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.sizePricingTitle"
+msgstr "规模与定价"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.perShareMeta"
+msgstr "每股 · {currency}"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.netAssets"
+msgstr "资产净值合计"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.nav"
+msgstr "每份净值"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.marketPrice"
+msgstr "市场价"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.premiumDiscount"
+msgstr "溢价 / 折价"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.premium"
+msgstr "溢价于净值"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.discount"
+msgstr "折价于净值"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.atNav"
+msgstr "与净值持平"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.navPriced"
+msgstr "仅按净值成交,无市场价"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.premiumDiscountNote"
+msgstr "溢价 / 折价即市场价与基金净值的比较:为正表示市场价高于净值(溢价),为负表示低于净值(折价)。"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.costIncomeTitle"
+msgstr "费用与分配"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.netExpense"
+msgstr "净费率"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.grossExpense"
+msgstr "总费率"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.categoryAvgExpense"
+msgstr "同类平均费率"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.turnover"
+msgstr "换手率"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.distributionYield"
+msgstr "分配收益率"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.expenseVsCategory"
+msgstr "与数据源的同类平均 {category} 相比,{delta} 个百分点"
+
+#. js-lingui-explicit-id
+msgid "report.fund.profile.expenseVsCategoryMissing"
+msgstr "基金自身费率与数据源的同类平均并非同时报告,因此不进行对比。"
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.dragTitle"
+msgstr "费用拖累"
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.dragMeta"
+msgstr "每投入 $10,000(美元)"
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.dragPer10k"
+msgstr "每投入 $10,000 支付的费用"
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.overYears"
+msgstr "{years} 年"
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.feeShare"
+msgstr "费用占毛收益比例"
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.arithmeticTitle"
+msgstr "拖累的算法"
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.arithmetic"
+msgstr "净费率 {ratio} × $10,000 = 每年 {annual};{years} 年合计 {total}。"
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.arithmeticPerYear"
+msgstr "净费率 {ratio} × $10,000 = 每年 {annual}。"
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.arithmeticUnavailable"
+msgstr "本次运行未报告净费率,无法用本件自身的输入重算每 $10,000 的费用。"
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.arithmeticNote"
+msgstr "上一行是按披露费率与 $10,000 基数所做的简单(未折现)乘积,便于手工核对。对外引用应以本件自身给出的费用拖累为准:若运行按复利计提、或按递减余额计算,两者会有差异。"
+
+#. js-lingui-explicit-id
+msgid "report.fund.cost.feeShareNote"
+msgstr "费用占毛收益比例指组合扣除成本前所获收益中被费用拿走的部分:0.123 表示持仓赚到的钱有 12.3% 付了基金费用。"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.allocationTitle"
+msgstr "资产配置"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.allocationHead"
+msgstr "资产类别"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.noAllocation"
+msgstr "本次运行未报告资产类别构成。"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.sectorsTitle"
+msgstr "行业权重"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.sectorsHead"
+msgstr "行业"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.noSectors"
+msgstr "未报告行业构成。没有股票敞口的组合(例如债券基金)本就没有行业可加权,属于指标不适用,而非数据缺失。"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.regionsTitle"
+msgstr "地区权重"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.regionsHead"
+msgstr "地区"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.creditTitle"
+msgstr "债券信用质量与久期"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.creditHead"
+msgstr "信用等级"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.noCredit"
+msgstr "未报告信用质量构成。股票基金不持有债券,因此没有评级分布、久期与到期期限,属于指标不适用,而非数据缺失。"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.bondMeasuresTitle"
+msgstr "债券与组合指标"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.yearsMeta"
+msgstr "年"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.duration"
+msgstr "久期(年)"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.maturity"
+msgstr "到期期限(年)"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.equityPe"
+msgstr "组合市盈率"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.topHoldingsTitle"
+msgstr "重仓持仓"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.nameHead"
+msgstr "持仓"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.symbolHead"
+msgstr "代码"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.weightHead"
+msgstr "权重"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.noHoldings"
+msgstr "本次运行未报告重仓持仓列表。"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.concentrationTitle"
+msgstr "集中度"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.top10"
+msgstr "前十权重"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.hhi"
+msgstr "HHI(0–1)"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.effectiveN"
+msgstr "有效持仓数"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.concentrationNote"
+msgstr "前十权重指前十大持仓占组合的比重。HHI 为各持仓权重的平方和(0–1):越高表示组合越依赖少数标的。有效持仓数为其倒数,即组合表现相当于多少只等权持仓。"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.returnsTitle"
+msgstr "区间收益"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.cagr1y"
+msgstr "1 年"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.cagr3y"
+msgstr "3 年(年化)"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.cagr5y"
+msgstr "5 年(年化)"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.ytd"
+msgstr "年初至今"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.r3m"
+msgstr "近 3 个月"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.annualisedMeta"
+msgstr "已扣费 · 滚动区间"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.returnsNote"
+msgstr "收益为基金自身的滚动记录,已扣除费率。年化数字是逐年复合率而非累计总收益,不宜与年初至今、近 3 个月两列直接比较。"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.measuresTitle"
+msgstr "风险指标"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.volatility"
+msgstr "波动率(年化)"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.maxDrawdown"
+msgstr "最大回撤(自峰值亏损)"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.sharpe"
+msgstr "夏普比率"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.chartTitle"
+msgstr "净值 / 价格"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.noSeries"
+msgstr "本件未携带净值或价格序列,因此不绘制价格走势。"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.chartCaption"
+msgstr "近一年净值 / 收盘价(每股 {currency})"
+
+#. js-lingui-explicit-id
+msgid "report.fund.risk.chartNote"
+msgstr "曲线为该基金自身的每股净值——对交易所交易基金则为每份市场收盘价。它不是公司的营收、利润或现金流:基金没有这些项目。"
+
+#. js-lingui-explicit-id
+msgid "report.fund.narrative.empty"
+msgstr "本次运行未生成叙述。上方数字即为流水线所获的全部记录。"
