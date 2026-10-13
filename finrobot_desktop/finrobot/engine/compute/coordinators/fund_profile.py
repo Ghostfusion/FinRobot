@@ -15,6 +15,7 @@ NAV, so one series serves both.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
@@ -29,12 +30,24 @@ from finrobot.engine.compute.operators.fund_metrics import (
     years_ago,
 )
 from finrobot.engine.data.interface import ProviderError
-from finrobot.engine.data.normalize.contracts import NormalizedFundProfile, PriceBar
+from finrobot.engine.data.normalize.contracts import (
+    NormalizedFundHoldings,
+    NormalizedFundProfile,
+    PriceBar,
+)
 from finrobot.engine.data.types import DataType
 from finrobot.engine.models.fund import FundAssessment, FundData, FundHolding, FundProvenance
 
 if TYPE_CHECKING:
     from finrobot.engine.data.layer import DataLayer
+
+#: ``portfolio_source`` when the concentration panel is the fund's own SEC
+#: N-PORT filing rather than the vendor's top-holdings excerpt.
+_SEC_PORTFOLIO_SOURCE = "sec_nport"
+#: Wall-clock budget for the optional FUND_HOLDINGS side-fetch. SEC is slow
+#: (measured 2026-10-12: ~10s cold) and a fund report must never hang on it, so a
+#: timeout degrades to the vendor top-holdings exactly like a ProviderError.
+_FUND_HOLDINGS_TIMEOUT_S = 45.0
 
 #: Horizon for the expense cost-drag illustration ($ per $10,000 holding).
 _COST_DRAG_HORIZON_YEARS = 5
@@ -65,6 +78,35 @@ async def _fetch_nav_range_bars(ticker: str, layer: DataLayer) -> list[PriceBar]
     end_exclusive = today + timedelta(days=1)
     bars = await layer.fetch_price_range(ticker, start.isoformat(), end_exclusive.isoformat())
     return [bar for bar in bars if bar.close > 0 and bar.date >= start]
+
+
+async def _fetch_optional_fund_holdings(
+    ticker: str, layer: DataLayer, warnings: list[str]
+) -> NormalizedFundHoldings | None:
+    """The fund's SEC N-PORT portfolio, or ``None`` when it cannot be served.
+
+    Optional and always-degrading: any failure (slow/unreachable SEC, an
+    unresolvable ticker, an unparseable filing) yields ``None`` and a warning,
+    never a failed fund report — mirroring the NAV-series fallback below. The
+    fetch is bounded by ``_FUND_HOLDINGS_TIMEOUT_S`` so a slow SEC cannot stall a
+    fund report; the timeout path is just another degrade.
+    """
+    try:
+        result = await asyncio.wait_for(
+            layer.fetch_canonical(DataType.FUND_HOLDINGS, ticker),
+            timeout=_FUND_HOLDINGS_TIMEOUT_S,
+        )
+    except (ProviderError, TimeoutError, ValueError, KeyError) as exc:
+        warnings.append(
+            f"The fund's own SEC N-PORT portfolio is unavailable for {ticker} "
+            f"({type(exc).__name__}: {exc}); the portfolio panel falls back to the "
+            "vendor's top-holdings excerpt, which typically covers only the largest "
+            "positions."
+        )
+        return None
+    if isinstance(result, NormalizedFundHoldings) and result.holdings:
+        return result
+    return None
 
 
 async def build_fund_data(ticker: str, layer: DataLayer) -> FundData:
@@ -105,7 +147,9 @@ async def build_fund_data(ticker: str, layer: DataLayer) -> FundData:
             "the 1y/3y/5y CAGRs and multi-year drawdowns stay limited to that window."
         )
 
-    return project_fund_data(profile, bars, series_warnings=series_warnings)
+    holdings = await _fetch_optional_fund_holdings(ticker, layer, series_warnings)
+
+    return project_fund_data(profile, bars, series_warnings=series_warnings, holdings=holdings)
 
 
 def project_fund_data(
@@ -113,8 +157,28 @@ def project_fund_data(
     bars: Sequence[PriceBar],
     *,
     series_warnings: Sequence[str] = (),
+    holdings: NormalizedFundHoldings | None = None,
 ) -> FundData:
-    """Project the canonical fund profile + a NAV/price bar series into :class:`FundData`."""
+    """Project the canonical fund profile + a NAV/price bar series into :class:`FundData`.
+
+    ``holdings`` is the fund's own SEC N-PORT portfolio when it was available; it
+    is carried ADDITIVELY as ``portfolio_holdings`` (with ``portfolio_source`` /
+    ``portfolio_as_of`` provenance) and the coordinator prefers it for the
+    concentration panel. When it is ``None`` the projection is byte-identical to
+    the vendor-only behaviour — ``top_holdings`` is untouched.
+    """
+    portfolio_holdings: list[FundHolding] = []
+    portfolio_source: str | None = None
+    portfolio_as_of = None
+    holdings_warnings: list[str] = []
+    if holdings is not None and holdings.holdings:
+        portfolio_holdings = [
+            FundHolding(symbol=h.symbol, name=h.name, weight=h.weight) for h in holdings.holdings
+        ]
+        portfolio_source = _SEC_PORTFOLIO_SOURCE
+        portfolio_as_of = holdings.as_of
+        holdings_warnings.extend(holdings.warnings)
+
     return FundData(
         ticker=profile.ticker,
         name=profile.name,
@@ -151,6 +215,9 @@ def project_fund_data(
             FundHolding(symbol=holding.symbol, name=holding.name, weight=holding.weight)
             for holding in profile.top_holdings
         ],
+        portfolio_holdings=portfolio_holdings,
+        portfolio_source=portfolio_source,
+        portfolio_as_of=portfolio_as_of,
         nav_dates=[bar.date for bar in bars],
         nav_closes=[bar.close for bar in bars],
         provenance=FundProvenance(
@@ -159,7 +226,7 @@ def project_fund_data(
             fetched_at=profile.provenance.fetched_at,
             degraded=list(profile.provenance.degraded),
         ),
-        warnings=[*profile.warnings, *series_warnings],
+        warnings=[*profile.warnings, *series_warnings, *holdings_warnings],
     )
 
 
@@ -193,13 +260,36 @@ def assess_fund(
         data.category_avg_expense_ratio,
     )
 
+    # Prefer the fund's own SEC N-PORT portfolio when present: it is the FULL
+    # reported portfolio, so the concentration panel reflects the real fund
+    # (unlisted_remainder ≈ 0) instead of the vendor's top-N excerpt (which for
+    # VTSAX left ~66% of net assets unaccounted). Fall back to the vendor
+    # top-holdings byte-identically when SEC could not serve it.
+    panel = data.portfolio_holdings or data.top_holdings
     holding_weights: dict[str, float] = {}
-    for index, holding in enumerate(data.top_holdings):
+    for index, holding in enumerate(panel):
         if holding.weight is None:
             continue
         label = holding.symbol or holding.name or f"position_{index + 1}"
+        # The full SEC portfolio routinely reports DISTINCT positions under the
+        # same issuer name (IEI carries many separate Treasuries all named
+        # "United States of America"), so a repeated label must be disambiguated
+        # or the mapping merges them into one position and the panel collapses
+        # (measured 2026-10-12: IEI's 84 positions read as 2). Unique labels keep
+        # the vendor top-holdings path byte-identical.
+        if label in holding_weights:
+            label = f"{label} [{index + 1}]"
         holding_weights[label] = holding.weight
     concentration = portfolio_concentration(holding_weights)
+
+    if data.portfolio_holdings:
+        portfolio_source: str | None = data.portfolio_source or _SEC_PORTFOLIO_SOURCE
+        portfolio_as_of = data.portfolio_as_of
+        portfolio_holding_count: int | None = len(data.portfolio_holdings)
+    else:
+        portfolio_source = data.provenance.provider or None
+        portfolio_as_of = data.as_of.date() if data.as_of is not None else None
+        portfolio_holding_count = len(data.top_holdings) or None
 
     premium = premium_discount(data.nav_per_share, data.market_price)
 
@@ -248,6 +338,9 @@ def assess_fund(
         premium_discount=premium,
         cost_drag=cost_drag,
         concentration=concentration,
+        portfolio_source=portfolio_source,
+        portfolio_as_of=portfolio_as_of,
+        portfolio_holding_count=portfolio_holding_count,
         duration_sensitivity=duration_rate_sensitivity(data.bond_duration, data.nav_per_share),
         warnings=warnings,
     )

@@ -103,6 +103,14 @@ class FundData(BaseModel):
     bond_maturity: float | None = Field(default=None, description="Years")
     equity_pe: float | None = None
     top_holdings: list[FundHolding] = Field(default_factory=list)
+    # The fund's FULL portfolio from its own SEC N-PORT filing, when available
+    # (DataType.FUND_HOLDINGS). Empty when SEC could not serve it — then
+    # ``top_holdings`` (the vendor excerpt) is the panel. ``portfolio_source`` /
+    # ``portfolio_as_of`` name which source the concentration panel came from and
+    # its as-of date (a fund's N-PORT is quarterly, so the date matters).
+    portfolio_holdings: list[FundHolding] = Field(default_factory=list)
+    portfolio_source: str | None = None
+    portfolio_as_of: date | None = None
     # ── NAV / price series (oldest → newest) ──────────────────────────────
     nav_dates: list[date] = Field(default_factory=list)
     nav_closes: list[float] = Field(default_factory=list)
@@ -148,5 +156,11 @@ class FundAssessment(BaseModel):
     )
     cost_drag: dict[str, float | None] = Field(default_factory=dict)
     concentration: dict[str, float | None] = Field(default_factory=dict)
+    # Provenance of the portfolio behind ``concentration``: which source the
+    # panel came from (``sec_nport`` for the fund's own filing, else the vendor id)
+    # and its as-of date. A reader must see the N-PORT date (it is quarterly).
+    portfolio_source: str | None = None
+    portfolio_as_of: date | None = None
+    portfolio_holding_count: int | None = None
     duration_sensitivity: dict[str, float | None] | None = None
     warnings: list[str] = Field(default_factory=list)

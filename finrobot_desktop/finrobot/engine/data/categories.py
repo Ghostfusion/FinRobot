@@ -191,6 +191,10 @@ DATATYPE_CATEGORY: dict[DataType, Category] = {
     DataType.PEER_CANDIDATES: Category.FUNDAMENTAL_DATA,
     DataType.DIVIDENDS: Category.CORPORATE_ACTIONS,
     DataType.FUND_PROFILE: Category.FUND_DATA,
+    # The fund's own N-PORT filing (full portfolio) routes to the SEC filings
+    # chain, not the vendor FUND_DATA chain — provenance is the fund/trust's
+    # primary document, and ``sec_edgar`` is the only provider that has it.
+    DataType.FUND_HOLDINGS: Category.SEC_FILINGS,
 }
 
 

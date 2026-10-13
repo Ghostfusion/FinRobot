@@ -3433,6 +3433,18 @@ msgid "report.fund.holdings.noHoldings"
 msgstr "本次运行未报告重仓持仓列表。"
 
 #. js-lingui-explicit-id
+msgid "report.fund.holdings.sourceNport"
+msgstr "来自基金自身 SEC N-PORT 申报的完整持仓 —— 共 {count} 个持仓{asOf}。"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.sourceVendor"
+msgstr "仅列出最大持仓 —— 行情供应商只提供前 N 名摘要,并非完整持仓。"
+
+#. js-lingui-explicit-id
+msgid "report.fund.holdings.moreRows"
+msgstr "仅显示 {total} 个持仓中最大的 {shown} 个。"
+
+#. js-lingui-explicit-id
 msgid "report.fund.holdings.concentrationTitle"
 msgstr "集中度"
 

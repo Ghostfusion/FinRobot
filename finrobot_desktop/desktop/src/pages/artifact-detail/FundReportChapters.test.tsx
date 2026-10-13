@@ -258,4 +258,43 @@ describe('FundReportChapters — the fund spine', () => {
     expect(derived.creditRisk).toBeNull()
     expect(derived.quoteCurrency).toBe('USD')
   })
+
+  it('prefers the fund’s own N-PORT filing over the vendor’s top-N excerpt', () => {
+    // A filing-sourced run: the vendor list is still in the payload but the
+    // fund's own filing supersedes it. The page must render the filing's rows
+    // (capped) and name the source WITH its as-of date — quarterly filing weights
+    // read as live ones is the failure this caption exists to prevent.
+    const filing = Array.from({ length: 30 }, (_, i) => ({
+      symbol: `9128${i}`,
+      name: `US Treasury Note ${i}`,
+      weight: 0.03 - i * 0.0005,
+    }))
+    renderFund(
+      artifact({
+        ...RICH,
+        portfolio_holdings: filing,
+        portfolio_source: 'sec_nport',
+        portfolio_as_of: '2026-05-31',
+        portfolio_holding_count: 30,
+      }),
+    )
+
+    // One matcher for the caption as a whole: the count alone also appears in the
+    // truncation note below, and a duplicate string would make getByText throw
+    // instead of proving the caption.
+    expect(screen.getByText(/filing — 30 positions · 2026-05-31/)).toBeTruthy()
+    expect(screen.getByText('US Treasury Note 0')).toBeTruthy()
+    // 30 positions against a 25-row page cap: the table says it is truncated
+    // instead of quietly dropping the tail.
+    expect(screen.getByText(/Showing the 25 largest of 30 positions/)).toBeTruthy()
+    expect(screen.queryByText('US Treasury Note 29')).toBeNull()
+    expect(screen.queryByText(/Largest positions only/)).toBeNull()
+  })
+
+  it('falls back to the vendor excerpt and says it is only a top-N list', () => {
+    renderFund(artifact(RICH))
+
+    expect(screen.getByText('US Treasury Note')).toBeTruthy() // the vendor row
+    expect(screen.getByText(/Largest positions only/)).toBeTruthy()
+  })
 })

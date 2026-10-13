@@ -90,3 +90,13 @@ class DataType(StrEnum):
     # variant — see ``engine.data.instrument`` for the classification that
     # decides which pipeline a symbol is routed to.
     FUND_PROFILE = "fund_profile"
+    # The fund's FULL reported portfolio, from its own SEC filing (Form N-PORT,
+    # served by the ``sec_edgar`` provider) — every position with its fraction of
+    # net assets, not a vendor's truncated top-N excerpt. Yahoo's ``funds_data``
+    # only exposes the top-10 holdings (measured 2026-10-12: VTSAX's ten summed to
+    # ~33% of net assets), so a concentration panel built from it is honest but
+    # weak. This type carries the authoritative statement the fund itself filed,
+    # and the fund coordinator uses it to supersede the top-10 when it is
+    # available. Distinct from FUND_PROFILE: that is the vendor summary (NAV, fees,
+    # allocation), this is the SEC primary-document portfolio.
+    FUND_HOLDINGS = "fund_holdings"

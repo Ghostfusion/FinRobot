@@ -582,3 +582,77 @@ class NormalizedFundProfile(BaseModel):
         if not self.asset_classes:
             return None
         return math.fsum(self.asset_classes.values())
+
+
+class FundPortfolioHolding(BaseModel):
+    """One position in a fund's REPORTED portfolio (fraction of net assets).
+
+    Unlike ``FundHolding`` (the vendor top-N excerpt: symbol / name / weight),
+    this carries the two extra facts an SEC N-PORT filing states per line — the
+    position's market value in USD and its asset category — so a consumer can
+    reconcile the reported weights against net assets and tell a bond from an
+    equity without re-deriving it. ``weight`` is a FRACTION (``0.0636`` = 6.36%
+    of net assets); the provider arm converts the filing's percent value.
+    """
+
+    model_config = ConfigDict(frozen=False)
+
+    symbol: str | None = None
+    name: str | None = None
+    weight: float = Field(description="Fraction of net assets (0.0636 = 6.36%)")
+    value_usd: float | None = None
+    asset_type: str | None = None
+
+
+class FundFees(BaseModel):
+    """A fund's reported fee, from its own N-CSR/XBRL when resolvable.
+
+    ``net_expense_ratio`` is a FRACTION (``0.0004`` = 4 bp), the same convention
+    as ``NormalizedFundProfile.net_expense_ratio``. Populated only when the fee
+    can be tied to the fund's series with confidence; absent otherwise (the
+    coordinator leaves it ``None`` rather than risk a sibling fund's fee).
+    """
+
+    model_config = ConfigDict(frozen=False)
+
+    net_expense_ratio: float | None = None
+    as_of: date | None = None
+    form: str | None = None
+
+
+class NormalizedFundHoldings(BaseModel):
+    """Canonical fund portfolio from the fund's own SEC N-PORT filing.
+
+    The authoritative counterpart to the vendor top-N: ``holdings`` is the FULL
+    reported portfolio (measured 2026-10-12: VTSAX 3,546 positions vs Yahoo's ten)
+    with every weight a FRACTION of net assets, and ``coverage`` the sum of those
+    weights (≈1.0 for a complete portfolio).
+
+    Unit trap this contract closes: the N-PORT XML reports ``pctValue`` as a
+    PERCENT number (measured: VTSAX's largest position ``2.55`` = 2.55%), so the
+    provider arm divides by 100 at the edge and this model stores fractions —
+    ``portfolio_concentration`` sums weights directly and would otherwise read a
+    percent as a fraction, inflating every concentration figure 100×.
+
+    ``as_of`` is the N-PORT REPORT PERIOD END (a fund files quarterly/late, so
+    the portfolio is inherently some weeks-to-months old — the date is carried so
+    a reader can see it). ``holding_count`` is ``len(holdings)``. All optional
+    identity/size fields are ``None`` when the filing omits them.
+    """
+
+    model_config = ConfigDict(frozen=False)
+
+    ticker: str
+    as_of: date | None = None
+    filing_date: date | None = None
+    form: str | None = None
+    series_name: str | None = None
+    series_id: str | None = None
+    class_id: str | None = None
+    total_net_assets: float | None = None
+    holding_count: int = 0
+    coverage: float | None = None
+    holdings: list[FundPortfolioHolding] = Field(default_factory=list)
+    fees: FundFees | None = None
+    provenance: Provenance
+    warnings: list[str] = Field(default_factory=list)

@@ -27,6 +27,15 @@ interface Props {
   fund: FundStructuredShape
 }
 
+/** ``portfolio_source`` when the portfolio came from the fund's own N-PORT filing
+ *  rather than the market-data vendor's top-holdings excerpt. */
+const SEC_PORTFOLIO_SOURCE = 'sec_nport'
+
+/** Rows this chapter renders. An index fund's filing carries thousands of
+ *  positions (VTSAX: 3,540), which no page should paint — the source note prints
+ *  the real count, and the concentration panel above is computed on all of them. */
+const MAX_HOLDING_ROWS = 25
+
 export function FundHoldingsChapter({ fund }: Props): React.ReactElement {
   const { locale, t } = useI18n()
 
@@ -34,7 +43,26 @@ export function FundHoldingsChapter({ fund }: Props): React.ReactElement {
   const sectors = fundMixEntries(fund.sector_weights)
   const regions = fundMixEntries(fund.region_weights)
   const ratings = fundMixEntries(fund.bond_ratings)
-  const holdings = (fund.top_holdings ?? []).filter((h) => fundNum(h?.weight) !== null)
+
+  // The fund's own N-PORT filing supersedes the vendor excerpt when the run has
+  // it: the vendor ships a top-N list (Yahoo: the 10 largest), while the filing
+  // is the whole book — and the concentration panel below is computed on that
+  // same filing, so rendering 10 vendor rows beside a full-portfolio panel would
+  // describe two different portfolios. The vendor list stays the fallback.
+  const vendorHoldings = (fund.top_holdings ?? []).filter((h) => fundNum(h?.weight) !== null)
+  const filingPositions = (fund.portfolio_holdings ?? []).filter((h) => fundNum(h?.weight) !== null)
+  const fromFiling = fund.portfolio_source === SEC_PORTFOLIO_SOURCE && filingPositions.length > 0
+  const positions = fromFiling ? filingPositions : vendorHoldings
+  const shown = positions.slice(0, MAX_HOLDING_ROWS)
+  const reportedCount = fundNum(fund.portfolio_holding_count)
+  const positionCount = fromFiling ? (reportedCount ?? positions.length) : positions.length
+  const asOf = (fund.portfolio_as_of ?? '').trim()
+  const sourceNote = fromFiling
+    ? t('report.fund.holdings.sourceNport', {
+        count: positionCount,
+        asOf: asOf === '' ? '' : ` · ${asOf}`,
+      })
+    : t('report.fund.holdings.sourceVendor')
 
   const duration = fundNum(fund.bond_duration)
   const maturity = fundNum(fund.bond_maturity)
@@ -149,20 +177,34 @@ export function FundHoldingsChapter({ fund }: Props): React.ReactElement {
       </SubChapter>
 
       <SubChapter heading={t('report.fund.holdings.topHoldingsTitle')}>
-        {holdings.length === 0 ? (
+        {positions.length === 0 ? (
           <p style={note}>{t('report.fund.holdings.noHoldings')}</p>
         ) : (
-          <MixTable
-            labelHead={t('report.fund.holdings.nameHead')}
-            symbolHead={t('report.fund.holdings.symbolHead')}
-            valueHead={t('report.fund.holdings.weightHead')}
-            rows={holdings.map((h) => ({
-              key: `${h.symbol ?? ''}-${h.name ?? ''}`,
-              label: fundString(h.name),
-              second: fundString(h.symbol),
-              value: fundPercent(h.weight, locale, 2),
-            }))}
-          />
+          <>
+            <MixTable
+              labelHead={t('report.fund.holdings.nameHead')}
+              symbolHead={t('report.fund.holdings.symbolHead')}
+              valueHead={t('report.fund.holdings.weightHead')}
+              rows={shown.map((h, index) => ({
+                // Index-prefixed: a filing legitimately repeats a label (IEI's
+                // Treasuries are all "United States of America" with no ticker),
+                // and a duplicate React key would drop rows from the table.
+                key: `${index}-${h.symbol ?? ''}-${h.name ?? ''}`,
+                label: fundString(h.name),
+                second: fundString(h.symbol),
+                value: fundPercent(h.weight, locale, 2),
+              }))}
+            />
+            <p style={note}>{sourceNote}</p>
+            {positions.length > shown.length && (
+              <p style={note}>
+                {t('report.fund.holdings.moreRows', {
+                  shown: shown.length,
+                  total: positions.length,
+                })}
+              </p>
+            )}
+          </>
         )}
       </SubChapter>
 

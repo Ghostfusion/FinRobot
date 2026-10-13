@@ -236,6 +236,20 @@ Single-vendor (no fallback):
 | `news_retractions` | benzinga |
 | `offerings_calendar` | benzinga |
 
+**Fund portfolios ride the SEC.** `sec_filings` (single vendor, `sec_edgar`) also
+serves the fund pipeline's portfolio: `DataType.FUND_HOLDINGS` is the fund's own
+N-PORT filing — the FULL reported book — resolved from the ticker's SEC fund
+SERIES. The series matters: a trust's newest NPORT-P is routinely a SIBLING fund
+(Vanguard Index Funds' latest was Small-Cap Growth, not Total Stock Market), so the
+filing is matched on the report's own `series_id` via EDGAR full-text search. Live
+2026-10-12: VTSAX 3,540 positions as of 2026-06-30 (the vendor's 10-row excerpt
+left ~66% of net assets unaccounted; the filing leaves 0), IEI 84 as of
+2026-05-31. The fetch is optional and degrading, so an ETF the SEC mutual-fund file
+does not list (e.g. SPY) or a slow filing falls back to the vendor excerpt with a
+warning rather than failing the run. N-CSR fee data stays unwired ON PURPOSE:
+edgartools exposes it (`FundShareholderReport.expense_data()`) but it cannot be
+tied to the ticker's series, so a published fee could be a sibling fund's.
+
 **Id vs runtime name.** Table entries are registry ids. One provider registers
 under a different runtime name: `sec_edgar` (registry/env id) is `edgar_tools` at
 runtime — the name the UI (`DataSourcesPanel`), `routes/settings.py` and cache

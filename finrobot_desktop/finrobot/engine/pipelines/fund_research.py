@@ -81,6 +81,18 @@ def _assessment_narrative(data: FundData, assessment: FundAssessment) -> str:
     horizon = assessment.cost_drag.get("horizon_years")
     if drag is not None and horizon is not None:
         bits.append(f"expense drag ${drag:,.0f} per $10,000 over {horizon:.0f}y")
+    if assessment.portfolio_source is not None:
+        when = (
+            f" as of {assessment.portfolio_as_of.isoformat()}"
+            if assessment.portfolio_as_of is not None
+            else ""
+        )
+        positions = (
+            f" ({assessment.portfolio_holding_count} positions)"
+            if assessment.portfolio_holding_count
+            else ""
+        )
+        bits.append(f"portfolio source {assessment.portfolio_source}{when}{positions}")
     return "; ".join(bits) + "."
 
 

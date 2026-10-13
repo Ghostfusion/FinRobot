@@ -237,6 +237,23 @@ Only steps 2, 7, 8 (plus LLM peer *selection*) involve the LLM; steps 4/5/6 igno
   the window anchors are calendar-based, because a window of exactly N years can
   never measure an N-year CAGR (a 6-year fetch returns 4.988 years at the 5-year
   boundary once you count holidays).
+- **Fund portfolio provenance:** the concentration panel comes from the fund's OWN
+  SEC N-PORT filing when it can be served (`DataType.FUND_HOLDINGS`, chain
+  `sec_filings` = sec_edgar), else from the vendor's top-N excerpt;
+  `portfolio_source` / `portfolio_as_of` / `portfolio_holding_count` record which,
+  and the desktop prints the FILING date because it is quarterly (VTSAX: 3,540
+  positions as of 2026-06-30, and the vendor's 10-row excerpt left ~66% of net
+  assets unaccounted where the filing leaves 0). Two traps are pinned in code: a
+  fund company's newest NPORT-P is routinely a SIBLING series (Vanguard Index
+  Funds' latest was Small-Cap Growth, not Total Stock Market), so the filing is
+  matched on `report.series_id`; and a full book legitimately repeats a label
+  (IEI's Treasuries are all "United States of America"), so repeated labels are
+  disambiguated rather than merged. The whole fetch is optional and degrading — a
+  slow SEC (45s cap), an unresolvable ticker (SPY is absent from the SEC
+  mutual-fund file) or a stale filing warns and falls back, never failing a run.
+  N-CSR fee data is deliberately NOT wired: edgartools exposes it
+  (`FundShareholderReport.expense_data()`) but it cannot be tied to the ticker's
+  series, so publishing it would risk a sibling fund's ratio.
 
 **Implicit (follow the pattern):**
 
@@ -273,7 +290,8 @@ a bare `uv sync` removes installed extras; `run_semaphore=None` means "no conten
 | A **UI chapter/page** | `desktop/src/pages/artifact-detail/ReportChapters.tsx`, `src/stores/` | React only | client-side chapter composition; Zustand vs TanStack split | `*.test.tsx` + `npm test` |
 | A **report chart's year axis** | `desktop/src/utils/chartAdapters.ts` | `ChapterFinancialAnalysis` (anchor + base-row merge) | anchor from the artifact's `assumption_current_actuals_fy`, **never** `new Date()`; base row kept only when history lags | `src/utils/__tests__/chartAdapters.test.ts`, `ChapterFinancialAnalysis.test.tsx` |
 | An **instrument's type** (fund vs company) | `engine/data/instrument.py` | `extract_financial_data` (fail-fast), pipeline routing | `quote_type=None` is `unknown`, never `company`; the ticker gate stays syntactic | `tests/unit/test_fund_pipeline.py` |
-| A **fund's numbers** (NAV, fee, holdings) | `engine/data/normalize/contracts.py::NormalizedFundProfile`, `engine/pipelines/fund_research.py` | `fetch_canonical(DataType.FUND_PROFILE)`; `docs/DATA_PROVIDERS_V3_DESIGN.md` §5.2 | one unit (fraction) for every ratio; `None` ≠ 0; a fund is never valued with DCF/EV | `tests/unit/test_fund_metrics.py`, `tests/unit/test_eodhd_fund_profile.py` |
+| A **fund's numbers** (NAV, fee, holdings) | `engine/data/normalize/contracts.py::NormalizedFundProfile`, `engine/compute/coordinators/fund_profile.py`, `engine/pipelines/fund_research.py` | `fetch_canonical(DataType.FUND_PROFILE)` + `FUND_HOLDINGS` (the fund's SEC N-PORT); `docs/DATA_PROVIDERS_V3_DESIGN.md` §5.2 | one unit (fraction) for every ratio; `None` ≠ 0; a fund is never valued with DCF/EV; the portfolio panel names its source and FILING date | `tests/unit/test_fund_metrics.py`, `tests/unit/test_fund_holdings.py`, `tests/unit/test_eodhd_fund_profile.py` |
+| A **CLI pipeline command** | `cli.py` (`_run_with_teardown`, `_build_pipeline`) | `factory.shutdown_data_layer` | one `asyncio.run` per command — workload + teardown on the SAME loop; the pipeline registry stays the single step source | `tests/unit/test_cli.py` |
 | The **Tauri sidecar/token** | `desktop/src-tauri/src/{lib,sidecar}.rs`, `sidecar/build_sidecar.py` | auth middleware, `/health` echo | token via env not argv; loopback binding; `/health` exempt | Rust build + `tests/unit/test_auth_capability.py` |
 | V1 **narrative text** | `core/src/modules/text_generator_agents.py` | (NOT `equity_agents/`) | direct OpenAI client path | `core/tests/` (mostly non-signal) |
 | V1 **data/reporting** | `core/src/modules/market_data_api.py`, `html_renderer.py`, `professional_pdf_report.py` | web_app flow | FMP contract | `core/tests/` |

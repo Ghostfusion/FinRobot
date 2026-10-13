@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -51,6 +52,9 @@ try:
         get_filings,
         set_identity,
     )
+    from edgar.funds import FundReport, find_fund
+    from edgar.funds.core import FundClass, FundSeries
+    from edgar.search.efts import search_filings
 
     _EDGAR_AVAILABLE = True
 except ImportError:  # pragma: no cover — defensive; we always pin edgartools
@@ -59,6 +63,11 @@ except ImportError:  # pragma: no cover — defensive; we always pin edgartools
     DataObjectException = Exception
     get_filings = None
     set_identity = None
+    FundReport = None
+    find_fund = None
+    FundClass = None
+    FundSeries = None
+    search_filings = None
     _EDGAR_AVAILABLE = False
 
 from finrobot.engine.data.catalog import EndpointSpec
@@ -149,6 +158,8 @@ _SUPPORTED: list[DataType] = [
     DataType.PROXY_STATEMENT,
     DataType.SCHEDULE_13,
     DataType.CEO_CERTIFICATION,
+    # Fund holdings — the fund's FULL N-PORT portfolio (see DataType.FUND_HOLDINGS).
+    DataType.FUND_HOLDINGS,
     DataType.RAG_10K,  # legacy alias
     DataType.FILINGS,  # legacy alias for 10-K
 ]
@@ -172,6 +183,19 @@ ENDPOINTS: dict[Category, EndpointSpec] = {
         auth_header="User-Agent",
     ),
 }
+
+
+#: Wall-clock budget for the FUND_HOLDINGS route (SEC is slow). The fund
+#: coordinator side-fetches this beside the profile; a slow/unreachable SEC must
+#: never stall a fund report, so the provider bounds the whole N-PORT resolution
+#: (EFTS lookup + filing download + parse) and raises ``ProviderError`` on
+#: timeout so the caller degrades to the vendor top-holdings. Measured live
+#: 2026-10-12: VTSAX ~10s cold, IEI ~1s warm — 45s is generous headroom.
+_FUND_HOLDINGS_TIMEOUT_S = 45.0
+#: Max N-PORT candidate filings to download while matching the fund's series. The
+#: EFTS lookup usually returns the right series on the first try; this bounds the
+#: pathological case (a stale/mismatched hit) without scanning a whole trust.
+_FUND_HOLDINGS_MAX_CANDIDATES = 30
 
 
 # Exceptions we map to ProviderError (don't crash the route layer).
@@ -1525,12 +1549,27 @@ class EdgarToolsProvider(DataProvider):
         # event loop stays responsive. nest-asyncio is installed transitively
         # and 门 1 实测 with uvicorn lifespan: 10/10 starts, 0 anomalies.
         try:
-            data, warnings = await asyncio.to_thread(
-                self._fetch_sync,
-                ticker.upper(),
-                data_type,
-                kwargs,
-            )
+            if data_type == DataType.FUND_HOLDINGS:
+                # SEC is slow and the N-PORT route downloads a filing: bound the
+                # whole resolution so a hung SEC degrades instead of stalling the
+                # fund report. TimeoutError ⊂ OSError ⊂ _ADAPTER_CATCH, so it is
+                # handled explicitly first for a clear message.
+                data, warnings = await asyncio.wait_for(
+                    asyncio.to_thread(self._fetch_fund_holdings_sync, ticker.upper()),
+                    timeout=_FUND_HOLDINGS_TIMEOUT_S,
+                )
+            else:
+                data, warnings = await asyncio.to_thread(
+                    self._fetch_sync,
+                    ticker.upper(),
+                    data_type,
+                    kwargs,
+                )
+        except TimeoutError as e:
+            raise ProviderError(
+                f"edgartools {data_type} for {ticker}: timed out after "
+                f"{_FUND_HOLDINGS_TIMEOUT_S:.0f}s resolving the SEC N-PORT filing"
+            ) from e
         except _ADAPTER_CATCH as e:
             raise _provider_error(f"edgartools {data_type} for {ticker}: {e}", e) from e
         return DataResult(
@@ -1672,6 +1711,10 @@ class EdgarToolsProvider(DataProvider):
         data_type: str | DataType,
         kwargs: dict[str, Any],
     ) -> tuple[dict[str, Any], list[str]]:
+        # FUND_HOLDINGS is a fund route: it must NOT resolve through Company()
+        # (a mutual fund / ETF ticker is not an operating-company CIK path).
+        if data_type == DataType.FUND_HOLDINGS:
+            return self._fetch_fund_holdings_sync(ticker)
         c = Company(ticker)
         if data_type in (DataType.FILINGS_10K, DataType.FILINGS, DataType.RAG_10K):
             return self._fetch_10k(c, want_rag=(data_type == DataType.RAG_10K))
@@ -2258,3 +2301,173 @@ class EdgarToolsProvider(DataProvider):
         if not alerts and filings:
             warnings.append("SC 13D/13G filings found but none parseable")
         return {"alerts": alerts}, warnings
+
+    # ------------------------------------------------------------------
+    # Fund holdings (Form N-PORT — the fund's FULL portfolio)
+    # ------------------------------------------------------------------
+
+    def _fetch_fund_holdings_sync(self, ticker: str) -> tuple[dict[str, Any], list[str]]:
+        """The fund's FULL N-PORT portfolio as the provider-boundary dict.
+
+        Resolves the ticker to its SEC fund SERIES (via the mutual-fund ticker
+        file), locates that series' latest ``NPORT-P`` filing through EDGAR
+        full-text search, and parses it with edgartools' ``FundReport``.
+
+        EFTS (not the filing index) is mandatory here: the index carries no
+        series→filing mapping, and a fund company's newest N-PORT is routinely a
+        SIBLING series — probed 2026-10-12, Vanguard Index Funds' latest NPORT-P
+        was the Small-Cap Growth fund (S000002846), not VTSAX's Total Stock Market
+        series (S000002848). Matching ``report.series_id`` against the resolved
+        series is what keeps the portfolio honest.
+
+        Raises ``ProviderError`` when the ticker cannot be tied to a series, or no
+        matching N-PORT can be parsed — never an empty-holdings payload that would
+        read downstream as a real empty portfolio.
+        """
+        warnings: list[str] = []
+        series_id, class_id = self._resolve_fund_series(ticker)
+        report, filing = self._latest_series_nport(series_id, ticker)
+
+        inv = report.investment_data()
+        fund_info = report.fund_info
+        general = report.general_info
+        total_net_assets = _opt_float(getattr(fund_info, "net_assets", None))
+
+        holdings: list[dict[str, Any]] = []
+        for _, row in inv.iterrows():
+            pct = _opt_float(row.get("pct_value"))
+            if pct is None:
+                continue
+            # N-PORT ``pctValue`` is a PERCENT number (VTSAX's largest position =
+            # 2.55 → 2.55% of net assets); the contract stores a FRACTION.
+            weight = pct / 100.0
+            if not math.isfinite(weight):
+                continue
+            symbol = _fund_holding_symbol(row.get("ticker"))
+            name = _clean_text(row.get("name"))
+            asset_type = _clean_text(row.get("asset_category"))
+            holdings.append(
+                {
+                    "symbol": symbol,
+                    "name": name or symbol or "Unknown position",
+                    "weight": weight,
+                    "value_usd": _opt_float(row.get("value_usd")),
+                    "asset_type": asset_type,
+                }
+            )
+        holdings.sort(key=lambda holding: holding["weight"], reverse=True)
+        if not holdings:
+            # An N-PORT filing with zero parseable positions is never a real
+            # portfolio — raise so the caller degrades, rather than hand back an
+            # empty payload that would look like a genuinely empty fund.
+            raise ProviderError(
+                f"SEC fund holdings: the latest N-PORT filing for series {series_id} "
+                f"({ticker}) reported no parseable positions."
+            )
+
+        coverage = math.fsum(holding["weight"] for holding in holdings)
+        data: dict[str, Any] = {
+            "ticker": ticker,
+            "as_of": _clean_text(getattr(report, "reporting_period", None)),
+            "filing_date": _clean_text(getattr(filing, "filing_date", None)),
+            "form": _clean_text(getattr(filing, "form", None)),
+            "series_name": _clean_text(getattr(general, "series_name", None)),
+            "series_id": series_id,
+            "class_id": class_id,
+            "total_net_assets": total_net_assets,
+            "holding_count": len(holdings),
+            "coverage": coverage,
+            "holdings": holdings,
+            # Fees are deliberately NOT populated. edgartools' N-CSR XBRL does
+            # expose a per-class fee (``FundShareholderReport.expense_data()``),
+            # but the N-CSR filing cannot be resolved to the ticker's SERIES
+            # (probed 2026-10-12: EFTS series search returns 0 N-CSR hits for both
+            # VTSAX and IEI, and ``FundShareholderReport`` carries no ``series_id``),
+            # so any fee would risk a SIBLING fund's number. ``None`` is honest;
+            # the FUND_PROFILE arm already supplies the vendor expense ratio.
+            "fees": None,
+            "warnings": warnings,
+        }
+        return data, warnings
+
+    def _resolve_fund_series(self, ticker: str) -> tuple[str, str | None]:
+        """``(series_id, class_id)`` for a fund ticker, or ``ProviderError``."""
+        try:
+            entity = find_fund(ticker)
+        except _ADAPTER_CATCH as e:
+            raise ProviderError(
+                f"SEC fund holdings: '{ticker}' is not a resolvable SEC fund "
+                f"(mutual fund / ETF) ticker: {e}"
+            ) from e
+        class_id: str | None = None
+        series_id: str | None = None
+        if isinstance(entity, FundClass):
+            class_id = _clean_text(getattr(entity, "class_id", None))
+            series = getattr(entity, "series", None)
+            series_id = (
+                _clean_text(getattr(series, "series_id", None)) if series is not None else None
+            )
+        elif isinstance(entity, FundSeries):
+            series_id = _clean_text(getattr(entity, "series_id", None))
+        if not series_id:
+            raise ProviderError(
+                f"SEC fund holdings: '{ticker}' resolved to an SEC fund company but not a "
+                "specific series, so its N-PORT portfolio cannot be identified (typical for "
+                "an ETF absent from the SEC mutual-fund ticker file, e.g. SPY)."
+            )
+        return series_id, class_id
+
+    def _latest_series_nport(self, series_id: str, ticker: str) -> tuple[Any, Any]:
+        """The newest ``NPORT-P`` filing whose report matches ``series_id``."""
+        try:
+            results = search_filings(query=f'"{series_id}"', forms=["NPORT-P"])
+            all_results = results.fetch_more(_FUND_HOLDINGS_MAX_CANDIDATES)
+            candidates = sorted(
+                all_results.results, key=lambda result: str(result.filed), reverse=True
+            )
+        except _ADAPTER_CATCH as e:
+            raise ProviderError(
+                f"SEC fund holdings: EDGAR full-text search failed for series "
+                f"{series_id} ({ticker}): {e}"
+            ) from e
+
+        for candidate in candidates[:_FUND_HOLDINGS_MAX_CANDIDATES]:
+            try:
+                filing = candidate.get_filing()
+            except _ADAPTER_CATCH:
+                continue
+            try:
+                report = FundReport.from_filing(filing)
+            except _ADAPTER_CATCH:
+                continue
+            if report is not None and getattr(report, "series_id", None) == series_id:
+                return report, filing
+        raise ProviderError(
+            f"SEC fund holdings: no N-PORT filing could be resolved for series "
+            f"{series_id} ({ticker}) among {len(candidates)} candidate(s)."
+        )
+
+
+def _clean_text(value: Any) -> str | None:
+    """Trimmed string, or ``None`` for blank/absent (never ``""``)."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _fund_holding_symbol(value: Any) -> str | None:
+    """An N-PORT ``ticker`` cell → a symbol, or ``None`` for the blanks bonds carry.
+
+    Debt positions report no ticker; edgartools surfaces the missing cell as the
+    literal string ``"N/A"`` / ``"None"`` or a pandas ``NaN`` float. All three
+    mean "no symbol", never the text.
+    """
+    if value is None:
+        return None
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    text = str(value).strip()
+    if not text or text.upper() in {"N/A", "NONE", "NAN"}:
+        return None
+    return text

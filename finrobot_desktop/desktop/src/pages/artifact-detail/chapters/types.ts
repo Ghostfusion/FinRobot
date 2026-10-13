@@ -906,6 +906,19 @@ export interface FundStructuredShape {
   equity_pe?: number | null
   top_holdings?: FundHoldingShape[] | null
   concentration?: FundConcentrationShape | null
+  /** The fund's own SEC N-PORT portfolio — the FULL reported book, not the
+   *  vendor's top-N excerpt. Weights are FRACTIONS like every other fund weight.
+   *  Absent/empty whenever SEC could not serve the filing, in which case
+   *  `top_holdings` is all that exists. */
+  portfolio_holdings?: FundHoldingShape[] | null
+  /** `sec_nport` when the portfolio (and the concentration panel above) came from
+   *  the fund's filing, else the vendor id behind `top_holdings`. */
+  portfolio_source?: string | null
+  /** N-PORT report period end — the panel's as-of date. A filing is quarterly,
+   *  so a reader must see this rather than assume the weights are live. */
+  portfolio_as_of?: string | null
+  /** Positions in the filing; the rendered list is capped well below it. */
+  portfolio_holding_count?: number | null
   /** Trailing NAV / traded-close series. Key omitted when the fund has no bars. */
   nav_series?: FundNavPointShape[] | null
   warnings?: string[]
