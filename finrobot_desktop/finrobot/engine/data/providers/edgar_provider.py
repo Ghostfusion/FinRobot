@@ -79,6 +79,7 @@ from finrobot.engine.data.interface import (
     RateLimitedProviderError,
 )
 from finrobot.engine.data.types import DataType
+from finrobot.warning_text import safe_error_text
 
 logger = logging.getLogger(__name__)
 
@@ -1806,8 +1807,14 @@ class EdgarToolsProvider(DataProvider):
             try:
                 full_text = filing.text() or ""
             except _ADAPTER_CATCH as e:
-                # Type only — str(e) embeds the SEC URL; this rides to the report.
-                warnings.append(f"filing.text() also failed: {type(e).__name__}")
+                # ``safe_error_text`` is the sanitized home for this: it strips any
+                # URL (the reason this used to be type-name only — the raw str()
+                # embeds the SEC URL and this line rides to the report) while
+                # keeping the part a reader needs. "filing.text() also failed:
+                # AttributeError" told an analyst nothing about WHY the corpus came
+                # back empty; live 2026-10-12 on NFLX the real message was
+                # "'NoneType' object has no attribute 'download'".
+                warnings.append(f"filing.text() also failed: {safe_error_text(e)}")
                 full_text = ""
             if full_text:
                 items["item_7_mdna"] = full_text
