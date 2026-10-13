@@ -5,6 +5,8 @@ from typing import Any, Literal, overload
 
 from pydantic import ValidationError
 
+from finrobot.engine.data import authority_log
+from finrobot.engine.data.authority import reconcile_results
 from finrobot.engine.data.cache import DataCache, cached_fetch
 from finrobot.engine.data.interface import (
     DataProvider,
@@ -41,10 +43,11 @@ from finrobot.engine.data.normalize.contracts import (
 )
 from finrobot.engine.data.normalize.fund_holdings import normalize_fund_holdings
 from finrobot.engine.data.validator import (
+    authority_key_field_divergences,
+    authority_reconciliation,
     cross_validate,
     cross_validate_price,
     has_comparable_financials,
-    key_field_divergences,
     market_cap_consistency,
 )
 
@@ -333,6 +336,11 @@ class DataLayer:
         primary_result: DataResult | None = None
         secondary_count = 0
         circuit_open: list[str] = []
+        # Every provider result the FINANCIALS walk fetched — primary AND every
+        # secondary, including one that failed ``has_comparable_financials`` — so
+        # the reconciler sees the full slate of observations, not just the pair the
+        # pairwise prose comparator happened to look at.
+        collected: list[DataResult] = []
         for provider in self._ordered(data_type):
             if not _serves(provider, data_type):
                 continue
@@ -346,6 +354,8 @@ class DataLayer:
                 logger.warning(f"Provider '{provider.name}' failed for {ticker}/{data_type}: {e}")
                 continue
             self._health.record_success(provider.name)
+            if data_type == DataType.FINANCIALS:
+                collected.append(result)
 
             if primary_result is None:
                 primary_result = result
@@ -395,32 +405,46 @@ class DataLayer:
                 merged = list(
                     dict.fromkeys([*primary_result.warnings, *result.warnings, *discrepancies])
                 )
-                # BUG-007: in ADDITION to the prose warnings, carry a STRUCTURED
-                # list of KEY fields (revenue / net_income) the two providers
-                # disagree on, so fetch_canonical can stamp Provenance.degraded.
-                # The primary value still wins and flows — this only flags it.
-                merged_divergences = list(
-                    dict.fromkeys(
-                        [
-                            *primary_result.key_field_divergences,
-                            *key_field_divergences(primary_result, result),
-                        ]
-                    )
-                )
-                if merged != list(primary_result.warnings) or merged_divergences != list(
-                    primary_result.key_field_divergences
-                ):
-                    primary_result = primary_result.model_copy(
-                        update={
-                            "warnings": merged,
-                            "key_field_divergences": merged_divergences,
-                        }
-                    )
+                # The STRUCTURED KEY-field divergence channel (BUG-007) is filled
+                # ONCE, after the walk, from the reconciled decisions (below) — not
+                # pairwise here — so the prose warning and the marker can never
+                # disagree and every fetched provider is considered, not just this
+                # secondary.
+                if merged != list(primary_result.warnings):
+                    primary_result = primary_result.model_copy(update={"warnings": merged})
                 secondary_count += 1
                 if data_type != DataType.FINANCIALS or secondary_count >= 2:
                     break
 
         if primary_result is not None:
+            if data_type == DataType.FINANCIALS and collected:
+                # Reconcile the whole slate ONCE: which provider owns each metric,
+                # which alternatives were eligible, and where they disagreed. The
+                # report rides the result (→ NormalizedFinancials.reconciliation →
+                # FinancialData.data_authority); the STRUCTURED key-divergence list
+                # and the ``Data authority:`` prose both derive from it, so they
+                # cannot drift. Reconciliation is pure and never raises; only the
+                # append-only log write is best-effort (authority_log swallows its
+                # own OSError/ValueError/TypeError), so a full disk cannot fail a run.
+                report = reconcile_results(collected)
+                divergences = list(
+                    dict.fromkeys(
+                        [
+                            *primary_result.key_field_divergences,
+                            *authority_key_field_divergences(collected, report=report),
+                        ]
+                    )
+                )
+                updates: dict[str, Any] = {"reconciliation": report}
+                if divergences != list(primary_result.key_field_divergences):
+                    updates["key_field_divergences"] = divergences
+                authority_lines = authority_reconciliation(collected, report=report)
+                if authority_lines:
+                    updates["warnings"] = list(
+                        dict.fromkeys([*primary_result.warnings, *authority_lines])
+                    )
+                primary_result = primary_result.model_copy(update=updates)
+                authority_log.record_decisions(ticker, report)
             # Cache the row CLEAN of circuit_open_providers: which providers sat
             # in an open breaker is a point-in-time observation about THIS fetch,
             # not a property of the data. Persisting it would freeze "fetched
@@ -609,6 +633,12 @@ class DataLayer:
         # onto the canonical object so they survive the normalization boundary.
         if raw.warnings:
             normalized.warnings = list(raw.warnings)
+        # Carry the metric-authority decision record (which provider's number won,
+        # on what basis, and every alternative considered) onto the canonical
+        # snapshot so it rides into ``FinancialData.data_authority`` and every
+        # artifact's ``raw_data``. None when the fetch fed no reconcilable metric.
+        if isinstance(normalized, (NormalizedFinancials, NormalizedPrice)):
+            normalized.reconciliation = raw.reconciliation
         # BUG-007: promote the STRUCTURED key-field divergences to
         # Provenance.degraded (in addition to the prose warning above) so
         # dcf_seed / comps can programmatically down-confidence or tag [金融待核]
@@ -1172,21 +1202,38 @@ class DataLayer:
             # failure never blocks the primary price. Only the cheap QUOTE is
             # pulled (not a second year of OHLC), preserving the QUOTE/PRICE
             # perf split. Runs only on cache-miss, like FINANCIALS cross_validate.
-            price_warns = await self._cross_source_price_warnings(
+            price_warns, secondary_quote = await self._cross_source_price_warnings(
                 ticker, primary=result, skip_provider=chosen_provider
             )
             if price_warns:
                 for w in price_warns:
                     logger.warning(w)
-                result = result.model_copy(
-                    update={
-                        "warnings": list(result.warnings) + price_warns,
-                        "price_field_divergences": [
-                            *result.price_field_divergences,
-                            "current_price",
-                        ],
-                    }
+            # Reconcile the ``current_price`` decision across the primary and the
+            # cross-check quote. The STRUCTURED ``price_field_divergences`` channel
+            # (ADR-0004) is derived from that decision, so the degraded marker
+            # stamped onto the canonical PRICE snapshot has one source of truth.
+            price_results = [result] + ([secondary_quote] if secondary_quote is not None else [])
+            price_report = reconcile_results(price_results)
+            # CONFLICT only: ``price_divergence:<field>`` asserts "two sources drew
+            # different numbers". An ``unavailable`` decision means NOTHING was
+            # eligible (e.g. a lone observation older than the row's freshness bound,
+            # the stale-cache-fallback path) — a real but differently-labelled
+            # condition, whose reader-facing line is the stale-cache warning. The
+            # report is still attached so its reason code rides the artifact.
+            price_divergences = [
+                decision.metric
+                for decision in price_report.decisions
+                if decision.metric == "current_price" and decision.status == "conflict"
+            ]
+            price_updates: dict[str, Any] = {"reconciliation": price_report}
+            if price_warns:
+                price_updates["warnings"] = list(result.warnings) + price_warns
+            if price_divergences:
+                price_updates["price_field_divergences"] = list(
+                    dict.fromkeys([*result.price_field_divergences, *price_divergences])
                 )
+            result = result.model_copy(update=price_updates)
+            authority_log.record_decisions(ticker, price_report)
             # Quote-only fell through the WHOLE chain (no provider had bars).
             # Letting it overwrite a bar-carrying cached row destroys the
             # chart/52w range for every consumer until the better providers
@@ -1258,14 +1305,16 @@ class DataLayer:
 
     async def _cross_source_price_warnings(
         self, ticker: str, *, primary: DataResult, skip_provider: str
-    ) -> list[str]:
+    ) -> tuple[list[str], DataResult | None]:
         """Confirm ``primary``'s current price against a second provider's QUOTE.
 
         Walks the provider chain for the first QUOTE-capable provider that is NOT
         the one that served ``primary``, and cross-validates the two prices. Pure
         best-effort: a secondary ProviderError is swallowed (this is a validation
         probe, not a data dependency) and does NOT touch the health breaker, which
-        governs real fetches. Returns ``[]`` when no second provider answers.
+        governs real fetches. Returns ``([], None)`` when no second provider answers;
+        otherwise the prose warnings AND the secondary quote result, so the caller can
+        reconcile the ``current_price`` decision from the same two observations.
         """
         for provider in self._ordered(DataType.QUOTE):
             if provider.name == skip_provider:
@@ -1284,8 +1333,8 @@ class DataLayer:
                     e,
                 )
                 continue
-            return cross_validate_price(primary, secondary)
-        return []
+            return cross_validate_price(primary, secondary), secondary
+        return [], None
 
     @staticmethod
     def _split_yearly(result: DataResult) -> list[DataResult]:

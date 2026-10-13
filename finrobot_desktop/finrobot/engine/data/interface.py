@@ -5,6 +5,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from finrobot.engine.data.types import DataType
+from finrobot.engine.models.metric_authority import ReconciliationReport
 
 
 class DataResult(BaseModel):
@@ -49,6 +50,13 @@ class DataResult(BaseModel):
     # read retries the recovered chain) and stamps a price_history_stale
     # degraded marker on the provenance.
     stale_history: bool = False
+    # The reconciled decision record for THIS fetch (which metric/proposition won,
+    # from which source, and every alternative considered) — the data-layer half of
+    # the metric-authority policy. None when the fetch fed no reconcilable metric
+    # (news, filings, …) or when the caller built the result by hand. Only the layer
+    # populates it; a consumer treats None as "no decision record", never as a clean
+    # bill of health.
+    reconciliation: ReconciliationReport | None = None
 
     def to_context_string(self) -> str:
         """Format data for LLM consumption. Human-readable, includes warnings."""

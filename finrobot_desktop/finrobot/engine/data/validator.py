@@ -54,32 +54,39 @@ from __future__ import annotations
 
 import logging
 from numbers import Real
+from typing import Sequence
 
+from finrobot.engine.data.authority import _SHARES_DERIVED_EPS, reconcile_results
 from finrobot.engine.data.interface import DataResult
+from finrobot.engine.models.metric_authority import (
+    METRIC_REGISTRY_BY_NAME,
+    MetricDecision,
+    ReconciliationReport,
+    compared_fields,
+    key_fields,
+)
 
 logger = logging.getLogger(__name__)
 
-# field -> relative tolerance (as a fraction)
+# field -> relative tolerance (as a fraction). A VIEW over the leaf registry's
+# ``compared_fields()`` — the band now has ONE home (the metric-authority rows), and
+# this table cannot drift from it. The set is the four cross-provider PROSE-WARNING
+# metrics: revenue / net_income (15%, one quarter of timing drift), total_cash (10%,
+# re-enabled 2026-06-08 once FMP adopted the cash + short-term-investments caliber),
+# market_cap (5%, real-time vs delayed). ebitda / total_debt / gross_margin are
+# deliberately NOT here — different calibers across providers, declared as
+# ``caliber_divergent`` rows in the registry.
 _RELATIVE_FIELDS: dict[str, float] = {
-    "revenue": 0.15,
-    # total_cash re-enabled 2026-06-08: FMP now serves cash + short-term
-    # investments (cashAndShortTermInvestments), sharing yfinance's caliber, so a
-    # divergence is a genuine period/classification signal (e.g. one provider's
-    # balance sheet lags a quarter), not a caliber artifact. 10% absorbs normal
-    # balance-sheet timing drift between providers.
-    "total_cash": 0.10,
-    # ebitda / total_debt intentionally omitted — still different calibers across
-    # providers (operating-vs-reported EBITDA; total_debt's finance/operating-lease
-    # inclusion differs) and neither is arbitrated downstream. See module docstring.
-    "net_income": 0.15,
-    "market_cap": 0.05,
+    metric: row.tolerance_pct for metric, row in compared_fields().items()
 }
 
 # KEY fundamentals that drive valuation (DCF numerator / comps base). An
 # over-tolerance divergence on these is escalated from a prose warning to a
 # STRUCTURED Provenance.degraded marker (BUG-007) so dcf_seed / comps can
 # react programmatically. The primary value still flows — this only flags it.
-_KEY_FIELDS: tuple[str, ...] = ("revenue", "net_income")
+# A view over the registry's ``key_field=True`` rows (sorted), so the key set has
+# one home too.
+_KEY_FIELDS: tuple[str, ...] = key_fields()
 
 
 def _is_number(v: object) -> bool:
@@ -173,7 +180,9 @@ def has_comparable_financials(result: DataResult) -> bool:
 
 # shares within this relative distance of mc/price is treated as rederived from
 # them (i.e. NOT an independent source), so it can't validate its own parents.
-_SHARES_DERIVED_EPS = 1e-3
+# The threshold lives in ``engine.data.authority`` (which also applies it when
+# building a ``shares_outstanding`` observation's derivation lineage) and is
+# imported above so the rule has ONE home.
 
 # implied/reported ratio inside [LO, HI] = closes (single effective class). Outside
 # → flagged by direction. 0.9/1.1 chosen so normal float-vs-outstanding and
@@ -197,7 +206,8 @@ def _num(v: object) -> float | None:
 # would be self-inconsistent) — wide enough to tolerate a delayed feed on a
 # volatile session, tight enough to catch a ~2× split mismatch or multi-day-stale
 # quote. Measured 2026-06-05: FMP vs yfinance agree to <0.04% across 12 names.
-_PRICE_REL_TOLERANCE = 0.05
+# A view over the ``current_price`` registry row's relative band (one home).
+_PRICE_REL_TOLERANCE: float = METRIC_REGISTRY_BY_NAME["current_price"].tolerance_pct
 
 
 def _price_of(result: DataResult) -> float | None:
@@ -352,4 +362,123 @@ def key_field_divergences(primary: DataResult, secondary: DataResult) -> list[st
         if abs(pv - sv) / denominator > tolerance:
             diverged.append(field)
 
+    return diverged
+
+
+# --- Metric-authority reconciliation -----------------------------------------
+#
+# The pairwise comparators above emit prose about TWO dicts; the leaf registry's
+# ``resolve_metric_observations`` reconciles N observations with full provenance
+# (which source won, why, and every alternative considered). These two functions are
+# the bridge the data layer calls after a provider walk: one supplies the
+# ``Data authority:`` prose lines, the other the STRUCTURED key-divergence list that
+# feeds ``Provenance.degraded`` — replacing the pairwise :func:`key_field_divergences`
+# as the single source for that channel.
+#
+# The prose set is restricted to the cross-validated rows (``compared_fields()``): a
+# warning line flips a coverage row to ``partial``, so preferred_stock /
+# noncontrolling_interest conflicts keep their structured decision record without
+# adding prose.
+
+_AUTHORITY_PREFIX = "Data authority: "
+
+
+def _fmt_num(value: float | None) -> str:
+    return "N/A" if value is None else f"{value:,.0f}"
+
+
+def _authority_line(decision: MetricDecision) -> str | None:
+    """One ``Data authority:`` prose line for a non-clean decision, or ``None``.
+
+    Clean = an accepted selection with every alternative comparable within tolerance.
+    A conflict, an unavailable metric, or an alternative that could not be compared
+    (a period/currency/unit mismatch) is reported; a ``fallback`` is left to the
+    structured record.
+    """
+    if decision.status == "conflict":
+        over = [
+            candidate
+            for candidate in decision.candidates
+            if candidate.reason_code == "above_tolerance_published_flagged"
+        ]
+        selected = decision.selected_source or "?"
+        details = "; ".join(
+            f"{candidate.source} {_fmt_num(candidate.value)} "
+            f"({candidate.deviation_pct:.1%} > {decision.tolerance_pct:.0%} tolerance)"
+            for candidate in over
+            if candidate.deviation_pct is not None
+        )
+        note = "producer of record" if decision.is_authoritative else "not the producer of record"
+        return (
+            f"{_AUTHORITY_PREFIX}{decision.metric} conflict — "
+            f"{selected} {_fmt_num(decision.value)} vs {details}; using {selected} ({note})."
+        )
+    if decision.status == "unavailable":
+        return (
+            f"{_AUTHORITY_PREFIX}{decision.metric} unavailable — no eligible "
+            f"observation ({decision.reason_code})."
+        )
+    mismatched = [
+        candidate
+        for candidate in decision.candidates
+        if not candidate.eligible and candidate.reason_code.startswith("definition_mismatch_")
+    ]
+    if mismatched:
+        selected = decision.selected_source or "?"
+        details = "; ".join(
+            f"{candidate.source} {_fmt_num(candidate.value)} ({candidate.reason_code})"
+            for candidate in mismatched
+        )
+        return (
+            f"{_AUTHORITY_PREFIX}{decision.metric} not compared — {details}; "
+            f"using {selected} {_fmt_num(decision.value)}."
+        )
+    return None
+
+
+def authority_reconciliation(
+    results: Sequence[DataResult], *, report: ReconciliationReport | None = None
+) -> list[str]:
+    """``Data authority:`` prose lines for the non-clean decisions across ``results``.
+
+    One line per non-clean decision, restricted to the cross-validated rows
+    (``compared_fields()``) so a caliber-divergent or non-warning metric cannot flip
+    a coverage row to ``partial``. Deterministic order (the report is sorted by
+    metric). Pass ``report`` when the caller already reconciled the same results, so
+    the walk reconciles once.
+    """
+    if report is None:
+        report = reconcile_results(results)
+    compared = compared_fields()
+    lines: list[str] = []
+    for decision in report.decisions:
+        if decision.metric not in compared:
+            continue
+        line = _authority_line(decision)
+        if line is not None:
+            lines.append(line)
+    return lines
+
+
+def authority_key_field_divergences(
+    results: Sequence[DataResult], *, report: ReconciliationReport | None = None
+) -> list[str]:
+    """KEY-field metric names (``key_field=True`` rows) that are over tolerance or
+    unavailable across ``results`` — the single source for the structured
+    ``key_field_divergences`` channel (BUG-007).
+
+    Replaces the pairwise :func:`key_field_divergences` for the data layer: same
+    output for a two-provider fetch (the owner's value is the reference, the same
+    relative-deviation formula), but computed from the reconciled decision so the
+    structured marker and the prose warning can never disagree.
+    """
+    if report is None:
+        report = reconcile_results(results)
+    key = set(key_fields())
+    diverged: list[str] = []
+    for decision in report.decisions:
+        if decision.metric not in key:
+            continue
+        if decision.status in ("conflict", "unavailable"):
+            diverged.append(decision.metric)
     return diverged

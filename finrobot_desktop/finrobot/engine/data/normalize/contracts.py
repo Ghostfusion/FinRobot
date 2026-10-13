@@ -19,6 +19,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from finrobot.engine.models.metric_authority import ReconciliationReport
+
 # Canonical contract version. Bump whenever a Normalized* model changes shape
 # in a way that makes an old cached payload unsafe to deserialize/trust. The
 # cache encodes this in the canonical slot key (``…:canonical:v<N>``) so a bump
@@ -264,6 +266,12 @@ class NormalizedPrice(BaseModel):
     # (written before this field) read back as None → clock-window fallback.
     market_state: str | None = None
     provenance: Provenance
+    # The metric-authority decision record for the fetch that produced this
+    # snapshot (which source's ``current_price`` won, and every alternative with its
+    # deviation). New OPTIONAL field: absent in old cached canonical payloads →
+    # deserializes to None, which every consumer reads as "no decision record" — the
+    # BUG-038 precedent, so CANONICAL_CONTRACT_VERSION is deliberately NOT bumped.
+    reconciliation: ReconciliationReport | None = None
     # Free-text warnings carried from the raw fetch (e.g. cross-provider
     # discrepancies, stale-cache notices). Distinct from provenance.degraded,
     # which is an enum of structured fallback markers.
@@ -416,6 +424,13 @@ class NormalizedFinancials(BaseModel):
     ttm_quarter_ends: list[date] = Field(default_factory=list)
 
     provenance: Provenance
+    # The metric-authority decision record for the fetch that produced this
+    # snapshot (which provider's revenue/net_income/… won, on what basis, and every
+    # alternative with its deviation). New OPTIONAL field: absent in old cached
+    # canonical payloads → deserializes to None, which every consumer reads as "no
+    # decision record" — the BUG-038 precedent, so CANONICAL_CONTRACT_VERSION is
+    # deliberately NOT bumped.
+    reconciliation: ReconciliationReport | None = None
     # Free-text warnings carried from the raw fetch (e.g. cross-provider
     # discrepancies surfaced by cross_validate). Distinct from
     # provenance.degraded, which is an enum of structured fallback markers.
