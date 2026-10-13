@@ -15,9 +15,20 @@ def _settings():
 
 
 class TestCreateSubAgents:
-    def test_returns_dict_with_5_keys(self):
+    def test_returns_one_agent_per_declared_role(self):
+        """The role set is read from SUB_AGENT_ROLES, never copied here.
+
+        Hard-coding the expected keys is how this test broke when fund support
+        added the `fund_report` editor: the factory grew a role and the pin did
+        not. Deriving from the tuple keeps the assertion about the CONTRACT
+        ("every declared role was built") instead of about a count.
+        """
+        from finrobot.engine.agents.factory import SUB_AGENT_ROLES
+
         agents = create_sub_agents(_settings())
-        assert set(agents.keys()) == {"data", "analysis", "modeling", "synthesis", "report"}
+        assert set(agents.keys()) == set(SUB_AGENT_ROLES)
+        # The roles the pipelines actually reach for by name.
+        assert {"data", "analysis", "modeling", "synthesis", "report"} <= set(agents)
 
     def test_each_value_is_agent(self):
         agents = create_sub_agents(_settings())
