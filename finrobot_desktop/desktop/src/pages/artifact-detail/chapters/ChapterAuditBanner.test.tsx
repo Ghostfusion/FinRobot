@@ -254,4 +254,67 @@ describe('ChapterAuditBanner', () => {
     )
     expect(container.firstChild).toBeNull()
   })
+
+  // ── Metric-authority findings (data reconciliation) ────────────────────────
+
+  it('renders a metric_authority_conflict finding as a defect row — the canonical value still ships', () => {
+    // A published conflict is a data-quality advisory, NOT a structural
+    // expected-by-economics fact: it must be a prominent warning row carrying the
+    // diagnostic numbers (which vendor, how far apart), and it must never withhold
+    // the number — it annotates the value the report already published.
+    render(
+      <ChapterAuditBanner
+        audit={{
+          artifact_status: 'caveated',
+          withhold_valuation: false,
+          findings: [
+            {
+              field_key: 'revenue',
+              check: 'metric_authority_conflict',
+              severity: 'review',
+              evidence:
+                'Data authority: revenue conflict — fmp 1,000 vs yfinance 1,180 (18.0% > 15% tolerance); using fmp (producer of record).',
+            },
+          ],
+        }}
+      />,
+    )
+    const banner = screen.getByTestId('report-audit-banner')
+    expect(banner.getAttribute('role')).toBe('alert')
+    // Not demoted to the calm "Valuation Notes" treatment.
+    expect(screen.queryAllByTestId('report-audit-note')).toHaveLength(0)
+    const row = screen.getByTestId('report-audit-finding')
+    // Humanised metric label, not the raw snake_case key.
+    expect(row.textContent).toContain('Revenue')
+    // The raw evidence (the disagreement itself) is preserved verbatim.
+    expect(row.textContent).toContain('18.0% > 15% tolerance')
+    expect(row.textContent).toContain('yfinance')
+  })
+
+  it('renders the unavailable and definition-mismatch authority checks the same way', () => {
+    render(
+      <ChapterAuditBanner
+        audit={{
+          artifact_status: 'caveated',
+          findings: [
+            {
+              field_key: 'market_cap',
+              check: 'metric_authority_unavailable',
+              severity: 'review',
+              evidence: 'Data authority: market_cap unavailable — no eligible observation.',
+            },
+            {
+              field_key: 'ev_ebitda',
+              check: 'metric_authority_definition_mismatch',
+              severity: 'review',
+              evidence: 'Data authority: ev_ebitda caliber-divergent observation excluded.',
+            },
+          ],
+        }}
+      />,
+    )
+    expect(screen.getAllByTestId('report-audit-finding')).toHaveLength(2)
+    expect(screen.getByText(/Market Cap/)).toBeTruthy()
+    expect(screen.getByText(/EV\/EBITDA/)).toBeTruthy()
+  })
 })

@@ -373,6 +373,106 @@ msgid "report.audit.note.lossMakerPe"
 msgstr "P/E is not meaningful here — earnings are negative. Leaning on EV/Revenue, P/B and DCF instead."
 
 #. js-lingui-explicit-id
+msgid "report.dataAuthority.title"
+msgstr "Data Authority"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.note"
+msgstr "Reference record only — where sources disagree the canonical value above still stands: the conflict is published, never averaged, and no value is corrected to agree."
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.accepted"
+msgstr "Resolved to the producer of record with no material disagreement: {count}"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.selectedSource"
+msgstr "Selected source"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.alternatives"
+msgstr "Alternatives"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.notCompared"
+msgstr "not compared"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.status.fallback"
+msgstr "Fallback"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.status.conflict"
+msgstr "Conflict"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.status.unavailable"
+msgstr "Unavailable"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.status.definition_mismatch"
+msgstr "Definition mismatch"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.authoritative_selected"
+msgstr "selected as producer of record"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.sources_agree"
+msgstr "sources agree"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.within_tolerance"
+msgstr "within tolerance"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.canonical_value_invalid_fallback_selected"
+msgstr "canonical value invalid — fallback selected"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.above_tolerance_published_flagged"
+msgstr "above tolerance — published and flagged"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.no_eligible_observation"
+msgstr "no eligible observation"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.definition_mismatch_period"
+msgstr "different period"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.definition_mismatch_currency"
+msgstr "different currency"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.definition_mismatch_unit"
+msgstr "different unit"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.definition_mismatch_caliber"
+msgstr "different caliber by construction"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.non_finite_value"
+msgstr "non-finite value"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.non_positive_value"
+msgstr "non-positive value"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.stale_beyond_freshness_policy"
+msgstr "stale beyond the freshness policy"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.after_run_as_of"
+msgstr "published after the run's as-of"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.non_independent_agreement"
+msgstr "agreement from a non-independent source"
+
+#. js-lingui-explicit-id
 msgid "chapter.financial.kv.revenueBase"
 msgstr "Revenue (Base)"
 

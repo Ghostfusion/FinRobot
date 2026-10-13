@@ -27,6 +27,7 @@ import { formatCurrency, formatPercent, formatDate, formatCompactNumber } from '
 import { MarkdownLite } from '../../components/MarkdownLite'
 import { layerComputeWarnings, parseSurfacedContractFindings } from './reportData'
 import { ComputeWarningsPanel } from './ComputeWarningsPanel'
+import { DataAuthorityPanel } from './DataAuthorityPanel'
 import {
   ChapterAuditBanner,
   ValuationBody,
@@ -359,6 +360,10 @@ export function CompactArtifactViewer({
     // standalone export supplies its own <main> (export/viewer.tsx).
     <div data-testid="compact-artifact-viewer" style={{ minWidth: 0, padding: '12px 0 60px' }}>
       <ChapterAuditBanner audit={numericAudit} contractFindings={contractFindings} />
+      {/* The metric-authority decision record (`raw_data.data_authority`) — the
+          same reference surface the full report shows. Renders nothing when the
+          block is absent. */}
+      <DataAuthorityPanel authority={inputs.raw_data?.['data_authority']} />
 
       {/* Header: type + ticker + headline number */}
       <header style={{ marginBottom: 28 }}>

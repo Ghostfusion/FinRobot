@@ -314,3 +314,90 @@ describe('CompactArtifactViewer — comps reuses the competitive peer table', ()
     expect(container.textContent ?? '').not.toMatch(/\d+ 字段/)
   })
 })
+
+// The data layer's reconciliation findings ride the SAME numeric-audit banner
+// (`metric_authority_conflict` / `_unavailable` / `_definition_mismatch`), and the
+// decision record itself rides `raw_data.data_authority`. Neither may need new UI,
+// and a compact artifact (which has no chapters at all) must render both without
+// crashing — this is the non-chapter path, so it is the one that would break first.
+describe('CompactArtifactViewer — metric authority', () => {
+  const AUDIT = {
+    artifact_status: 'caveated',
+    withhold_valuation: false,
+    findings: [
+      {
+        field_key: 'revenue',
+        check: 'metric_authority_conflict',
+        severity: 'review',
+        evidence:
+          'Data authority: revenue conflict — fmp 1,000 vs yfinance 1,180 (18.0% > 15% tolerance); using fmp (producer of record).',
+      },
+    ],
+  }
+
+  const AUTHORITY = {
+    policy_version: 'metric_authority_v1',
+    decisions: [
+      {
+        metric: 'revenue',
+        status: 'conflict',
+        value: 1_000_000_000,
+        unit: 'USD',
+        currency: 'USD',
+        selected_source: 'fmp',
+        is_authoritative: true,
+        reason_code: 'above_tolerance_published_flagged',
+        basis: 'TTM as-reported revenue, FMP caliber',
+        disagreement_pct: 0.18,
+        candidates: [
+          {
+            source: 'fmp',
+            value: 1_000_000_000,
+            eligible: true,
+            deviation_pct: null,
+            reason_code: 'authoritative_selected',
+          },
+          {
+            source: 'yfinance',
+            value: 1_180_000_000,
+            eligible: true,
+            deviation_pct: 0.18,
+            reason_code: 'above_tolerance_published_flagged',
+          },
+        ],
+      },
+    ],
+  }
+
+  it('renders the conflict through the existing banner and the decision record, without crashing', () => {
+    render(
+      <CompactArtifactViewer
+        artifact={artifact(
+          'ad_hoc',
+          { numeric_audit: AUDIT },
+          {
+            inputs: {
+              data_source: 'FMP',
+              data_fetched_at: '2026-10-13T00:00:00Z',
+              raw_data: { data_authority: AUTHORITY },
+            },
+          },
+        )}
+      />,
+    )
+    // Reused banner: the finding is a warning row, evidence intact.
+    expect(screen.getByTestId('report-audit-banner')).toBeTruthy()
+    expect(screen.getByText(/18\.0% > 15% tolerance/)).toBeTruthy()
+    // Reused decision-record surface: the disagreeing vendor + its deviation.
+    expect(screen.getByTestId('report-data-authority')).toBeTruthy()
+    expect(screen.getByText('yfinance')).toBeTruthy()
+    expect(screen.getByText('18.0%')).toBeTruthy()
+  })
+
+  it('renders neither surface when neither block is present (older artifacts)', () => {
+    const { container } = render(<CompactArtifactViewer artifact={artifact('ad_hoc', {})} />)
+    expect(screen.queryByTestId('report-audit-banner')).toBeNull()
+    expect(screen.queryByTestId('report-data-authority')).toBeNull()
+    expect(container.textContent ?? '').not.toContain('Data Authority')
+  })
+})

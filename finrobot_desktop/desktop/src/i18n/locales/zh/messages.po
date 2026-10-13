@@ -373,6 +373,106 @@ msgid "report.audit.note.lossMakerPe"
 msgstr "P/E 在此不适用 —— 盈利为负。改用 EV/Revenue、P/B、DCF。"
 
 #. js-lingui-explicit-id
+msgid "report.dataAuthority.title"
+msgstr "数据权威"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.note"
+msgstr "仅为参考记录 —— 数据源存在分歧时，仍以上方权威值为准：分歧会公开保留，绝不取平均，也不会为了达成一致而修正数值。"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.accepted"
+msgstr "已由记录生产者确认、无实质性分歧：{count}"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.selectedSource"
+msgstr "选定来源"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.alternatives"
+msgstr "备选值"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.notCompared"
+msgstr "未比较"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.status.fallback"
+msgstr "回退"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.status.conflict"
+msgstr "冲突"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.status.unavailable"
+msgstr "不可用"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.status.definition_mismatch"
+msgstr "口径不一致"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.authoritative_selected"
+msgstr "选定为记录生产者"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.sources_agree"
+msgstr "数据源一致"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.within_tolerance"
+msgstr "在容差范围内"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.canonical_value_invalid_fallback_selected"
+msgstr "权威值无效 —— 已选用回退来源"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.above_tolerance_published_flagged"
+msgstr "超出容差 —— 已公开并标注"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.no_eligible_observation"
+msgstr "无合格观测值"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.definition_mismatch_period"
+msgstr "报告期不一致"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.definition_mismatch_currency"
+msgstr "币种不一致"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.definition_mismatch_unit"
+msgstr "单位不一致"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.definition_mismatch_caliber"
+msgstr "口径本身不同"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.non_finite_value"
+msgstr "非有限数值"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.non_positive_value"
+msgstr "非正值"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.stale_beyond_freshness_policy"
+msgstr "超出有效期策略"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.after_run_as_of"
+msgstr "晚于运行截止时点"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.reason.non_independent_agreement"
+msgstr "来自非独立来源的一致"
+
+#. js-lingui-explicit-id
 msgid "chapter.financial.kv.revenueBase"
 msgstr "营收（基期）"
 

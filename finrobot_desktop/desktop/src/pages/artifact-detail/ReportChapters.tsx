@@ -23,6 +23,7 @@ import { useI18n } from '../../i18n'
 import { deriveReportData, parseSurfacedContractFindings, layerComputeWarnings } from './reportData'
 import { ComputeWarningsPanel } from './ComputeWarningsPanel'
 import { FundReportChapters } from './FundReportChapters'
+import { DataAuthorityPanel } from './DataAuthorityPanel'
 import {
   ChapterAnalysisSummary,
   ChapterAuditBanner,
@@ -97,6 +98,11 @@ function EquityReportChapters({
     // <main> (export/viewer.tsx), so the landmark is never lost.
     <div style={{ minWidth: 0, padding: '12px 0 60px' }}>
       <ChapterAuditBanner audit={d.numericAudit} contractFindings={contractFindings} />
+      {/* The metric-authority decision record (`raw_data.data_authority`): who
+          else supplied each number and why the canonical one won. Reference
+          material beside the audited numbers — renders nothing on older
+          artifacts that predate the block. */}
+      <DataAuthorityPanel authority={d.inputs.raw_data?.['data_authority']} />
       {langMismatch && (
         <div
           data-testid="report-lang-mismatch"
