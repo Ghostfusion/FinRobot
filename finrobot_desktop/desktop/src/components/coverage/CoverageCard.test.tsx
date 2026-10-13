@@ -291,3 +291,90 @@ describe('CoverageCard owned checkbox', () => {
     expect(screen.getByLabelText('Mark AAA as owned')).toBeDisabled()
   })
 })
+
+describe('CoverageCard delete control', () => {
+  function renderDelete(
+    over: Partial<CoverageRow>,
+    opts: { onDelete?: (ticker: string) => void; onOpen?: () => void } = {},
+  ): void {
+    render(
+      <MemoryRouter>
+        <CoverageCard
+          row={row(over)}
+          density="comfort"
+          onOpen={opts.onOpen ?? vi.fn()}
+          onDelete={opts.onDelete}
+        />
+      </MemoryRouter>,
+    )
+  }
+
+  it('opens the confirm on the X and never triggers the card open handler', () => {
+    const onOpen = vi.fn()
+    renderDelete({ ticker: 'NFLX', artifact_count: 3 }, { onOpen })
+    fireEvent.click(screen.getByTestId('coverage-delete-NFLX'))
+    expect(screen.getByTestId('coverage-delete-confirm-NFLX')).toBeInTheDocument()
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('does not open the card on an Enter keydown at the X', () => {
+    const onOpen = vi.fn()
+    renderDelete({ ticker: 'NFLX' }, { onOpen })
+    fireEvent.keyDown(screen.getByTestId('coverage-delete-NFLX'), { key: 'Enter' })
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('Cancel closes the confirm without calling the mutation', () => {
+    const onDelete = vi.fn()
+    renderDelete({ ticker: 'NFLX', artifact_count: 3 }, { onDelete })
+    fireEvent.click(screen.getByTestId('coverage-delete-NFLX'))
+    fireEvent.click(screen.getByText('Cancel'))
+    expect(screen.queryByTestId('coverage-delete-confirm-NFLX')).not.toBeInTheDocument()
+    expect(onDelete).not.toHaveBeenCalled()
+  })
+
+  it('Escape cancels the confirm', () => {
+    renderDelete({ ticker: 'NFLX', artifact_count: 3 }, {})
+    fireEvent.click(screen.getByTestId('coverage-delete-NFLX'))
+    fireEvent.keyDown(screen.getByTestId('coverage-delete-confirm-NFLX'), { key: 'Escape' })
+    expect(screen.queryByTestId('coverage-delete-confirm-NFLX')).not.toBeInTheDocument()
+  })
+
+  it('a backdrop click cancels the confirm', () => {
+    renderDelete({ ticker: 'NFLX', artifact_count: 3 }, {})
+    fireEvent.click(screen.getByTestId('coverage-delete-NFLX'))
+    fireEvent.click(screen.getByTestId('coverage-delete-confirm-NFLX'))
+    expect(screen.queryByTestId('coverage-delete-confirm-NFLX')).not.toBeInTheDocument()
+  })
+
+  it('confirming calls onDelete with the ticker and closes', () => {
+    const onDelete = vi.fn()
+    const onOpen = vi.fn()
+    renderDelete({ ticker: 'NFLX', artifact_count: 3 }, { onDelete, onOpen })
+    fireEvent.click(screen.getByTestId('coverage-delete-NFLX'))
+    fireEvent.click(screen.getByTestId('coverage-delete-confirm-btn-NFLX'))
+    expect(onDelete).toHaveBeenCalledTimes(1)
+    expect(onDelete).toHaveBeenCalledWith('NFLX')
+    expect(screen.queryByTestId('coverage-delete-confirm-NFLX')).not.toBeInTheDocument()
+    // The destructive path must never also navigate to the ticker.
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('names the ticker and the artifact count in the body', () => {
+    renderDelete({ ticker: 'NFLX', artifact_count: 5 }, {})
+    fireEvent.click(screen.getByTestId('coverage-delete-NFLX'))
+    const dialog = screen.getByTestId('coverage-delete-confirm-NFLX')
+    expect(dialog).toHaveTextContent('Delete NFLX?')
+    expect(dialog).toHaveTextContent('NFLX leaves the desk')
+    expect(dialog).toHaveTextContent('5 stored artifacts')
+    expect(dialog).toHaveTextContent('This cannot be undone')
+  })
+
+  it('uses the empty wording when the card has no artifacts', () => {
+    renderDelete({ ticker: 'NFLX', artifact_count: 0 }, {})
+    fireEvent.click(screen.getByTestId('coverage-delete-NFLX'))
+    const dialog = screen.getByTestId('coverage-delete-confirm-NFLX')
+    expect(dialog).toHaveTextContent('It has no stored artifacts')
+    expect(dialog).not.toHaveTextContent('0 stored artifacts')
+  })
+})

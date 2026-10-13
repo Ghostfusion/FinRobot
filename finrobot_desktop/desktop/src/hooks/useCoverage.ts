@@ -10,7 +10,11 @@ import {
   type CoverageGroupDetail,
   type CoverageOverview,
   type CoverageRerunRequest,
+  type CoverageTickerDeletion,
 } from '../api/coverage'
+import { useToastStore } from '../stores/toastStore'
+import { tSync } from '../i18n'
+import { mapErrorToUserMessage } from '../utils/errorMessage'
 
 const KEYS = {
   groups: ['coverage', 'groups'] as const,
@@ -145,6 +149,39 @@ export function useSetOwned() {
       },
     },
   )
+}
+
+/**
+ * Delete a ticker from the desk: drop its membership AND every stored artifact
+ * for it in one action. Success invalidates THIS group's overview (both the
+ * cache-only paint and its nested `fresh` revalidate, prefix-matched by the
+ * group's key) so the card leaves the wall, and confirms through the toast
+ * store — the app's surface for a completed destructive action. On failure the
+ * card stays put, so the toast carries the reason instead of a silent no-op.
+ */
+export function useDeleteCoverageTicker(groupId: string) {
+  const qc = useQueryClient()
+  const addToast = useToastStore((s) => s.addToast)
+  return useMutation<CoverageTickerDeletion, Error, string>({
+    mutationFn: (ticker) => coverageApi.deleteTicker(groupId, ticker),
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: KEYS.overview(groupId) })
+      addToast({
+        type: 'success',
+        title: tSync('coverage.delete.done', {
+          ticker: result.ticker,
+          n: result.artifacts_deleted,
+        }),
+      })
+    },
+    onError: (err: Error) => {
+      addToast({
+        type: 'error',
+        title: tSync('coverage.delete.failed'),
+        description: mapErrorToUserMessage(err),
+      })
+    },
+  })
 }
 
 /**

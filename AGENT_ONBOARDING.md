@@ -293,6 +293,16 @@ Only steps 2, 7, 8 (plus LLM peer *selection*) involve the LLM; steps 4/5/6 igno
   card. The re-run-all filter necessarily exists twice (`select_targets` server-side,
   `matchesRerunFilters` client-side, where it drives the confirm count) and the two MUST agree:
   otherwise the user confirms N and re-runs a different N.
+- **A card's "X" deletes the membership AND the ticker's artifacts, and it is NOT permanent the
+  other way round:** `DELETE /api/coverage/groups/{id}/members/{ticker}` drops the member row
+  and purges every artifact for that ticker (archived included), reusing the single-artifact
+  DELETE's cleanup steps and calling the existing `delete()` per id so there is ONE deletion
+  authority. It is idempotent (a non-member still purges, reporting `removed_from_group: false`)
+  and it KEEPS the `owned` flag — ownership outlives desk membership. But opening that ticker
+  again re-enrols it (the documented `/stocks/:ticker` auto-add), so "delete the card" cleans
+  the desk, it does not blacklist the name; the reports, however, stay gone. The handler logs
+  every deletion because nothing else records it (hard DELETE, and the audit chain only
+  appends on save).
 
 **Implicit (follow the pattern):**
 

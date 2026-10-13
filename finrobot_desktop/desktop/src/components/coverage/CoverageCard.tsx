@@ -9,7 +9,8 @@
 // report count + latest report date. Live Upside is labelled "vs latest price"
 // in the inspector; on the dense card the column header carries that meaning.
 
-import { memo } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useI18n, type Locale } from '../../i18n'
 import {
   formatAge,
@@ -38,6 +39,9 @@ interface Props {
   // The owned write for THIS ticker is in flight — disable the checkbox so a
   // double-click can't queue a lost-update pair.
   ownedPending?: boolean
+  // Destructive: remove the ticker from the desk AND delete its stored artifacts.
+  // Optional (mirrors onSetOwned) so card-only tests render without the mutation.
+  onDelete?: (ticker: string) => void
 }
 
 // Badge text + dot ride the bright signal hue (matches the card's top hairline);
@@ -103,8 +107,14 @@ export const CoverageCard = memo(function CoverageCard({
   onOpen,
   onSetOwned,
   ownedPending = false,
+  onDelete,
 }: Props): React.ReactElement {
   const { t, locale } = useI18n()
+  // The "X" arms a local confirm before anything is deleted; the card is a
+  // role=link, so the whole control (and the modal) swallows its own click /
+  // keydown — opening the ticker is the one thing it must never do.
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [deleteArmed, setDeleteArmed] = useState(false)
   const compact = density === 'compact'
   const ccy = row.currency || 'USD'
   const verdict = row.latest_verdict ? VERDICT[row.latest_verdict] : null
@@ -183,16 +193,65 @@ export const CoverageCard = memo(function CoverageCard({
             </div>
           )}
         </div>
-        <div
-          className="coverage-card__verdict"
-          style={{
-            color: verdict ? verdict.color : 'var(--text-muted)',
-            background: verdict ? verdict.bg : 'var(--neutral-soft)',
-            borderColor: verdict ? verdict.bg : 'var(--border-soft)',
-          }}
-        >
-          <span className="coverage-card__verdict-dot" aria-hidden />
-          {row.latest_verdict ?? t('coverage.notRun')}
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flex: 'none' }}>
+          <div
+            className="coverage-card__verdict"
+            style={{
+              color: verdict ? verdict.color : 'var(--text-muted)',
+              background: verdict ? verdict.bg : 'var(--neutral-soft)',
+              borderColor: verdict ? verdict.bg : 'var(--border-soft)',
+            }}
+          >
+            <span className="coverage-card__verdict-dot" aria-hidden />
+            {row.latest_verdict ?? t('coverage.notRun')}
+          </div>
+          {/* Delete control — muted at rest, danger on hover/focus. Sits beside
+              the verdict chip but owns its own aria-label (the card's label is
+              "Open NFLX"; a delete action must never be announced as "open"). */}
+          <button
+            type="button"
+            data-testid={`coverage-delete-${row.ticker}`}
+            className="coverage-hover-btn"
+            aria-label={t('coverage.delete.aria', { ticker: row.ticker })}
+            title={t('coverage.delete.aria', { ticker: row.ticker })}
+            onClick={(e) => {
+              e.stopPropagation()
+              setConfirmOpen(true)
+            }}
+            // Swallow keydown so it never bubbles to the article's open handler
+            // (Enter/Space still fire the button's own click natively).
+            onKeyDown={(e) => e.stopPropagation()}
+            onMouseEnter={() => setDeleteArmed(true)}
+            onMouseLeave={() => setDeleteArmed(false)}
+            onFocus={() => setDeleteArmed(true)}
+            onBlur={() => setDeleteArmed(false)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flex: 'none',
+              width: 24,
+              height: 24,
+              padding: 0,
+              borderRadius: 'var(--radius-pill)',
+              border: '1px solid',
+              borderColor: deleteArmed ? 'var(--danger)' : 'var(--border-soft)',
+              background: 'var(--bg-card-overlay)',
+              // Inline color overrides the class's hover rule, so the danger
+              // treatment (armed) actually wins over `.coverage-hover-btn:hover`.
+              color: deleteArmed ? 'var(--danger)' : 'var(--text-muted)',
+              cursor: 'pointer',
+            }}
+          >
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+              <path
+                d="M2.5 2.5l7 7M9.5 2.5l-7 7"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -370,9 +429,121 @@ export const CoverageCard = memo(function CoverageCard({
           />
         </span>
       </footer>
+
+      {/* Portaled to <body>: the card is overflow:hidden and translates on hover
+          (transform creates a containing block), so an in-card fixed modal would
+          be clipped/mispositioned. */}
+      {confirmOpen &&
+        createPortal(
+          <DeleteTickerConfirmModal
+            ticker={row.ticker}
+            count={row.artifact_count}
+            onCancel={() => setConfirmOpen(false)}
+            onConfirm={() => {
+              setConfirmOpen(false)
+              onDelete?.(row.ticker)
+            }}
+          />,
+          document.body,
+        )}
     </article>
   )
 })
+
+// Local confirm for the destructive delete. Shaped like SecHoldingsConfirmModal
+// (backdrop + title + body + Cancel/Delete). Portaled to <body> at the call site
+// so the card's overflow:hidden / hover-transform can't clip it. Escape and a
+// backdrop click cancel; focus lands on Cancel (the safe action) on open. React
+// portals bubble through the COMPONENT tree, so every click/keydown here stops
+// propagation — otherwise it would reach the article's role=link open handler.
+function DeleteTickerConfirmModal({
+  ticker,
+  count,
+  onCancel,
+  onConfirm,
+}: {
+  ticker: string
+  count: number
+  onCancel: () => void
+  onConfirm: () => void
+}): React.ReactElement {
+  const { t } = useI18n()
+  const cancelRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    cancelRef.current?.focus()
+  }, [])
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      data-testid={`coverage-delete-confirm-${ticker}`}
+      onClick={(e) => {
+        e.stopPropagation()
+        onCancel()
+      }}
+      onKeyDown={(e) => {
+        e.stopPropagation()
+        if (e.key === 'Escape') onCancel()
+      }}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'var(--scrim)',
+        backdropFilter: 'blur(6px)',
+        WebkitBackdropFilter: 'blur(6px)',
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 200,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          minWidth: 360,
+          maxWidth: 460,
+          padding: '22px 24px',
+          background: 'var(--bg-elevated)',
+          border: '1px solid var(--border-soft)',
+          borderRadius: 'var(--radius-md)',
+          boxShadow: 'var(--shadow-lg)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 14,
+        }}
+      >
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--danger)' }}>
+          {t('coverage.delete.title', { ticker })}
+        </div>
+        <div style={{ fontSize: 12.5, color: 'var(--text-primary)', lineHeight: 1.6 }}>
+          {count > 0
+            ? t('coverage.delete.body', { ticker, n: count })
+            : t('coverage.delete.bodyEmpty', { ticker })}
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
+          <button ref={cancelRef} type="button" className="btn" onClick={onCancel}>
+            {t('coverage.delete.cancel')}
+          </button>
+          <button
+            type="button"
+            data-testid={`coverage-delete-confirm-btn-${ticker}`}
+            onClick={onConfirm}
+            className="btn"
+            style={{
+              background: 'var(--danger)',
+              borderColor: 'var(--danger)',
+              color: 'var(--text-on-danger)',
+              fontWeight: 600,
+            }}
+          >
+            {t('coverage.delete.confirm')}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // Footer "owned" chip. The card is a role=link with a click/keydown-to-open
 // handler, so the control MUST swallow its own click + keydown (stopPropagation)

@@ -17,7 +17,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useI18n } from '../i18n'
 import { useCoverageStore } from '../stores/coverageStore'
-import { useCoverageGroups, useCoverageOverview, useSetOwned } from '../hooks/useCoverage'
+import {
+  useCoverageGroups,
+  useCoverageOverview,
+  useSetOwned,
+  useDeleteCoverageTicker,
+} from '../hooks/useCoverage'
 import { CoverageEmptyState } from '../components/coverage/CoverageEmptyState'
 import { CoverageCardGrid } from '../components/coverage/CoverageCardGrid'
 import { CoverageRerunPanel } from '../components/coverage/CoverageRerunPanel'
@@ -85,6 +90,11 @@ export function CoveragePage(): React.ReactElement {
   // flag isn't present (older seed).
   const activeGroup = groups.find((g) => g.is_system) ?? groups[0]
   const activeGroupId = activeGroup?.id ?? null
+
+  // Destructive delete (card "X" → confirm): drop the ticker from this group AND
+  // delete its stored artifacts. Scoped to the active group; the mutation is only
+  // reachable from a rendered card, which requires a resolved group.
+  const deleteTicker = useDeleteCoverageTicker(activeGroupId ?? '')
 
   const overviewQuery = useCoverageOverview(activeGroupId)
   const rows = useMemo(() => overviewQuery.data?.rows ?? [], [overviewQuery.data])
@@ -232,6 +242,7 @@ export function CoveragePage(): React.ReactElement {
             onOpen={(ticker) => navigate(`/stocks/${ticker}`)}
             onSetOwned={(ticker, owned) => setOwned.mutate({ ticker, owned })}
             ownedPendingTicker={ownedPendingTicker}
+            onDelete={(ticker) => deleteTicker.mutate(ticker)}
           />
         )}
       </div>

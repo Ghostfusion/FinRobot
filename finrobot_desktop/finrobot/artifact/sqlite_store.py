@@ -480,6 +480,33 @@ class SqliteArtifactStore:
         await conn.commit()
         return cur.rowcount > 0
 
+    async def delete_by_ticker(self, ticker: str) -> list[str]:
+        """Delete EVERY artifact for ``ticker``, archived rows included.
+
+        The ticker is leaving the Coverage Desk entirely, so unlike
+        :meth:`list_by_ticker` (which hides archived rows by default) this
+        selects them too — a card's "X" must not leave an archived report
+        behind to resurface on the timeline. The filter is pushed into SQL as
+        ``ticker = ?`` (upper-cased, matching save/list) so no full-table scan
+        feeds a Python filter.
+
+        The ids are then deleted through the EXISTING single-id :meth:`delete`,
+        one at a time, so there stays exactly ONE deletion authority — anything
+        that ``delete`` learns to do later (link cleanup, cascade) keeps working
+        here for free. Empty / unknown ticker → ``[]`` (never an error: a
+        re-fired cleanup must be a clean no-op).
+        """
+        conn = await self._conn_ready()
+        async with conn.execute(
+            "SELECT id FROM artifacts WHERE ticker = ?", (ticker.upper(),)
+        ) as cur:
+            ids = [row[0] for row in await cur.fetchall()]
+        deleted: list[str] = []
+        for artifact_id in ids:
+            if await self.delete(artifact_id):
+                deleted.append(artifact_id)
+        return deleted
+
     async def list_by_ticker(
         self,
         ticker: str | None = None,

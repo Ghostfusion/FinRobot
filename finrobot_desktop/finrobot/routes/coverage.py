@@ -3,6 +3,7 @@
 Endpoints:
   GET    /api/coverage/groups                         — list groups (+ counts)
   POST   /api/coverage/studied-tickers/members        — auto-add opened ticker
+  DELETE /api/coverage/groups/{id}/members/{ticker}   — delete card + reports
   GET    /api/coverage/groups/{id}/overview           — Coverage Table payload
   POST   /api/coverage/groups/{id}/runs               — batch-run the group
   PUT    /api/coverage/owned/{ticker}                 — set the owned checkbox
@@ -12,7 +13,8 @@ Endpoints:
 Coverage Desk is a single ``Studied Tickers`` workspace — opening a ticker
 enrols it, the table renders the universe, and a batch run fans the pipeline
 across it. There is no multi-group management surface (no create / rename /
-delete / generic member edit).
+delete of groups / generic member edit); the one member mutation is the
+card's "X", which drops a ticker from a group AND purges its stored reports.
 
 Orchestration lives in :mod:`finrobot.coverage.service` (the table) and
 :mod:`finrobot.coverage.batch` (the queued re-run-all); this layer only wires
@@ -105,6 +107,20 @@ class OwnedTickerRequest(BaseModel):
 class OwnedTickerResponse(BaseModel):
     ticker: str
     owned: bool
+
+
+class DeleteMemberResponse(BaseModel):
+    """Outcome of a card's "X": desk membership + the ticker's stored reports.
+
+    ``removed_from_group`` is False when the ticker was not (or no longer) a
+    member — the artifact purge still ran, so a re-fired cleanup is a clean
+    no-op rather than a 404 halfway through.
+    """
+
+    ticker: str
+    removed_from_group: bool
+    artifacts_deleted: int
+    artifact_ids: list[str]
 
 
 class RerunRequest(BaseModel):
@@ -236,6 +252,77 @@ async def set_owned(ticker: str, request: Request, body: OwnedTickerRequest) -> 
     # stale checkbox on every other group's cards.
     _OVERVIEW_CACHE.clear()
     return OwnedTickerResponse(ticker=norm, owned=stored)
+
+
+# ── Card deletion (membership + stored reports) ──────────────────────────────
+
+
+@router.delete("/groups/{group_id}/members/{ticker}", response_model=DeleteMemberResponse)
+async def delete_member(group_id: str, ticker: str, request: Request) -> DeleteMemberResponse:
+    """Delete a ticker's card from a group AND purge its stored artifacts.
+
+    The card's "X" is a desk-level removal: the name leaves THIS group and the
+    ticker's stored reports (archived rows included) go with it, so the wall
+    never shows a card whose reports no longer exist. The ticker's ``owned``
+    flag is deliberately kept — ownership is a portfolio fact, not desk
+    membership, and re-opening the ticker re-adds the card (the documented
+    auto-add), restoring the checkbox state instead of silently losing it. The
+    audit chain is untouched, exactly as the single-artifact DELETE leaves it
+    (``audit_chain`` appends on save only).
+
+    Idempotent by design: a ticker that is not (or no longer) a member still
+    has its artifacts purged and reports ``removed_from_group: false`` — a
+    re-fired cleanup must not 404 halfway through. Only an unknown GROUP is a
+    404; an invalid ticker is the same 422 ``validate_ticker`` gives the owned
+    PUT.
+    """
+    store = _store(request)
+    try:
+        norm = validate_ticker(ticker)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if await store.get_group(group_id) is None:
+        raise HTTPException(status_code=404, detail=f"Coverage group not found: {group_id}")
+    artifact_store = _artifact_store(request)
+    if artifact_store is None:
+        raise HTTPException(status_code=503, detail="Backend deps not initialized")
+
+    removed = await store.remove_members(group_id, [norm])
+    artifact_ids = await artifact_store.delete_by_ticker(norm)
+    # Same three cleanup steps the single-artifact DELETE runs (routes/
+    # artifacts.py): drop the run_artifacts link rows so GET /api/runs/{run_id}
+    # never lists a ghost whose report 404s forever, bust the dashboard TTL
+    # caches (recent-research strip / hit-rate buckets), then drop this group's
+    # overview L1 so the card leaves the wall on next render. Absent run_store
+    # (router mounted bare in tests) just means there are no links to clean.
+    run_store = getattr(request.app.state, "run_store", None)
+    if run_store is not None:
+        for artifact_id in artifact_ids:
+            await run_store.remove_artifact_links(artifact_id)
+    # Local import keeps the routes.dashboard ← routes.coverage edge lazy/
+    # one-directional, mirroring the artifacts route.
+    from finrobot.routes.dashboard import invalidate_dashboard_caches
+
+    invalidate_dashboard_caches()
+    _invalidate(group_id)
+    # Trace a DESTRUCTIVE, irreversible operation. Nothing else records it: the
+    # artifacts table row is gone for good, the audit chain only appends on
+    # save, and the write itself is a hard DELETE — so without this line a
+    # "where did my card/report go?" question has no answer anywhere.
+    logger.info(
+        "Coverage card deleted: ticker=%s group=%s removed_from_group=%s artifacts_deleted=%d ids=%s",
+        norm,
+        group_id,
+        removed > 0,
+        len(artifact_ids),
+        artifact_ids,
+    )
+    return DeleteMemberResponse(
+        ticker=norm,
+        removed_from_group=removed > 0,
+        artifacts_deleted=len(artifact_ids),
+        artifact_ids=artifact_ids,
+    )
 
 
 # ── Overview (Coverage Table) ────────────────────────────────────────────────

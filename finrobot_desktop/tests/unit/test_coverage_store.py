@@ -2,9 +2,9 @@
 
 The store now exposes only the single ``Studied Tickers`` workspace: the
 system group is the sole creation primitive (``get_or_create_system_group``);
-members are added via ``add_members`` and read back via ``get_group`` /
-``get_system_group`` / ``list_groups``. There is no multi-group management
-(create / rename / delete / remove-member) — that surface was removed.
+members are added via ``add_members``, removed via ``remove_members``, and read
+back via ``get_group`` / ``get_system_group`` / ``list_groups``. There is no
+multi-group management (create / rename / delete of groups).
 """
 
 from __future__ import annotations
@@ -51,6 +51,50 @@ async def test_add_members_upper_cased_and_idempotent(store: CoverageStore) -> N
 
 async def test_add_members_to_missing_group_returns_none(store: CoverageStore) -> None:
     assert await store.add_members("cov_nope", ["AAPL"]) is None
+
+
+# ── remove_members ───────────────────────────────────────────────────────────
+
+
+async def test_remove_members_removes_only_named_and_reports_count(
+    store: CoverageStore,
+) -> None:
+    g = await store.get_or_create_system_group("Studied Tickers")
+    await store.add_members(g.id, ["AAPL", "MSFT", "NVDA"])
+
+    removed = await store.remove_members(g.id, ["AAPL"])
+
+    assert removed == 1
+    detail = await store.get_group(g.id)
+    assert detail is not None
+    assert sorted(m.ticker for m in detail.members) == ["MSFT", "NVDA"]
+
+
+async def test_remove_members_dedupes_and_upper_cases(store: CoverageStore) -> None:
+    g = await store.get_or_create_system_group("Studied Tickers")
+    await store.add_members(g.id, ["AAPL", "MSFT"])
+
+    # One symbol passed twice, lower-cased — de-duplicated to a single row.
+    assert await store.remove_members(g.id, ["aapl", "AAPL"]) == 1
+
+    detail = await store.get_group(g.id)
+    assert detail is not None
+    assert [m.ticker for m in detail.members] == ["MSFT"]
+
+
+async def test_remove_members_non_member_is_a_noop(store: CoverageStore) -> None:
+    g = await store.get_or_create_system_group("Studied Tickers")
+    await store.add_members(g.id, ["MSFT"])
+
+    assert await store.remove_members(g.id, ["AAPL"]) == 0
+
+    detail = await store.get_group(g.id)
+    assert detail is not None
+    assert [m.ticker for m in detail.members] == ["MSFT"]
+
+
+async def test_remove_members_unknown_group_returns_zero(store: CoverageStore) -> None:
+    assert await store.remove_members("cov_nope", ["AAPL"]) == 0
 
 
 async def test_list_groups_carries_member_count(store: CoverageStore) -> None:

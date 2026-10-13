@@ -31,6 +31,11 @@ const hooks = {
   },
   rerun: { mutate: vi.fn(), isPending: false, isError: false },
   batch: { data: undefined as unknown, isError: false },
+  // Destructive delete is mounted with the active group id; capture both it and
+  // the ticker the card hands the mutation so the (groupId, ticker) wiring is
+  // asserted end-to-end.
+  deleteTicker: { mutate: vi.fn() },
+  deleteGroupId: '' as string,
 }
 
 vi.mock('../hooks/useCoverage', () => ({
@@ -39,6 +44,10 @@ vi.mock('../hooks/useCoverage', () => ({
   useSetOwned: () => hooks.setOwned,
   useRerunAll: () => hooks.rerun,
   useCoverageBatch: () => hooks.batch,
+  useDeleteCoverageTicker: (groupId: string) => {
+    hooks.deleteGroupId = groupId
+    return hooks.deleteTicker
+  },
 }))
 
 import { CoveragePage } from './CoveragePage'
@@ -205,5 +214,83 @@ describe('CoveragePage header rail', () => {
     expect(screen.queryByTestId('coverage-rerun-panel')).not.toBeInTheDocument()
     fireEvent.click(screen.getByTestId('coverage-rerun-open'))
     expect(screen.getByTestId('coverage-rerun-panel')).toBeInTheDocument()
+  })
+})
+
+describe('CoveragePage delete ticker', () => {
+  beforeEach(() => {
+    hooks.groups = {
+      data: [{ id: 'g1', name: 'Studied Tickers', member_count: 1, is_system: true }],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    }
+    hooks.overview = {
+      ...makeOverview(),
+      data: {
+        group_id: 'g1',
+        group_name: 'Studied Tickers',
+        rows: [
+          {
+            ticker: 'AAPL',
+            owned: false,
+            company: null,
+            price: null,
+            change_pct_1d: null,
+            price_as_of: null,
+            session_state: null,
+            market_cap: null,
+            revenue_ttm: null,
+            ev_ebitda: null,
+            pe: null,
+            currency: null,
+            latest_verdict: 'BUY',
+            target_price: null,
+            target_date: null,
+            entry_price: null,
+            upside_to_target_live: null,
+            signal: null,
+            artifact_count: 2,
+            research_count: 0,
+            latest_artifact_id: null,
+            latest_type: null,
+            latest_at: null,
+            run_status: null,
+            run_error: null,
+            market_implied: null,
+            market_stale: false,
+            needs_refresh: [],
+            warnings: [],
+            sources: {
+              price: null,
+              change_pct_1d: null,
+              market_cap: null,
+              revenue_ttm: null,
+              ev_ebitda: null,
+              pe: null,
+              upside_to_target_live: null,
+              market_implied: null,
+            },
+          },
+        ],
+        generated_at: '2026-06-08T09:00:00Z',
+        partial: false,
+        cache_only: false,
+        refresh_noop: false,
+      },
+    }
+    hooks.setOwned = { mutate: vi.fn(), isPending: false, variables: undefined }
+    hooks.deleteTicker = { mutate: vi.fn() }
+    hooks.deleteGroupId = ''
+  })
+
+  it('confirms the delete with the active group id and the clicked ticker', () => {
+    renderPage()
+    fireEvent.click(screen.getByTestId('coverage-delete-AAPL'))
+    fireEvent.click(screen.getByTestId('coverage-delete-confirm-btn-AAPL'))
+    // The hook binds the active group; the card supplies the ticker → both land.
+    expect(hooks.deleteGroupId).toBe('g1')
+    expect(hooks.deleteTicker.mutate).toHaveBeenCalledTimes(1)
+    expect(hooks.deleteTicker.mutate).toHaveBeenCalledWith('AAPL')
   })
 })

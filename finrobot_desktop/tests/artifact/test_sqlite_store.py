@@ -212,6 +212,39 @@ async def test_delete_then_get_is_none(store: SqliteArtifactStore) -> None:
 
 
 @pytest.mark.asyncio
+async def test_delete_by_ticker_removes_archived_too(store: SqliteArtifactStore) -> None:
+    """The ticker is leaving the desk entirely, so archived rows go with it.
+
+    list_by_ticker hides archived rows by default — a naive "list then delete"
+    would leave an archived report behind to resurface on the timeline.
+    """
+    await store.save(_make_artifact(id="art_live", ticker="AAPL"))
+    dead = _make_artifact(id="art_arch", ticker="AAPL")
+    dead.meta.archived = True
+    await store.save(dead)
+    await store.save(_make_artifact(id="art_msft", ticker="MSFT"))
+
+    deleted = await store.delete_by_ticker("aapl")
+
+    assert set(deleted) == {"art_live", "art_arch"}
+    assert await store.exists("art_live") is False
+    assert await store.exists("art_arch") is False
+    assert await store.exists("art_msft") is True
+
+
+@pytest.mark.asyncio
+async def test_delete_by_ticker_unknown_ticker_returns_empty(
+    store: SqliteArtifactStore,
+) -> None:
+    """An unknown / empty ticker is a clean no-op — a re-fired cleanup is safe."""
+    await store.save(_make_artifact(id="art_a", ticker="AAPL"))
+
+    assert await store.delete_by_ticker("ZZZZ") == []
+    assert await store.delete_by_ticker("") == []
+    assert await store.exists("art_a") is True
+
+
+@pytest.mark.asyncio
 async def test_cross_ticker_artifact(store: SqliteArtifactStore) -> None:
     """ticker=None artifacts live in the same table, identified by NULL."""
     art = _make_artifact(id="art_cross", ticker=None)

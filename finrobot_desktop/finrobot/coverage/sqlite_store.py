@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -293,6 +294,39 @@ class CoverageStore:
             )
         await conn.commit()
         return await self.get_group(group_id)
+
+    async def remove_members(self, group_id: str, tickers: Iterable[str]) -> int:
+        """Remove the named tickers from a group; returns how many rows went.
+
+        ``tickers`` is upper-cased and de-duplicated the same way
+        :meth:`add_members` normalises its input, so a caller can hand in a
+        single symbol or a whole set without pre-cleaning. An unknown group is
+        a no-op returning 0 (never an error) — a cleanup fired at a group the
+        user just removed must not fail halfway. Only the NAMED tickers go:
+        removing one card leaves its siblings untouched.
+        """
+        conn = await self._conn_ready()
+        clean = sorted({t.strip().upper() for t in tickers if t and t.strip()})
+        if not clean:
+            return 0
+        async with conn.execute("SELECT 1 FROM coverage_groups WHERE id = ?", (group_id,)) as cur:
+            if await cur.fetchone() is None:
+                return 0
+        placeholders = ", ".join("?" for _ in clean)
+        cur = await conn.execute(
+            f"DELETE FROM coverage_members WHERE group_id = ? AND ticker IN ({placeholders})",
+            (group_id, *clean),
+        )
+        removed = cur.rowcount
+        if removed:
+            # A membership change bumps the group's updated_at, exactly like
+            # add_members — the store's mutation contract is symmetric.
+            await conn.execute(
+                "UPDATE coverage_groups SET updated_at = ? WHERE id = ?",
+                (_iso(_now()), group_id),
+            )
+        await conn.commit()
+        return removed
 
     # ── Ownership ────────────────────────────────────────────────────────────
 

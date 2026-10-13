@@ -19,6 +19,8 @@ interface Props {
   onSetOwned?: (ticker: string, owned: boolean) => void
   // The ticker whose owned write is in flight — only that card's checkbox locks.
   ownedPendingTicker?: string | null
+  // Destructive: remove the ticker from the desk AND delete its stored artifacts.
+  onDelete?: (ticker: string) => void
 }
 
 export function CoverageCardGrid({
@@ -28,6 +30,7 @@ export function CoverageCardGrid({
   onOpen,
   onSetOwned,
   ownedPendingTicker = null,
+  onDelete,
 }: Props): React.ReactElement {
   const { t } = useI18n()
   const compact = density === 'compact'
@@ -78,6 +81,7 @@ export function CoverageCardGrid({
           onOpen={onOpen}
           onSetOwned={onSetOwned}
           ownedPending={ownedPendingTicker === row.ticker}
+          onDelete={onDelete}
         />
       ))}
     </div>

@@ -126,6 +126,17 @@ export interface CoverageRow {
   sources: CoverageRowSources
 }
 
+// Result of the destructive "delete ticker" action (mirrors the router's DELETE
+// /api/coverage/groups/{id}/members/{ticker}). `removed_from_group` is false when
+// the ticker was never a member yet its artifacts were still deleted (idempotent
+// cleanup); `artifact_ids` is every row that was removed for the ticker.
+export interface CoverageTickerDeletion {
+  ticker: string
+  removed_from_group: boolean
+  artifacts_deleted: number
+  artifact_ids: string[]
+}
+
 export interface CoverageOverview {
   group_id: string
   group_name: string
@@ -252,6 +263,16 @@ export const coverageApi = {
     req<{ ticker: string; owned: boolean }>(
       `/api/coverage/owned/${encodeURIComponent(ticker)}`,
       jsonInit('PUT', { owned }),
+    ),
+
+  // Remove a ticker from the group AND delete every stored artifact for it — one
+  // destructive action, so the card and its reports leave the desk together.
+  // Idempotent: a ticker that was never a member still deletes its artifacts and
+  // reports removed_from_group=false (a re-fired cleanup must not 404 halfway).
+  deleteTicker: (groupId: string, ticker: string) =>
+    req<CoverageTickerDeletion>(
+      `/api/coverage/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(ticker)}`,
+      { method: 'DELETE' },
     ),
 
   // Kick off a filtered re-run of every matching card. Returns the initial batch

@@ -3041,6 +3041,38 @@ msgid "coverage.owned.aria"
 msgstr "Mark {ticker} as owned"
 
 #. js-lingui-explicit-id
+msgid "coverage.delete.aria"
+msgstr "Delete {ticker} from the desk"
+
+#. js-lingui-explicit-id
+msgid "coverage.delete.title"
+msgstr "Delete {ticker}?"
+
+#. js-lingui-explicit-id
+msgid "coverage.delete.body"
+msgstr "{ticker} leaves the desk and its {n} stored artifacts are deleted. This cannot be undone."
+
+#. js-lingui-explicit-id
+msgid "coverage.delete.bodyEmpty"
+msgstr "{ticker} leaves the desk. It has no stored artifacts. This cannot be undone."
+
+#. js-lingui-explicit-id
+msgid "coverage.delete.confirm"
+msgstr "Delete"
+
+#. js-lingui-explicit-id
+msgid "coverage.delete.cancel"
+msgstr "Cancel"
+
+#. js-lingui-explicit-id
+msgid "coverage.delete.done"
+msgstr "{ticker} removed from the desk · {n} artifacts deleted"
+
+#. js-lingui-explicit-id
+msgid "coverage.delete.failed"
+msgstr "Failed to delete"
+
+#. js-lingui-explicit-id
 msgid "coverage.sort.label"
 msgstr "Sort"
 

@@ -3041,6 +3041,38 @@ msgid "coverage.owned.aria"
 msgstr "将 {ticker} 标记为持有"
 
 #. js-lingui-explicit-id
+msgid "coverage.delete.aria"
+msgstr "将 {ticker} 从关注台删除"
+
+#. js-lingui-explicit-id
+msgid "coverage.delete.title"
+msgstr "删除 {ticker}？"
+
+#. js-lingui-explicit-id
+msgid "coverage.delete.body"
+msgstr "{ticker} 将离开关注台，其 {n} 份已存资料将被永久删除。此操作无法撤销。"
+
+#. js-lingui-explicit-id
+msgid "coverage.delete.bodyEmpty"
+msgstr "{ticker} 将离开关注台。它没有已存资料。此操作无法撤销。"
+
+#. js-lingui-explicit-id
+msgid "coverage.delete.confirm"
+msgstr "删除"
+
+#. js-lingui-explicit-id
+msgid "coverage.delete.cancel"
+msgstr "取消"
+
+#. js-lingui-explicit-id
+msgid "coverage.delete.done"
+msgstr "{ticker} 已从关注台移除 · 已删除 {n} 份资料"
+
+#. js-lingui-explicit-id
+msgid "coverage.delete.failed"
+msgstr "删除失败"
+
+#. js-lingui-explicit-id
 msgid "coverage.sort.label"
 msgstr "排序"
 

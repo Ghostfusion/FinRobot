@@ -51,6 +51,9 @@ class ArtifactStore:
     async def delete(self, artifact_id: str) -> bool:
         return await self._impl.delete(artifact_id)
 
+    async def delete_by_ticker(self, ticker: str) -> list[str]:
+        return await self._impl.delete_by_ticker(ticker)
+
     async def list_by_ticker(
         self,
         ticker: str | None = None,
