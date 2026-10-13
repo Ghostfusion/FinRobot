@@ -926,6 +926,151 @@ class TestFetchHistoricalFinancialsFullSchema:
         assert y[0]["capital_expenditure"] is None
 
 
+class TestCostOfRevenueAndEquityLegs:
+    """Owner review of the EHC deep-dive — two annual-series defects.
+
+    * The newest fiscal year's ``Cost Of Revenue`` / ``Selling General And
+      Administration`` are crossed ON THE SOURCE (Yahoo's own frame: 254.4M is the
+      real SG&A magnitude, 3411.1M the real cost of revenue), so the derived gross
+      margin printed 95.7% against 43.9% TTM. The provider emits the raw legs —
+      including the previously unread ``cost_of_revenue`` row the downstream
+      plausibility guard needs — and leaves the repair to ``historical_extractor``.
+    * ``total_equity`` was never read, so ``historical_metrics.shareholders_equity``
+      shipped all-null while the balance sheet carried the parent equity.
+    """
+
+    @staticmethod
+    def _crossed_frame() -> tuple[pd.DataFrame, pd.DataFrame]:
+        newest, prior = pd.Timestamp("2025-12-31"), pd.Timestamp("2024-12-31")
+        income = pd.DataFrame(
+            {
+                newest: {
+                    "Total Revenue": 5_935_200_000.0,
+                    "Cost Of Revenue": 254_400_000.0,  # crossed: the real SG&A
+                    "Gross Profit": 5_680_800_000.0,  # revenue − 254.4M
+                    "Selling General And Administration": 3_411_100_000.0,  # real COGS
+                },
+                prior: {
+                    "Total Revenue": 5_373_200_000.0,
+                    "Cost Of Revenue": 3_140_000_000.0,
+                    "Gross Profit": 2_233_200_000.0,
+                    "Selling General And Administration": 266_500_000.0,
+                },
+            }
+        )
+        balance = pd.DataFrame(
+            {
+                newest: {"Stockholders Equity": 2_438_200_000.0},
+                prior: {"Stockholders Equity": 2_067_000_000.0},
+            }
+        )
+        return income, balance
+
+    @pytest.mark.asyncio
+    async def test_cost_of_revenue_and_equity_legs_are_emitted(self):
+        income, balance = self._crossed_frame()
+        mock_ticker = _make_mock_ticker(VALID_INFO, income_stmt=income, balance_sheet=balance)
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker",
+            return_value=mock_ticker,
+        ):
+            result = await YFinanceProvider().fetch("EHC", "financials", years=2)
+        newest, prior = result.data["yearly_data"]
+        assert newest["fiscal_year"] == "2025-12-31"
+        # Raw source values, uncorrected — the guard (not the mapping) repairs them.
+        assert newest["cost_of_revenue"] == 254_400_000.0
+        assert newest["gross_profit"] == 5_680_800_000.0
+        assert newest["sga_expense"] == 3_411_100_000.0
+        assert newest["gross_margin"] == pytest.approx(0.9571, abs=1e-4)
+        assert newest["total_equity"] == 2_438_200_000.0
+        assert prior["total_equity"] == 2_067_000_000.0
+
+    @pytest.mark.asyncio
+    async def test_total_equity_is_none_when_the_row_is_absent(self):
+        income, _balance = self._crossed_frame()
+        mock_ticker = _make_mock_ticker(VALID_INFO, income_stmt=income)
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker",
+            return_value=mock_ticker,
+        ):
+            result = await YFinanceProvider().fetch("EHC", "financials", years=2)
+        assert result.data["yearly_data"][0]["total_equity"] is None
+
+
+class TestTtmWindowMetadata:
+    """Owner review: the forecast years were labelled from the wrong base — the
+    DCF's ``revenue_base`` is the TTM window while the chart labels came from the
+    last fiscal year, so projection year 1 rendered as "2026E" although it is the
+    twelve months ending mid-2027. The snapshot must carry the TTM window end and
+    its constituent quarter ends (it shipped ``fiscal_period_end=None`` /
+    ``ttm_quarter_ends=[]`` before).
+    """
+
+    @staticmethod
+    def _quarterly_sheet() -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                pd.Timestamp(col): {"Stockholders Equity": 1.0}
+                for col in ("2026-06-30", "2026-03-31", "2025-12-31", "2025-09-30", "2025-06-30")
+            }
+        )
+
+    @pytest.mark.asyncio
+    async def test_snapshot_carries_the_ttm_window_end_and_quarters(self):
+        info = dict(VALID_INFO, mostRecentQuarter=1782777600)  # 2026-06-30T00:00Z
+        mock_ticker = _make_mock_ticker(info, quarterly_balance_sheet=self._quarterly_sheet())
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker",
+            return_value=mock_ticker,
+        ):
+            result = await YFinanceProvider().fetch("EHC", "financials")
+        assert result.data["fiscal_year"] == "2026-06-30"
+        assert result.data["ttm_quarter_ends"] == [
+            "2026-06-30",
+            "2026-03-31",
+            "2025-12-31",
+            "2025-09-30",
+        ]
+
+    @pytest.mark.asyncio
+    async def test_window_end_falls_back_to_the_quarterly_frame(self):
+        """``info.mostRecentQuarter`` is the preferred source; the quarterly
+        frame's newest column is the fallback when Yahoo omits it."""
+        mock_ticker = _make_mock_ticker(VALID_INFO, quarterly_balance_sheet=self._quarterly_sheet())
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker",
+            return_value=mock_ticker,
+        ):
+            result = await YFinanceProvider().fetch("EHC", "financials")
+        assert result.data["fiscal_year"] == "2026-06-30"
+
+    @pytest.mark.asyncio
+    async def test_annual_sheet_never_fabricates_quarter_ends(self):
+        """An annual column date is a fiscal-YEAR end: publishing it as a TTM
+        quarter end would make the non-overlap audit "pass" on a non-window."""
+        mock_ticker = _make_mock_ticker(
+            VALID_INFO, balance_sheet=_sheet({"Stockholders Equity": 1.0}, column="2025-12-31")
+        )
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker",
+            return_value=mock_ticker,
+        ):
+            result = await YFinanceProvider().fetch("EHC", "financials")
+        assert result.data["ttm_quarter_ends"] == []
+        assert result.data["fiscal_year"] is None
+
+    @pytest.mark.asyncio
+    async def test_ttm_window_is_empty_when_no_statement_is_available(self):
+        mock_ticker = _make_mock_ticker(VALID_INFO)
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker",
+            return_value=mock_ticker,
+        ):
+            result = await YFinanceProvider().fetch("EHC", "financials")
+        assert result.data["fiscal_year"] is None
+        assert result.data["ttm_quarter_ends"] == []
+
+
 # ---------------------------------------------------------------------------
 # Integration tests (real yfinance — run manually with -m integration)
 # ---------------------------------------------------------------------------

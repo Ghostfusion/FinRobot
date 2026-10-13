@@ -12,6 +12,8 @@ receive raw ``DataResult`` slices from ``fetch_historical`` wrap them with
 ``normalize_financials / normalize_price`` at the call site before passing here.
 """
 
+import math
+
 from finrobot.engine.data.instrument import FundInstrumentError, is_fund_quote_type
 from finrobot.engine.data.normalize.contracts import NormalizedFinancials, NormalizedPrice
 from finrobot.engine.models.financial import (
@@ -59,6 +61,21 @@ from finrobot.engine.primitives.industry import is_balance_sheet_financial, is_b
 _MARGIN_CEILING = 1.0
 _MARGIN_FLOOR = -5.0
 
+# The label naming the P/E's denominator. A provider's ``trailingPE`` rides a
+# diluted-EPS basis while the report PRINTS TTM net income, so the two disagree by
+# construction (owner review, EHC: the 20.8× provider P/E implied ~$590M of net
+# income beside a printed $603.7M and a $621M filing fact). ``extract_financial_data``
+# therefore derives P/E from the SAME figures the report shows and stamps this
+# label, so the ratio's denominator is explicit instead of assumed.
+PE_BASIS_NET_INCOME = "market cap ÷ TTM net income (one net-income authority)"
+
+# Relative gap between a provider's TTM net income and the SEC XBRL TTM net income
+# above which the difference is DISCLOSED (see ``net_income_divergence_warning``).
+# A filing fact is rounded to the filing's own precision and the two windows can
+# differ by a few days, so small gaps are noise; >5% is a caliber difference the
+# narrative must not absorb silently.
+_NET_INCOME_DIVERGENCE_TOL = 0.05
+
 
 def _sanitize_margin(
     value: float | None, *, label: str, warnings: list[str] | None = None
@@ -88,6 +105,46 @@ def _sanitize_margin(
             )
         return None
     return value
+
+
+def net_income_divergence_warning(
+    provider_net_income: float | None,
+    provider_source: str | None,
+    xbrl_net_income: float | None,
+    xbrl_source: str | None,
+) -> str | None:
+    """Disclose a >5% gap between the SEC XBRL TTM net income and the provider's.
+
+    Once the P/E is derived from the printed net income, the report carries TWO
+    net-income authorities: the income-statement table's provider TTM net income
+    and the XBRL ``us-gaap:NetIncomeLoss`` TTM filing fact the narrative may cite.
+    A gap above ``_NET_INCOME_DIVERGENCE_TOL`` relative is a caliber difference
+    (concept / window / filing rounding) that must be DISCLOSED rather than
+    absorbed silently into prose — the EHC review found $621M (XBRL), $603.7M
+    (provider) and ~$590M (the old P/E-implied fourth number) inside one report.
+
+    Returns a warning naming BOTH values and BOTH sources, or None when either
+    figure is missing / non-finite or the two agree within tolerance. Pure and
+    side-effect free: the caller (the report's data-collection step — the one place
+    both values are in scope) appends the string to ``FinancialData.warnings``.
+    """
+    if provider_net_income is None or xbrl_net_income is None:
+        return None
+    if not (math.isfinite(provider_net_income) and math.isfinite(xbrl_net_income)):
+        return None
+    denominator = max(abs(provider_net_income), abs(xbrl_net_income))
+    if denominator == 0:
+        return None
+    gap = abs(provider_net_income - xbrl_net_income) / denominator
+    if gap <= _NET_INCOME_DIVERGENCE_TOL:
+        return None
+    return (
+        f"Net income disagreement ({gap:.1%}): the income statement's TTM net income is "
+        f"{provider_net_income:,.0f} ({provider_source or 'provider'}) while the SEC XBRL "
+        f"TTM filing fact is {xbrl_net_income:,.0f} ({xbrl_source or 'SEC XBRL'}) — a "
+        f"caliber gap (concept / window / filing rounding), not a typo; cite ONE authority "
+        f"explicitly instead of mixing the two"
+    )
 
 
 def extract_financial_data(
@@ -295,10 +352,49 @@ def extract_financial_data(
     high_52w = price.fifty_two_week_high()
     low_52w = price.fifty_two_week_low()
 
-    # P/E marked to the live cap: scale the provider's ratio (= mc_reported /
-    # net_income) by the mark-to-live adjustment so it tracks the live cap while
-    # preserving the provider's None semantics (ADR / cross-currency → None).
-    pe_ratio = fin.pe_ratio * mc_ratio if fin.pe_ratio is not None else None
+    # --- P/E: ONE net-income authority ---
+    # The provider's ``trailingPE`` rides its own denominator (Yahoo's diluted-EPS
+    # basis), so it implied a net income the report never printed (owner review,
+    # EHC: 20.8× → ~$590M beside a printed $603.7M income statement and a $621M
+    # filing fact). Derive the ratio from the SAME figures the report shows —
+    # market_cap ÷ TTM net_income — and stamp that basis on ``MarketData.pe_basis``
+    # (a label, NOT a row warning: coverage flips its "partial" flag on any
+    # FinancialData.warnings entry). The
+    # provider value survives only as a fallback (net income missing / ≤ 0, or a
+    # cross-currency ADR whose quote-ccy cap and reporting-ccy net income cannot
+    # form a ratio), where it is still marked to the live cap by ``mc_ratio``.
+    same_currency = fin.reporting_currency.upper() == fin.quote_currency.upper()
+    pe_ratio: float | None
+    pe_basis: str | None = None
+    if same_currency and fin.net_income is not None and fin.net_income > 0:
+        derived_pe = market_cap / fin.net_income
+        pe_ratio = derived_pe
+        pe_basis = PE_BASIS_NET_INCOME
+        if (
+            fin.pe_ratio is not None
+            and fin.pe_ratio > 0
+            and abs(derived_pe - fin.pe_ratio) / fin.pe_ratio > 0.01
+        ):
+            pe_basis = (
+                f"{PE_BASIS_NET_INCOME}; supersedes the provider's trailingPE "
+                f"{fin.pe_ratio:,.2f}×, which rides a different denominator"
+            )
+    else:
+        pe_ratio = fin.pe_ratio * mc_ratio if fin.pe_ratio is not None else None
+
+    # --- Quote basis -------------------------------------------------------
+    # A provider that served no quote timestamp served a session CLOSE, not a
+    # live tick — the canonical contract already records that as the
+    # ``quote_ts_missing`` degradation, so the report can label the price
+    # honestly instead of printing "Live" over yesterday's close (owner review
+    # 2026-10-13: "Live $124.42" was the Oct 12 close).
+    # The flags live on the PRICE feed's provenance (its own ``quote_ts_missing``
+    # / ``quote_currency_missing`` codes), not the financials' — and the price's
+    # semantic as-of is the latest BAR date, i.e. exactly the session the quote
+    # belongs to (EHC: 2026-10-12, the close the report was labelling "Live").
+    _quote_degraded = set(price.provenance.degraded) if price.provenance is not None else set()
+    quote_is_live = "quote_ts_missing" not in _quote_degraded
+    quote_as_of = price.provenance.as_of if price.provenance is not None else None
 
     # Carry any warnings that arrived on the canonical objects (e.g. cross-validate
     # discrepancies forwarded from raw fetch).
@@ -367,6 +463,11 @@ def extract_financial_data(
             shares_outstanding=shares,
             current_price=current_price,
             pe_ratio=pe_ratio,
+            # Names the P/E's denominator (see the block above); None when the
+            # provider's own ratio was kept as the fallback.
+            pe_basis=pe_basis,
+            quote_is_live=quote_is_live,
+            quote_as_of=quote_as_of,
             price_52w_high=high_52w,
             price_52w_low=low_52w,
             # Same canonical PRICE object the 52w high/low above derive from —

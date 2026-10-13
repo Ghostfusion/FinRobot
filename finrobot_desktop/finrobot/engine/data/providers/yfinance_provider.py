@@ -111,6 +111,22 @@ _NWC_CHANGE_NAMES = [
     "Change In Working Capital",
     "Changes In Working Capital",
 ]
+# Cost-of-revenue row. Emitted so the historical_extractor's gross-margin
+# plausibility guard can fall back to ``revenue − cost_of_revenue`` (the
+# provider's own reported cost) when the derived ``revenue − gross_profit`` is
+# implausible. Yahoo normally keeps ``Gross Profit`` == ``Total Revenue`` −
+# ``Cost Of Revenue``, so this is usually redundant — but when a single column's
+# cost lines are crossed it is one of the two independent legs the guard needs
+# (see _build_yearly_financials, EHC FY2025).
+_COGS_NAMES = ["Cost Of Revenue", "Cost Of Goods Sold", "Reconciled Cost Of Revenue"]
+# Parent-only shareholders' equity, the caliber FMP's ``totalStockholdersEquity``
+# reports and the one ``historical_extractor`` reads as ``total_equity`` (the
+# through-cycle ROE denominator). Without it the yfinance history shipped an
+# all-null ``shareholders_equity`` series while the balance sheet carried the
+# figure one DataFrame away. ``Total Equity Gross Minority Interest`` is
+# deliberately NOT in the list: it folds NCI into equity, which would make the
+# net_income/equity ROE ratio inconsistent with the parent-only numerator.
+_TOTAL_EQUITY_NAMES = ["Stockholders Equity", "Common Stock Equity", "Total Stockholders Equity"]
 # EV-bridge balance-sheet rows (numeric-audit family 3). Preferred equity and
 # noncontrolling (minority) interest are claims on the enterprise beside common
 # equity, so EV includes them (compute/operators/multiples.calculate_ev). FMP
@@ -170,6 +186,34 @@ def _cell(row: pd.Series | None, col: Any) -> float | None:
         return None
 
 
+def _column_iso_date(col: Any) -> str | None:
+    """A statement frame's column label (a fiscal period end) as an ISO date.
+
+    yfinance labels columns with ``pd.Timestamp`` (newest-first); a plain string
+    label is truncated to its date part. None when the label carries no date —
+    never a fabricated period.
+    """
+    if hasattr(col, "date"):
+        return str(col.date())
+    text = str(col)
+    return text[:10] if text[:4].isdigit() else None
+
+
+def _epoch_iso_date(value: Any) -> str | None:
+    """A Yahoo epoch-seconds timestamp as an ISO date; None when absent/invalid.
+
+    ``info.mostRecentQuarter`` / ``lastFiscalYearEnd`` arrive as Unix seconds. An
+    unusable value (missing, non-numeric, non-positive, out of range) stays None —
+    never a fabricated period.
+    """
+    if isinstance(value, bool) or not isinstance(value, int | float) or value <= 0:
+        return None
+    try:
+        return datetime.fromtimestamp(value, tz=timezone.utc).date().isoformat()
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
 def _build_yearly_financials(
     income_stmt: pd.DataFrame,
     cashflow: pd.DataFrame | None,
@@ -186,7 +230,19 @@ def _build_yearly_financials(
 
     ``balance_sheet`` supplies the debt/cash legs the historical bands build EV
     from; a missing frame (or a missing row in it) leaves those keys None rather
-    than inventing a debt-free year (see ``_TOTAL_DEBT_NAMES``).
+    than inventing a debt-free year (see ``_TOTAL_DEBT_NAMES``), plus the
+    parent-only equity the through-cycle ROE needs (``_TOTAL_EQUITY_NAMES``).
+
+    Rows are read straight off Yahoo's statement frames; a value that is crossed
+    or missing ON THE SOURCE (not in this mapping) is left as reported here and
+    repaired by the consumer's plausibility guard — this function stays a pure
+    shape translation. Live example (probe 2026-10-13): Yahoo's EHC annual frame
+    carries FY2025 ``Cost Of Revenue`` 254.4M (the real SG&A magnitude) and
+    ``Selling General And Administration`` 3411.1M (the real cost of revenue), so
+    its own ``Gross Profit`` row reads revenue − 254.4M = 5680.8M → a 95.7%
+    margin against 40-42% for FY2022-24; the same cross appears in every quarterly
+    column from 2025-09-30 on. ``cost_of_revenue`` is emitted so the guard has the
+    provider's own cost leg to test.
     """
     cols = list(income_stmt.columns[:max_years])
     has_cf = cashflow is not None and not cashflow.empty
@@ -199,6 +255,7 @@ def _build_yearly_financials(
     ni_row = _get_row(income_stmt, _NET_INCOME_NAMES)
     eps_row = _get_row(income_stmt, _EPS_NAMES)
     sga_row = _get_row(income_stmt, _SGA_NAMES)
+    cogs_row = _get_row(income_stmt, _COGS_NAMES)
 
     ocf_row = _get_row(cashflow, _OPERATING_CF_NAMES) if has_cf else None
     icf_row = _get_row(cashflow, _INVESTING_CF_NAMES) if has_cf else None
@@ -209,6 +266,7 @@ def _build_yearly_financials(
 
     debt_row = _get_row(balance_sheet, _TOTAL_DEBT_NAMES) if has_bs else None
     cash_row = _get_row(balance_sheet, _CASH_NAMES) if has_bs else None
+    equity_row = _get_row(balance_sheet, _TOTAL_EQUITY_NAMES) if has_bs else None
 
     yearly: list[dict[str, Any]] = []
     for col in cols:
@@ -226,6 +284,9 @@ def _build_yearly_financials(
                 "net_income": _cell(ni_row, col),
                 "eps": _cell(eps_row, col),
                 "sga_expense": _cell(sga_row, col),
+                # Provider's own cost-of-revenue leg (see _COGS_NAMES) — the
+                # guard's ``revenue − cost_of_revenue`` fallback input.
+                "cost_of_revenue": _cell(cogs_row, col),
                 "gross_margin": gp / rev if (gp is not None and rev) else None,
                 "operating_margin": oi / rev if (oi is not None and rev) else None,
                 "operating_cash_flow": _cell(ocf_row, col),
@@ -239,6 +300,10 @@ def _build_yearly_financials(
                 # here reads as a debt-free year and skews the multiple low.
                 "total_debt": _cell(debt_row, col),
                 "total_cash": _cell(cash_row, col),
+                # Parent-only equity (see _TOTAL_EQUITY_NAMES). None when absent,
+                # never a fabricated 0 — a 0 equity year would make the
+                # through-cycle ROE divide by zero / read as "no book value".
+                "total_equity": _cell(equity_row, col),
             }
         )
     return yearly
@@ -518,7 +583,7 @@ class YFinanceProvider(DataProvider):
                 result = await self._fetch_historical_financials(ticker, info, t, years_kwarg)
             else:
                 result = self._fetch_financials(
-                    ticker, info, await self._ev_bridge_claims(ticker, t)
+                    ticker, info, await self._ttm_snapshot_meta(ticker, t, info)
                 )
         elif data_type == DataType.PRICE:
             await asyncio.sleep(_CALL_DELAY)
@@ -699,30 +764,46 @@ class YFinanceProvider(DataProvider):
             timestamp=datetime.now(tz=timezone.utc),
         )
 
-    async def _ev_bridge_claims(self, ticker: str, t: yf.Ticker) -> dict[str, float | None]:
-        """Preferred stock + NCI carrying amounts off the balance-sheet DataFrame.
+    async def _ttm_snapshot_meta(
+        self, ticker: str, t: yf.Ticker, info: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Metadata the flat ``info`` snapshot lacks, read off the balance-sheet frame.
 
-        The flat ``info`` snapshot this provider otherwise serves carries neither
-        field, so on a yfinance-sourced run EV silently omitted both claims and the
-        ev_bridge audit could only report them unverifiable — while the statement
-        module had them all along (live WFC quarterly: 15.348B preferred / 2.133B
-        NCI, matching the SEC XBRL facts to the dollar). Quarterly sheet first: the
-        flat snapshot's debt/cash legs are FMP's freshest quarter, so these instant
-        items must be that same period's, and it is the fresher sheet (WFC's annual
-        balance still carried the prior year's 16.608B).
+        Two families, both served by the SAME statement read:
+
+        * **EV-bridge claims** — preferred stock + NCI carrying amounts. The flat
+          ``info`` snapshot carries neither, so on a yfinance-sourced run EV
+          silently omitted both claims and the ev_bridge audit could only report
+          them unverifiable — while the statement module had them all along (live
+          WFC quarterly: 15.348B preferred / 2.133B NCI, matching the SEC XBRL
+          facts to the dollar). Quarterly sheet first: the flat snapshot's
+          debt/cash legs are FMP's freshest quarter, so these instant items must be
+          that same period's, and it is the fresher sheet (WFC's annual balance
+          still carried the prior year's 16.608B).
+        * **TTM window** — ``period_end`` (newest reported quarter end) and
+          ``ttm_quarter_ends`` (the four newest). Yahoo's ``info`` exposes no
+          period end, so a yfinance snapshot shipped ``fiscal_period_end=None`` /
+          ``ttm_quarter_ends=[]`` and the report could not distinguish a
+          TTM-based projection year from a fiscal-year one (owner review:
+          "2026E" was really the twelve months ending mid-2027). ``period_end``
+          prefers ``info.mostRecentQuarter`` and falls back to the quarterly
+          frame's newest column; ``ttm_quarter_ends`` comes ONLY from the
+          quarterly frame — an annual column date is a fiscal-year end, and
+          publishing it as a TTM quarter end would make audit.ttm_period's
+          non-overlap check "pass" on a window that is not one.
 
         Best-effort by construction: these are completeness fields, so an empty or
-        rate-limited statement read degrades to (None, None) — the audit then
+        rate-limited statement read degrades to all-None/[] — the audit then
         reports the gap honestly — rather than failing the whole FINANCIALS fetch.
         """
-        both_none: dict[str, float | None] = {
+        empty: dict[str, Any] = {
             "preferred_stock": None,
             "noncontrolling_interest": None,
+            "period_end": _epoch_iso_date(info.get("mostRecentQuarter")),
+            "ttm_quarter_ends": [],
         }
         try:
             sheet = await asyncio.to_thread(lambda: t.quarterly_balance_sheet)
-            if sheet is None or sheet.empty:
-                sheet = await asyncio.to_thread(lambda: t.balance_sheet)
         except (
             YFRateLimitError,
             YFException,
@@ -733,20 +814,39 @@ class YFinanceProvider(DataProvider):
             RuntimeError,
             OSError,
         ) as e:
-            logger.warning(f"EV-bridge balance-sheet rows unavailable for {ticker}: {e}")
-            return both_none
+            logger.warning(f"Balance-sheet rows unavailable for {ticker}: {e}")
+            return empty
+        quarterly = sheet is not None and not sheet.empty
+        if not quarterly:
+            try:
+                sheet = await asyncio.to_thread(lambda: t.balance_sheet)
+            except (
+                YFRateLimitError,
+                YFException,
+                AttributeError,
+                KeyError,
+                TypeError,
+                ValueError,
+                RuntimeError,
+                OSError,
+            ) as e:
+                logger.warning(f"Balance-sheet rows unavailable for {ticker}: {e}")
+                return empty
         if sheet is None or sheet.empty:
-            return both_none
+            return empty
         # Columns are newest-first (verified live: quarterly col 0 = the latest
         # reported quarter), matching every other statement read in this module.
         latest = sheet.columns[0]
+        quarter_ends = [_column_iso_date(c) for c in list(sheet.columns[:4])] if quarterly else []
         return {
             "preferred_stock": _cell(_get_row(sheet, _PREFERRED_STOCK_NAMES), latest),
             "noncontrolling_interest": _cell(_get_row(sheet, _MINORITY_INTEREST_NAMES), latest),
+            "period_end": empty["period_end"] or (_column_iso_date(latest) if quarterly else None),
+            "ttm_quarter_ends": [d for d in quarter_ends if d is not None],
         }
 
     def _fetch_financials(
-        self, ticker: str, info: dict[str, Any], claims: dict[str, float | None]
+        self, ticker: str, info: dict[str, Any], meta: dict[str, Any]
     ) -> DataResult:
         # dict.get() never raises; no try/except needed here
         data = {
@@ -764,8 +864,17 @@ class YFinanceProvider(DataProvider):
             # FMP's ``preferredStock``/``minorityInterest``. None ≠ 0: a row the
             # statement omits stays None, and ev_bridge reports the EV as
             # unverifiable rather than pretending the claim is nil.
-            "preferred_stock": claims["preferred_stock"],
-            "noncontrolling_interest": claims["noncontrolling_interest"],
+            "preferred_stock": meta["preferred_stock"],
+            "noncontrolling_interest": meta["noncontrolling_interest"],
+            # TTM window (owner review: forecast-year labels were off by a base).
+            # Yahoo's flat ``info`` carries no period end, so this snapshot shipped
+            # ``fiscal_period_end=None`` / ``ttm_quarter_ends=[]`` and the report
+            # could not tell that its DCF ``revenue_base`` is the TTM window while
+            # the chart's labels came from the last FISCAL year. Read from the
+            # statement frame (see _ttm_snapshot_meta); None / [] when unavailable
+            # — the same honest-empty semantics the FMP path has.
+            "fiscal_year": meta["period_end"],
+            "ttm_quarter_ends": meta["ttm_quarter_ends"],
             "company_name": info.get("shortName") or info.get("longName"),
             # TTM cash-flow actuals for a real FCF = OCF − CapEx (computed
             # downstream, never LLM-estimated). yfinance `info` exposes TTM
@@ -851,10 +960,14 @@ class YFinanceProvider(DataProvider):
             logger.warning(
                 f"Historical data extraction failed for {ticker}, falling back to single-year: {e}"
             )
-            return self._fetch_financials(ticker, info, await self._ev_bridge_claims(ticker, t))
+            return self._fetch_financials(
+                ticker, info, await self._ttm_snapshot_meta(ticker, t, info)
+            )
 
         if income_stmt is None or income_stmt.empty:
-            return self._fetch_financials(ticker, info, await self._ev_bridge_claims(ticker, t))
+            return self._fetch_financials(
+                ticker, info, await self._ttm_snapshot_meta(ticker, t, info)
+            )
 
         # Tolerant: the balance sheet only supplies the net-debt legs, so its absence
         # must not cost the income/cashflow years (it would send a multi-year fetch

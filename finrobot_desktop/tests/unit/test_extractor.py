@@ -265,15 +265,19 @@ def test_extract_marks_market_cap_to_live_price():
     2026-06-09: AAPL ~+2%, MU ~+10% on up days)."""
     stale_cap = 15e9 * 196.0  # provider froze ~2% below the live 200 quote
     fin = _make_fin(market_cap=stale_cap, shares_outstanding=15e9)
-    provider_pe = fin.pe_ratio
     fd = extract_financial_data(fin, _make_price())  # current_price = 200
     live_cap = 15e9 * 200.0
     assert fd.market.market_cap == pytest.approx(live_cap, rel=1e-9)
     assert fd.market.market_cap != pytest.approx(stale_cap, rel=1e-6)
     assert fd.market.market_cap == pytest.approx(fd.market.shares_outstanding * 200.0, rel=1e-9)
-    # P/E tracks the live cap (scaled by the same ratio), preserving provider basis.
-    if provider_pe is not None:
-        assert fd.market.pe_ratio == pytest.approx(provider_pe * (live_cap / stale_cap), rel=1e-9)
+    # P/E now derives from the SAME figures the report prints (one net-income
+    # authority): live market_cap ÷ TTM net_income — NOT the provider's own
+    # trailingPE, which rides a different (diluted-EPS) denominator and implied a
+    # fourth net income in the EHC report (owner review). Updated 2026-10-13; the
+    # old assertion encoded the superseded "scale the provider ratio" behaviour.
+    assert fd.market.pe_ratio == pytest.approx(live_cap / fin.net_income, rel=1e-9)
+    assert fd.market.pe_basis is not None
+    assert "one net-income authority" in fd.market.pe_basis
 
 
 def test_extract_live_cap_flows_into_ev():

@@ -299,3 +299,88 @@ async def test_completion_marker_roundtrip(_isolated_cache) -> None:  # type: ig
     assert await cache_mod.is_period_complete(date(2026, 3, 31)) is True
     # A different, unmarked quarter stays incomplete.
     assert await cache_mod.is_period_complete("2025-12-31") is False
+
+
+@pytest.mark.asyncio
+async def test_period_completeness_empty_cache(_isolated_cache) -> None:  # type: ignore[no-untyped-def]
+    """No refresh has run: the probe reports an empty cache (period None, zero
+    counts) instead of raising — the same "expose, don't block" contract as
+    ``cache_status``."""
+    probe = await cache_mod.period_completeness()
+    assert probe["period_end"] is None
+    assert probe["complete"] is False
+    assert probe["row_count"] == 0
+    assert probe["filer_count"] == 0
+    assert (
+        probe["expected_period_end"]
+        == cache_mod.expected_latest_period_end(date.today()).isoformat()
+    )
+
+
+@pytest.mark.asyncio
+async def test_period_completeness_reports_a_partial_index(_isolated_cache) -> None:  # type: ignore[no-untyped-def]
+    """The EHC shape: rows for a period with NO completion marker = a truncated
+    refresh (interrupted / --max-filings capped / rate-limited). The ownership
+    section needs exactly this signal to label the holder table 'partial' instead
+    of presenting a truncated list as the quarter's holdings (57,432 rows /
+    117 filers in one period, marker absent)."""
+    await cache_mod.bulk_upsert_holdings(
+        [
+            _row(holder_cik="A", period_end=date(2026, 3, 31), shares=10, value_usd=100.0),
+            _row(
+                holder_cik="B",
+                period_end=date(2026, 3, 31),
+                shares=20,
+                value_usd=200.0,
+                cusip="67066G105",
+                holder_name="Renaissance",
+            ),
+            # A duplicate CIK on another class must NOT inflate the filer count.
+            _row(
+                holder_cik="A",
+                period_end=date(2026, 3, 31),
+                shares=5,
+                value_usd=50.0,
+                cusip="67066G106",
+                title_of_class="CL A",
+            ),
+        ]
+    )
+    probe = await cache_mod.period_completeness(date(2026, 3, 31))
+    assert probe["period_end"] == "2026-03-31"
+    assert probe["complete"] is False
+    assert probe["row_count"] == 3
+    assert probe["filer_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_period_completeness_defaults_to_the_newest_cached_period(_isolated_cache) -> None:  # type: ignore[no-untyped-def]
+    """No period passed → the probe describes the SAME period
+    ``lookup_holders_for_ticker`` would serve, and flips to complete once the
+    refresh marks it."""
+    await cache_mod.bulk_upsert_holdings(
+        [
+            _row(holder_cik="A", period_end=date(2025, 12, 31), shares=10, value_usd=100.0),
+            _row(holder_cik="A", period_end=date(2026, 3, 31), shares=20, value_usd=200.0),
+        ]
+    )
+    probe = await cache_mod.period_completeness()
+    assert probe["period_end"] == "2026-03-31"
+    assert probe["row_count"] == 1
+    assert probe["filer_count"] == 1
+    assert probe["complete"] is False
+    await cache_mod.mark_period_complete(date(2026, 3, 31), filings_processed=1)
+    probe_after = await cache_mod.period_completeness()
+    assert probe_after["complete"] is True
+
+
+@pytest.mark.asyncio
+async def test_period_completeness_for_an_unpopulated_period(_isolated_cache) -> None:  # type: ignore[no-untyped-def]
+    """A period the cache holds nothing for reports zero counts and incomplete —
+    never a fabricated row/filer number."""
+    await cache_mod.bulk_upsert_holdings([_row(period_end=date(2026, 3, 31))])
+    probe = await cache_mod.period_completeness(date(2025, 9, 30))
+    assert probe["period_end"] == "2025-09-30"
+    assert probe["complete"] is False
+    assert probe["row_count"] == 0
+    assert probe["filer_count"] == 0

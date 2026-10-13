@@ -518,3 +518,71 @@ async def is_period_complete(
         (period_str,),
     ) as cur:
         return await cur.fetchone() is not None
+
+
+async def period_completeness(
+    period_end: date | str | None = None,
+    *,
+    conn: aiosqlite.Connection | None = None,
+) -> dict[str, Any]:
+    """Completeness probe for the cached 13F period the ownership section shows.
+
+    ``lookup_holders_for_ticker`` serves whatever rows a possibly-PARTIAL refresh
+    left behind — a run interrupted mid-parse, a ``--max-filings`` dev cap, or a
+    rate-limit abort — and returned no way for the caller to tell a complete
+    quarter from a truncated one (observed for EHC's period: 57,432 rows /
+    117 distinct filers in one period, with NO ``holdings_refresh_meta`` row at
+    all). This probe exposes that state so the ownership section can label the
+    holder table "partial" instead of presenting a truncated list as the
+    quarter's holdings — the same "expose, don't block" contract as
+    ``cache_status``.
+
+    ``period_end`` defaults to the newest period present in cache — the same
+    period ``lookup_holders_for_ticker`` would serve.
+
+    Returns::
+
+        {
+          "period_end": str | None,   # the probed period (None → cache empty)
+          "complete": bool,           # a completion marker exists for it
+          "row_count": int,           # holdings rows cached for the period
+          "filer_count": int,         # distinct holder CIKs (filers) cached
+          "expected_period_end": str, # newest quarter whose 13F deadline passed
+        }
+
+    ``complete`` False with a non-empty ``row_count`` is the partial-index signal;
+    an empty cache reports ``period_end=None`` / ``complete=False`` / 0 / 0.
+    """
+    expected = expected_latest_period_end(date.today()).isoformat()
+    c = conn if conn is not None else await _conn()
+    if period_end is None:
+        async with c.execute("SELECT MAX(period_end) FROM holdings") as cur:
+            row = await cur.fetchone()
+        period_str = str(row[0]) if row is not None and row[0] is not None else None
+    else:
+        period_str = period_end.isoformat() if isinstance(period_end, date) else str(period_end)
+    if period_str is None:
+        return {
+            "period_end": None,
+            "complete": False,
+            "row_count": 0,
+            "filer_count": 0,
+            "expected_period_end": expected,
+        }
+    async with c.execute(
+        "SELECT COUNT(*), COUNT(DISTINCT holder_cik) FROM holdings WHERE period_end = ?",
+        (period_str,),
+    ) as cur:
+        counts = await cur.fetchone()
+    async with c.execute(
+        "SELECT 1 FROM holdings_refresh_meta WHERE period_end = ?",
+        (period_str,),
+    ) as cur:
+        complete = await cur.fetchone() is not None
+    return {
+        "period_end": period_str,
+        "complete": complete,
+        "row_count": int(counts[0]) if counts else 0,
+        "filer_count": int(counts[1]) if counts else 0,
+        "expected_period_end": expected,
+    }

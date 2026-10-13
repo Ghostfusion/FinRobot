@@ -279,7 +279,10 @@ async def test_overview_happy_path_fields() -> None:
     assert row.price == 200.0
     assert row.market_cap == pytest.approx(3e12)
     assert row.revenue_ttm == pytest.approx(100e9)
-    assert row.pe == pytest.approx(28.5)
+    # P/E is now derived from the printed figures (one net-income authority):
+    # market_cap 3e12 ÷ TTM net_income 20e9 = 150.0, not the provider's 28.5
+    # (which rode its own diluted-EPS denominator). Owner review 2026-10-13.
+    assert row.pe == pytest.approx(150.0)
     assert row.ev_ebitda is not None
     assert row.latest_verdict == "BUY"
     assert row.artifact_count == 1
