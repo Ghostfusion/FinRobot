@@ -1,6 +1,7 @@
 // The compute-warnings footer, layered: genuine caveats up front (amber ⚠), and
-// the always-fires template boilerplate sunk into a default-collapsed "Methodology
-// notes" section. Shared by the full report (ReportChapters) and the compact viewer
+// the always-fires template boilerplate sunk into a (default-OPEN, still
+// collapsible) "Methodology notes" section. Shared by the full report
+// (ReportChapters) and the compact viewer
 // so the two — and the standalone HTML export — render the layering identically,
 // never each re-implementing it. Buckets come pre-classified from
 // reportData.layerComputeWarnings (the single source of truth); this component is
@@ -75,10 +76,12 @@ export function ComputeWarningsPanel({
 
       {methodologyNotes.length > 0 && (
         // Calm / muted, NOT amber: these are transparency notes that fire on nearly
-        // every report, not defects. Default-collapsed via native <details> (works
-        // without JS → the standalone export keeps the toggle); nothing is dropped,
-        // everything is one click away.
+        // every report, not defects. Default-OPEN via native <details> (works
+        // without JS → the standalone export keeps the toggle) — reviewers reported
+        // the collapsed disclosure hid them; still collapsible, nothing is dropped,
+        // everything one click away.
         <details
+          open
           data-testid="report-methodology-notes"
           style={{
             marginTop: alerts.length > 0 ? 10 : 0,

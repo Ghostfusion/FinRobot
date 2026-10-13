@@ -152,6 +152,10 @@ function EquityReportChapters({
         // Out-of-consensus street-range disclosure, relocated here from the ⚠ pile
         // (beside the target it qualifies). null when the target sits in-band.
         streetContext={layered.streetContext}
+        // Price basis: "Live" only for an intraday tick; a prior close renders
+        // "Close … · <as-of>" so a stale quote is never mislabelled.
+        quoteIsLive={d.quoteIsLive}
+        quoteAsOf={d.quoteAsOf}
       />
       {/* The engine's own summary of the run — collapsed, content-gated, and
           listed in the rail between the cover and the thesis (CFA front-matter →
@@ -203,6 +207,9 @@ function EquityReportChapters({
         // Same EV/EBITDA band the Technical chapter charts — surfaced here as the
         // football field's per-multiple provenance rail (frozen, no live refetch).
         historicalBand={d.technical?.historical_bands ?? null}
+        // Today's EV/EBITDA (raw_data.valuation) — the comparison base for the
+        // DCF's implied TERMINAL multiple on the football field.
+        currentEvEbitda={d.snapshotEvEbitda}
       />
       <ChapterSensitivity
         dcf={d.dcf}

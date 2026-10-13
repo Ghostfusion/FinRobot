@@ -179,3 +179,23 @@ describe('DCF year axis — anchored on the DCF fiscal year, never the browser c
     expect(mergeDcfBaseRow(hist, [])).toBe(hist)
   })
 })
+
+// The DCF base is a TTM figure, so the first forecast year is not necessarily
+// baseFY + 1 (a twelve-month window ending mid-2027 was labelled "2026E"). The
+// backend's forecast_basis.first_forecast_year wins when present; the baseFY + 1
+// rule survives as the fallback for legacy artifacts.
+describe('DCF first forecast year — forecast_basis provenance', () => {
+  it('prefers firstForecastYear when supplied', () => {
+    const bars = dcfResultToRevenueEbitdaData(makeDcfResult(0.05), 2025, 2027)
+    expect(bars.map((r) => r.year)).toEqual(['2025', '2027E', '2028E'])
+    const margins = dcfResultToMarginData(makeDcfResult(0.05), 2025, 2027)
+    expect(margins.map((r) => r.year)).toEqual(['2025', '2027E', '2028E'])
+  })
+
+  it('falls back to baseFY + 1 when firstForecastYear is absent or null', () => {
+    const omitted = dcfResultToRevenueEbitdaData(makeDcfResult(0.05), 2025)
+    expect(omitted.map((r) => r.year)).toEqual(['2025', '2026E', '2027E'])
+    const explicitNull = dcfResultToMarginData(makeDcfResult(0.05), 2025, null)
+    expect(explicitNull.map((r) => r.year)).toEqual(['2025', '2026E', '2027E'])
+  })
+})

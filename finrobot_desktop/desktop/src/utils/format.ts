@@ -281,6 +281,23 @@ export function formatSourceDate(
   return `${y}-${m}-${day}`
 }
 
+/**
+ * Month + day, no year — for stamping an as-of date onto a price label
+ * ("Close $124.42 · Oct 12"). Date-only strings parse as local midnight (see
+ * parseDateInput) so the calendar day round-trips regardless of viewer timezone.
+ *   en → "Oct 12"   zh → "10月12日"
+ */
+export function formatMonthDay(
+  d: Date | string | number | null | undefined,
+  locale: Locale,
+): string {
+  if (d === null || d === undefined) return '—'
+  const date = parseDateInput(d)
+  if (Number.isNaN(date.getTime())) return '—'
+  if (locale === 'zh') return `${date.getMonth() + 1}月${date.getDate()}日`
+  return new Intl.DateTimeFormat(NF_LOCALE[locale], { month: 'short', day: 'numeric' }).format(date)
+}
+
 /** Stale 阈值常量（秒）。> WARN 视为 delayed；> DANGER 视为 stale。 */
 export const FRESHNESS_WARN_SECONDS = 5 * 60 // 5min
 export const FRESHNESS_DANGER_SECONDS = 30 * 60 // 30min

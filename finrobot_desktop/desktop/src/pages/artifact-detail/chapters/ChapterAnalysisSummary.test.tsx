@@ -17,7 +17,7 @@ describe('ChapterAnalysisSummary', () => {
     expect(blank.innerHTML).toBe('')
   })
 
-  it('renders the engine record, collapsed, as the manifest id', () => {
+  it('renders the engine record, open by default, as the manifest id', () => {
     const { container } = render(
       <ChapterAnalysisSummary
         text={'# FinRobot Analysis Report\n\nRating: **HOLD** (medium confidence).'}
@@ -25,7 +25,8 @@ describe('ChapterAnalysisSummary', () => {
     )
     const section = container.querySelector('section#report-summary')
     expect(section).not.toBeNull()
-    expect(section?.querySelector('details')?.hasAttribute('open')).toBe(false)
+    // Open by default so a reviewer sees it immediately; still collapsible.
+    expect(section?.querySelector('details')?.hasAttribute('open')).toBe(true)
     expect(screen.getByText('Analysis Summary')).toBeTruthy()
     expect(screen.getByText('ENGINE RECORD')).toBeTruthy()
     expect(screen.getByText(/medium confidence/)).toBeTruthy()

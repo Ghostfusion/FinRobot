@@ -206,7 +206,14 @@ export function ChapterFilings({ filings, xbrl }: Props): React.ReactElement {
                     >
                       {formatCompactNumber(fact.value, locale)}
                     </td>
-                    <td style={tdStyle}>{formatDate(fact.period_end, locale, 'short')}</td>
+                    <td style={tdStyle}>
+                      {formatDate(fact.period_end, locale, 'short')}
+                      {fact.warning && (
+                        <div style={{ ...badgeWarn, display: 'block', marginTop: 3 }}>
+                          {fact.warning}
+                        </div>
+                      )}
+                    </td>
                     <td style={tdStyle}>{fact.units ?? '—'}</td>
                   </tr>
                 ))}

@@ -6,10 +6,11 @@
 // words, what it did and concluded was unreachable from the report it describes.
 //
 // Placement: behind the cover (CFA / sell-side convention: front matter, then a
-// summary, then the argument) and COLLAPSED by default — it is a 2k-char roll-up
-// of the step outputs, so it must be able to state the whole picture without
-// pushing the cover→thesis flow down the page. Not a substitute for the thesis
-// chapter: the thesis is the argument, this is the engine's record of the run.
+// summary, then the argument) and OPEN by default — reviewers reported the
+// collapsed disclosure hid the two sections they always need; it stays
+// COLLAPSIBLE so a reader can still fold a 2k-char roll-up away. Not a
+// substitute for the thesis chapter: the thesis is the argument, this is the
+// engine's record of the run.
 //
 // Content-gated: renders nothing when the artifact carries no summary (legacy /
 // non-equity artifacts), and the section manifest drops the nav entry with it.
@@ -37,7 +38,7 @@ export function ChapterAnalysisSummary({ text }: Props): React.ReactElement | nu
       aria-labelledby="report-summary-title"
       style={wrap}
     >
-      <details>
+      <details open>
         <summary style={summaryRow}>
           <span id="report-summary-title" style={title}>
             {tr('分析摘要', 'Analysis Summary', locale)}

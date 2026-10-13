@@ -5,6 +5,13 @@ import { useI18n } from '../../i18n'
 interface ChartProps {
   data: Record<string, number | string | boolean | null>[]
   title: string
+  /** The DCF's own base WACC. When finite (with `baseTg`) the grid marks the
+   *  cell matching the base case exactly, so the headline cell is unambiguous —
+   *  the axis labels carry 2 decimals because a cell labelled "7.0%" holds a
+   *  value computed at 6.97%. Absent/legacy ⇒ the old centre-cell marking. */
+  baseWacc?: number | null
+  /** The DCF's own base terminal growth rate. */
+  baseTg?: number | null
 }
 
 // The 8 heatmap tiers, ordered HIGH implied value → LOW. These are the exact
@@ -43,7 +50,7 @@ interface GridCell {
   price: number
 }
 
-export default function SensitivityHeatmap({ data, title }: ChartProps) {
+export default function SensitivityHeatmap({ data, title, baseWacc, baseTg }: ChartProps) {
   const { t } = useI18n()
   const memo = useMemo(() => {
     if (!data || data.length === 0) return null
@@ -75,9 +82,20 @@ export default function SensitivityHeatmap({ data, title }: ChartProps) {
   const { waccValues, tgValues, grid, minPrice, maxPrice } = memo
 
   const range = maxPrice - minPrice || 1
-  // Find the "current" cell (middle row, middle col)
+  // Legacy fallback: the grid centre (middle row, middle col). Superseded by the
+  // exact base-case match whenever the DCF supplies its own base WACC / TGR —
+  // the backend now makes the centre axis value the base WACC, but Gordon-floor
+  // pruning can drop cells, so an EXACT match is the honest marker.
   const midWacc = waccValues[Math.floor(waccValues.length / 2)]
   const midTg = tgValues[Math.floor(tgValues.length / 2)]
+  const hasBase =
+    typeof baseWacc === 'number' &&
+    Number.isFinite(baseWacc) &&
+    typeof baseTg === 'number' &&
+    Number.isFinite(baseTg)
+  // Float-tolerant equality: serialized WACC/TGR round-trip, but a tolerance
+  // guards against any residual representation drift.
+  const matches = (a: number, b: number): boolean => Math.abs(a - b) <= Math.abs(b) * 1e-6 + 1e-12
 
   return (
     <div className="card animate-in">
@@ -95,22 +113,39 @@ export default function SensitivityHeatmap({ data, title }: ChartProps) {
                   <span style={{ color: 'var(--chart-1)' }}>TGR</span>
                 </th>
                 {tgValues.map((tg) => (
-                  <th key={tg}>{(tg * 100).toFixed(1)}%</th>
+                  // Two decimals: a cell labelled "7.0%" held a value computed at
+                  // 6.97% (the base WACC) — the rounded label sat beside an
+                  // un-rounded computation. The base cell is now marked exactly.
+                  <th key={tg}>{(tg * 100).toFixed(2)}%</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {waccValues.map((wacc) => (
                 <tr key={wacc}>
-                  <th>{(wacc * 100).toFixed(1)}%</th>
+                  <th>{(wacc * 100).toFixed(2)}%</th>
                   {tgValues.map((tg) => {
                     const price = grid.get(`${wacc}_${tg}`)
                     const normalised = price != null ? (price - minPrice) / range : 0.5
-                    const isCurrent = wacc === midWacc && tg === midTg
+                    const isBase =
+                      hasBase && matches(wacc, baseWacc as number) && matches(tg, baseTg as number)
+                    // Centre-cell marking only survives as the legacy fallback.
+                    const isCurrent = !hasBase && wacc === midWacc && tg === midTg
                     return (
                       <td
                         key={`${wacc}_${tg}`}
-                        className={`${heatmapClass(normalised)}${isCurrent ? ' current' : ''}`}
+                        data-base={isBase ? 'true' : undefined}
+                        className={`${heatmapClass(normalised)}${isBase ? ' base' : ''}${
+                          isCurrent ? ' current' : ''
+                        }`}
+                        title={
+                          isBase
+                            ? t('chart.sensitivity.baseCell', {
+                                wacc: (wacc * 100).toFixed(2),
+                                tg: (tg * 100).toFixed(2),
+                              })
+                            : undefined
+                        }
                       >
                         {price != null ? `$${price.toFixed(2)}` : '\u2014'}
                       </td>

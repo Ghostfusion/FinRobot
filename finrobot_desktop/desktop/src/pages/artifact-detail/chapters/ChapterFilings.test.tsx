@@ -84,6 +84,37 @@ const XBRL: XbrlFactsSnapshotShape = {
   ],
 }
 
+describe('XBRL fact warnings', () => {
+  it('renders a stale fact warning instead of presenting the number as current', () => {
+    // EHC stopped tagging OperatingIncomeLoss after FY2022, so the snapshot row
+    // is a four-year-old figure; the backend flags it and the row must SAY so
+    // (owner review 2026-10-13).
+    renderChapter(null, {
+      'us-gaap:OperatingIncomeLoss': [
+        {
+          concept: 'us-gaap:OperatingIncomeLoss',
+          value: 539_500_000,
+          period_end: '2022-12-31',
+          units: 'USD',
+          warning: 'stale: latest reported period is 2026-06-30, this fact is 2022-12-31',
+        },
+      ],
+    })
+    expect(
+      screen.getByText('stale: latest reported period is 2026-06-30, this fact is 2022-12-31'),
+    ).toBeInTheDocument()
+  })
+
+  it('renders no warning note for a current fact', () => {
+    renderChapter(null, {
+      'us-gaap:Assets': [
+        { concept: 'us-gaap:Assets', value: 7_457_500_000, period_end: '2026-06-30', units: 'USD' },
+      ],
+    })
+    expect(screen.queryByText(/stale:/)).toBeNull()
+  })
+})
+
 function renderChapter(filings: SecFilingsShape | null, xbrl: XbrlFactsSnapshotShape | null) {
   return render(
     <MemoryRouter>

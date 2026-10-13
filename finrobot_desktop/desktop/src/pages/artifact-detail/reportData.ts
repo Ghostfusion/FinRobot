@@ -109,6 +109,16 @@ export interface DerivedReportData {
   snapshot52wLow: number | null
   /** When the underlying market data was fetched — the report's "as of" stamp. */
   snapshotAsOf: string | null
+  /** True when the frozen quote is a LIVE intraday tick; false when it is a prior
+   *  close (the data step's flag). Absent/legacy ⇒ false, so a stale close is
+   *  never mislabelled "Live". */
+  quoteIsLive: boolean
+  /** The quote's as-of date (market field, else the fetch timestamp) — stamps a
+   *  "Close … · <date>" label. null only when neither is available. */
+  quoteAsOf: string | null
+  /** Today's EV/EBITDA from the raw valuation snapshot — the comparison base for
+   *  the DCF's implied terminal multiple. null when absent (legacy artifacts). */
+  snapshotEvEbitda: number | null
   /** Frozen prior-close → last-close delta, in the QUOTE currency. null when the
    *  run had fewer than 2 price bars (no session to diff) — which is why the rail
    *  renders it only when present, never as a 0.00 move. */
@@ -366,6 +376,23 @@ export function deriveReportData(
   const snapshot52wHigh = num(market['price_52w_high'])
   const snapshot52wLow = num(market['price_52w_low'])
   const snapshotAsOf = inputs.data_fetched_at ?? null
+  // Whether the snapshot quote is a LIVE intraday tick or a prior close. The
+  // data step flags it; absent (legacy artifacts) ⇒ treat as NOT live so the
+  // report never claims a stale close is live.
+  const quoteIsLive = market['quote_is_live'] === true
+  // The quote's own as-of date. Prefer the market field, fall back to the fetch
+  // timestamp — used only to stamp a "Close … · <date>" label.
+  const quoteAsOf =
+    (typeof market['quote_as_of'] === 'string' && market['quote_as_of']
+      ? (market['quote_as_of'] as string)
+      : null) ?? snapshotAsOf
+  // Today's valuation multiple snapshot (raw_data.valuation) — compared against
+  // the DCF's implied TERMINAL multiple on the football field.
+  const valuationSnap = ((inputs.raw_data ?? {}) as Record<string, unknown>)['valuation']
+  const valuation = (
+    typeof valuationSnap === 'object' && valuationSnap !== null ? valuationSnap : {}
+  ) as Record<string, unknown>
+  const snapshotEvEbitda = num(valuation['ev_ebitda'])
 
   // "Fairly valued" = the point target was withheld BECAUSE the price sits inside
   // the fair-value range (range spans market) → a confident HOLD, not a failure.
@@ -434,6 +461,9 @@ export function deriveReportData(
     snapshot52wHigh,
     snapshot52wLow,
     snapshotAsOf,
+    quoteIsLive,
+    quoteAsOf,
+    snapshotEvEbitda,
     priceSession,
     fairlyValued,
     createdAt,

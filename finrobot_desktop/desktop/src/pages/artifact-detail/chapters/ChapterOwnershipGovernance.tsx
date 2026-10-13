@@ -76,6 +76,29 @@ export function ChapterOwnershipGovernance({
   const compensationInvalid = compensationRaw !== null && compensation === null
   const alerts = ownership.schedule13_alerts ?? []
 
+  // 13F coverage: the fraction of the issuer's institutionally-held shares the
+  // cached holder list actually covers. Normalised to 0–1 (a backend emitting
+  // 0–100 is guarded); < 1 ⇒ the list is a partial sample, so the concentration
+  // strip must say so and measure against the listed share base — never present
+  // a truncated row set as the issuer's holder base. Absent on legacy artifacts.
+  const rawCoverage = ownership.institutional_coverage_pct
+  const coveragePct =
+    typeof rawCoverage === 'number' && Number.isFinite(rawCoverage)
+      ? rawCoverage > 1
+        ? rawCoverage / 100
+        : rawCoverage
+      : null
+  const partialCoverage = coveragePct !== null && coveragePct < 0.99
+  const sharesListed =
+    typeof ownership.institutional_shares_listed === 'number' &&
+    Number.isFinite(ownership.institutional_shares_listed)
+      ? ownership.institutional_shares_listed
+      : null
+  // QoQ is unavailable when a prior quarter was never cached — detectable as
+  // EVERY listed holder lacking a change figure (a genuine 0% change is 0, not
+  // null). The institutions table then explains the blank instead of a bare dash.
+  const qoqUnavailable = holdings.length > 0 && holdings.every((h) => h.shares_change_pct == null)
+
   const insidersReason = degradedReasonKey(
     'insiders',
     reasons['insider_transactions'],
@@ -103,6 +126,8 @@ export function ChapterOwnershipGovernance({
         <OwnershipSignalStrip
           insiders={showInsiderFlow ? insiders : []}
           holdings={showConcentration ? holdings : []}
+          coveragePct={partialCoverage ? coveragePct : null}
+          sharesListed={sharesListed}
           locale={locale}
           t={t}
         />
@@ -133,7 +158,7 @@ export function ChapterOwnershipGovernance({
             cta={{ to: '/settings', label: t('chapter.ownership.degraded.institutions.cta') }}
           />
         ) : holdings.length > 0 ? (
-          <InstitutionTable rows={holdings} locale={locale} t={t} />
+          <InstitutionTable rows={holdings} locale={locale} t={t} qoqUnavailable={qoqUnavailable} />
         ) : (
           <EmptyNote>{t('chapter.ownership.empty.institutions')}</EmptyNote>
         )}
@@ -242,11 +267,19 @@ type Translator = (key: string, params?: Record<string, string | number>) => str
 function OwnershipSignalStrip({
   insiders,
   holdings,
+  coveragePct,
+  sharesListed,
   locale,
   t,
 }: {
   insiders: InsiderTransactionShape[]
   holdings: InstitutionalHoldingShape[]
+  /** Fraction (0–1) of institutionally-held shares the list covers, when it is
+   *  a PARTIAL sample; null when full/unknown. */
+  coveragePct: number | null
+  /** Total shares across the listed institutional holders — the true denominator
+   *  the concentration is measured against, when supplied. */
+  sharesListed: number | null
   locale: 'zh' | 'en'
   t: Translator
 }): React.ReactElement | null {
@@ -268,14 +301,31 @@ function OwnershipSignalStrip({
   const hasFlow = insiders.length > 0 && (buy > 0 || sell > 0)
   const flowDenom = buy + sell || 1
 
+  // Rank the top holders by filed value, then measure their concentration against
+  // the LISTED share base when the backend supplies it — the true denominator,
+  // never a truncated display set. Falls back to the value share of the returned
+  // set when shares_listed is absent (legacy artifacts).
+  const topHolders = holdings
+    .filter((h) => finite(h.value_usd))
+    .sort((a, b) => (b.value_usd as number) - (a.value_usd as number))
+  const topN = Math.min(5, topHolders.length)
+  const topShares = topHolders
+    .slice(0, topN)
+    .reduce((s, h) => (finite(h.shares) ? s + h.shares : s), 0)
+  const shareDenom =
+    sharesListed !== null && sharesListed > 0 && topShares > 0 ? sharesListed : null
   const vals = holdings
     .map((h) => h.value_usd)
     .filter(finite)
     .sort((a, b) => b - a)
   const total = vals.reduce((s, v) => s + v, 0)
-  const topN = Math.min(5, vals.length)
   const topShare =
-    total > 0 && topN > 0 ? vals.slice(0, topN).reduce((s, v) => s + v, 0) / total : null
+    shareDenom !== null
+      ? topShares / shareDenom
+      : total > 0 && topN > 0
+        ? vals.slice(0, topN).reduce((s, v) => s + v, 0) / total
+        : null
+  const usedShareDenom = shareDenom !== null
 
   if (!hasFlow && topShare === null) return null
 
@@ -312,9 +362,20 @@ function OwnershipSignalStrip({
               {t('chapter.ownership.signal.topHolders', { n: topN })} {(topShare * 100).toFixed(0)}%
             </span>
             <span style={{ color: 'var(--text-dim)' }}>
-              {t('chapter.ownership.signal.ofTotal')}
+              {t(
+                usedShareDenom
+                  ? 'chapter.ownership.signal.ofListed'
+                  : 'chapter.ownership.signal.ofTotal',
+              )}
             </span>
           </div>
+          {coveragePct !== null && (
+            <div data-testid="ownership-coverage-caveat" style={signalCaveat}>
+              {t('chapter.ownership.signal.coveragePartial', {
+                pct: (coveragePct * 100).toFixed(0),
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -355,6 +416,13 @@ const signalFootRow: React.CSSProperties = {
   gap: 8,
   fontFamily: 'var(--font-mono)',
   fontSize: 11,
+}
+const signalCaveat: React.CSSProperties = {
+  marginTop: 6,
+  fontFamily: 'var(--font-body)',
+  fontSize: 10.5,
+  lineHeight: 1.45,
+  color: 'var(--text-dim)',
 }
 
 function InsiderTable({
@@ -498,10 +566,14 @@ function InstitutionTable({
   rows,
   locale,
   t,
+  qoqUnavailable,
 }: {
   rows: InstitutionalHoldingShape[]
   locale: 'zh' | 'en'
   t: Translator
+  /** True when NO listed holder carries a QoQ change — i.e. no prior 13F quarter
+   *  is cached. Renders the reason instead of a bare dash. */
+  qoqUnavailable: boolean
 }): React.ReactElement {
   const sorted = [...rows].sort((a, b) => b.value_usd - a.value_usd).slice(0, 12)
   const distinctClasses = new Set(
@@ -555,7 +627,9 @@ function InstitutionTable({
                   }}
                 >
                   {r.shares_change_pct === null || r.shares_change_pct === undefined
-                    ? '—'
+                    ? qoqUnavailable
+                      ? t('chapter.ownership.qoq.noPriorQuarter')
+                      : '—'
                     : `${r.shares_change_pct > 0 ? '+' : ''}${formatPercent(r.shares_change_pct, locale, 1, true)}`}
                 </td>
                 <td style={{ ...tdStyle, color: 'var(--text-muted)' }}>
@@ -599,7 +673,9 @@ function CompensationGrid({
       value:
         comp.ceo_total_compensation !== null && comp.ceo_total_compensation !== undefined
           ? formatCurrencyCompact(comp.ceo_total_compensation, reportingCurrency, locale)
-          : '—',
+          : // Reason, not a bare dash: the DEF 14A was reached but the pay figure
+            // was not parseable (sanitized away) — say so.
+            t('chapter.ownership.ceoPay.unavailable'),
       sub:
         comp.ceo_yoy_change_pct !== null && comp.ceo_yoy_change_pct !== undefined
           ? `${comp.ceo_yoy_change_pct > 0 ? '+' : ''}${formatPercent(comp.ceo_yoy_change_pct, locale, 1, true)} YoY`

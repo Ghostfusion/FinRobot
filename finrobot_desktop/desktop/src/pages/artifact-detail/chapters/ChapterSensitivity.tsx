@@ -226,7 +226,14 @@ export function SensitivityBody({
 
       <SubChapter heading={t('chapter.sensitivity.subheading.matrix')}>
         {heatmapRows.length > 0 ? (
-          <SensitivityHeatmap data={heatmapRows} title={t('chapter.sensitivity.matrix.title')} />
+          <SensitivityHeatmap
+            data={heatmapRows}
+            title={t('chapter.sensitivity.matrix.title')}
+            // The DCF's own base case — marks the headline cell exactly (the
+            // axis labels are 2-decimal so the centre no longer rounds to it).
+            baseWacc={dcf?.wacc ?? null}
+            baseTg={inputs?.terminal_growth_rate ?? null}
+          />
         ) : (
           <p style={mutedNote}>{t('chapter.sensitivity.empty')}</p>
         )}

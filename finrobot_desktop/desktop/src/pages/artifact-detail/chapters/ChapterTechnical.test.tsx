@@ -170,6 +170,57 @@ describe('ChapterTechnical', () => {
     expect(screen.queryByText('R / R Ratio')).not.toBeInTheDocument()
   })
 
+  it('explains an entry zone the market already sits inside, with both discounts', () => {
+    // EHC-shape: the dial entry ($192.03 = target × 0.85) sits ABOVE the market
+    // price, so the level is an at-or-below entry zone rather than a price to
+    // wait for. The level itself is NOT rewritten — without the sub-label the
+    // row read as a contradiction ("ideal buy 54% above a Buy-now price").
+    renderChapter({
+      sniper: {
+        ideal_buy: 192.03,
+        stop_loss: 100,
+        take_profit: 225.91,
+        safety_margin: 0.15,
+        safety_margin_achieved: 0.35,
+        ideal_buy_at_market: true,
+        support_level: 120,
+        resistance_level: 160,
+        direction: 'LONG',
+      },
+    })
+    expect(screen.getByText('Ideal Buy')).toBeInTheDocument()
+    expect(screen.getByText('$192.03')).toBeInTheDocument()
+    expect(
+      screen.getByText('at or below this level · safety required 15%, already achieved 35%'),
+    ).toBeInTheDocument()
+  })
+
+  it('falls back to the plain safety-margin sub-label when the new fields are absent', () => {
+    renderChapter({
+      sniper: { ideal_buy: 162.5, safety_margin: 0.15, direction: 'LONG' },
+    })
+    expect(screen.getByText('safety 15%')).toBeInTheDocument()
+    expect(screen.queryByText(/at or below this level/)).toBeNull()
+  })
+
+  it('discloses that the Monte Carlo is assumption-sensitivity, not independent evidence', () => {
+    renderChapter({
+      monte_carlo: {
+        histogram_bins: [100, 120, 140],
+        histogram_counts: [1, 1],
+        percentiles: { '5': 110, '50': 150, '95': 195 },
+        mean: 152.4,
+        std: 24.1,
+        current_price_percentile: 3.7,
+        n_valid: 9876,
+        assumptions_used: { centered_on: 'base_case_dcf', independent: false },
+      },
+    })
+    const note = screen.getByTestId('mc-assumptions-note')
+    expect(note.textContent).toMatch(/base-case DCF/i)
+    expect(note.textContent).toMatch(/not independent evidence/i)
+  })
+
   it('renders historical EV/EBITDA bands with timeline and classification badge', () => {
     renderChapter({
       historical_bands: {

@@ -60,3 +60,37 @@ describe('TargetRange', () => {
     expect(screen.queryByText(/withheld/i)).toBeNull()
   })
 })
+
+describe('TargetRange price-basis legend', () => {
+  const base = {
+    point: 300,
+    low: 270,
+    high: 330,
+    currentPrice: 240,
+    confidence: 'medium' as const,
+    quoteCurrency: 'USD',
+  }
+
+  it('defaults to "Close" (never the misleading "Live") when the quote is not live', () => {
+    render(<TargetRange {...base} />)
+    expect(screen.getByText(/^Close \$240\.00$/)).toBeInTheDocument()
+    expect(screen.queryByText(/^Live \$240\.00/)).toBeNull()
+  })
+
+  it('renders "Live" only when quote_is_live is true', () => {
+    render(<TargetRange {...base} quoteIsLive />)
+    expect(screen.getByText(/^Live \$240\.00$/)).toBeInTheDocument()
+    expect(screen.queryByText(/^Close /)).toBeNull()
+  })
+
+  it('stamps the as-of date on a non-live close', () => {
+    render(<TargetRange {...base} quoteAsOf="2026-10-12" />)
+    expect(screen.getByText(/^Close \$240\.00 · Oct 12$/)).toBeInTheDocument()
+  })
+
+  it('ignores the as-of date while live', () => {
+    render(<TargetRange {...base} quoteIsLive quoteAsOf="2026-10-12" />)
+    expect(screen.getByText(/^Live \$240\.00$/)).toBeInTheDocument()
+    expect(screen.queryByText(/Oct 12/)).toBeNull()
+  })
+})

@@ -19,6 +19,7 @@ import { tSync } from '../i18n'
 export function dcfResultToRevenueEbitdaData(
   result: DCFResult,
   baseYear: number,
+  firstForecastYear?: number | null,
 ): Array<Record<string, number | string | boolean | null>> {
   const rows: Array<Record<string, number | string | boolean | null>> = []
 
@@ -30,10 +31,14 @@ export function dcfResultToRevenueEbitdaData(
     is_forecast: false,
   })
 
-  // Projected years — the DCF schedule starts the year AFTER its base year.
+  // Projected years. Prefer the backend's `financial_modeling.forecast_basis
+  // .first_forecast_year` (the DCF base is a TTM figure, so the first forecast
+  // year is not necessarily baseFY + 1 — labelling a twelve-month period ending
+  // mid-2027 "2026E" was the defect); fall back to baseFY + 1 when it is absent.
+  const start = firstForecastYear != null ? firstForecastYear : baseYear + 1
   for (let i = 0; i < result.projected_revenue.length; i++) {
     rows.push({
-      year: `${baseYear + 1 + i}E`,
+      year: `${start + i}E`,
       revenue: result.projected_revenue[i],
       ebitda: result.projected_ebitda[i],
       is_forecast: true,
@@ -63,6 +68,7 @@ export function dcfResultToRevenueEbitdaData(
 export function dcfResultToMarginData(
   result: DCFResult,
   baseYear: number,
+  firstForecastYear?: number | null,
 ): Array<Record<string, number | string | boolean | null>> {
   const rows: Array<Record<string, number | string | boolean | null>> = []
 
@@ -83,13 +89,15 @@ export function dcfResultToMarginData(
     is_forecast: false,
   })
 
-  // Projected years
+  // Projected years — first forecast year from forecast_basis when available,
+  // else the baseFY + 1 rule (see dcfResultToRevenueEbitdaData).
+  const start = firstForecastYear != null ? firstForecastYear : baseYear + 1
   for (let i = 0; i < result.projected_revenue.length; i++) {
     const rev = result.projected_revenue[i]
     const ebitda = result.projected_ebitda[i]
     const ebitdaMargin = rev > 0 ? ebitda / rev : 0
     rows.push({
-      year: `${baseYear + 1 + i}E`,
+      year: `${start + i}E`,
       ebitda_margin: ebitdaMargin,
       operating_margin: ebitMargin(ebitdaMargin),
       is_forecast: true,

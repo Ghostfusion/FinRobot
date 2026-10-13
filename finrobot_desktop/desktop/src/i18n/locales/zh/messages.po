@@ -209,6 +209,10 @@ msgid "targetRange.legendLive"
 msgstr "现价"
 
 #. js-lingui-explicit-id
+msgid "targetRange.legendClose"
+msgstr "收盘价"
+
+#. js-lingui-explicit-id
 msgid "targetRange.legendTarget"
 msgstr "目标"
 
@@ -517,6 +521,14 @@ msgid "chapter.valuation.bridge.netDebt"
 msgstr "减：净债务"
 
 #. js-lingui-explicit-id
+msgid "chapter.valuation.bridge.preferredStock"
+msgstr "减：优先股"
+
+#. js-lingui-explicit-id
+msgid "chapter.valuation.bridge.nonControllingInterest"
+msgstr "减：少数股东权益"
+
+#. js-lingui-explicit-id
 msgid "chapter.valuation.bridge.equity"
 msgstr "股权价值"
 
@@ -641,6 +653,10 @@ msgid "chart.sensitivity.legend.higher"
 msgstr "隐含价值更高"
 
 #. js-lingui-explicit-id
+msgid "chart.sensitivity.baseCell"
+msgstr "基准情形 · WACC {wacc}% / 永续增长 {tg}%"
+
+#. js-lingui-explicit-id
 msgid "chart.priceTrend.close"
 msgstr "收盘"
 
@@ -757,12 +773,24 @@ msgid "chapter.technical.mc.sims"
 msgstr "模拟次数"
 
 #. js-lingui-explicit-id
+msgid "chapter.technical.mc.assumptionsNote"
+msgstr "该分布以基准情形的 DCF 假设为中心，因此其中位数只是复述 DCF，分位仅衡量单一方法内的假设敏感度——并非独立证据。"
+
+#. js-lingui-explicit-id
 msgid "chapter.technical.sniper.idealBuy"
 msgstr "理想买点"
 
 #. js-lingui-explicit-id
 msgid "chapter.technical.sniper.safetyMargin"
 msgstr "安全边际 {pct}%"
+
+#. js-lingui-explicit-id
+msgid "chapter.technical.sniper.safetyMarginAtMarket"
+msgstr "该价位或以下买入 · 要求安全边际 {required}%，当前已具备 {achieved}%"
+
+#. js-lingui-explicit-id
+msgid "chapter.technical.sniper.safetyMarginAtMarketSolo"
+msgstr "该价位或以下买入 · 所需折价已满足"
 
 #. js-lingui-explicit-id
 msgid "chapter.technical.sniper.secondaryBuy"
@@ -863,6 +891,22 @@ msgstr "前 {n} 大持有人"
 #. js-lingui-explicit-id
 msgid "chapter.ownership.signal.ofTotal"
 msgstr "占 13F 总额"
+
+#. js-lingui-explicit-id
+msgid "chapter.ownership.signal.ofListed"
+msgstr "占已列示机构持股"
+
+#. js-lingui-explicit-id
+msgid "chapter.ownership.signal.coveragePartial"
+msgstr "13F 持有人名单不完整——仅覆盖机构持股的 {pct}%，因此该集中度以已列示口径计算，并非发行人的全部持有人基数。"
+
+#. js-lingui-explicit-id
+msgid "chapter.ownership.qoq.noPriorQuarter"
+msgstr "无上一季度缓存"
+
+#. js-lingui-explicit-id
+msgid "chapter.ownership.ceoPay.unavailable"
+msgstr "未从代理文件中提取"
 
 #. js-lingui-explicit-id
 msgid "chapter.ownership.heading.insiders"
@@ -2579,6 +2623,22 @@ msgstr "当前"
 #. js-lingui-explicit-id
 msgid "chart.footballField.target"
 msgstr "目标价"
+
+#. js-lingui-explicit-id
+msgid "chart.footballField.crossCheckTag"
+msgstr "交叉验证"
+
+#. js-lingui-explicit-id
+msgid "chart.footballField.crossCheckNote"
+msgstr "虚线参考行是独立的交叉验证（例如以发行人自身历史倍数乘以 TTM 基本面）。它们不构成已发布目标价，仅供三角验证。"
+
+#. js-lingui-explicit-id
+msgid "chart.footballField.terminalMultiple"
+msgstr "终值 {metric} {implied}，当前 {current}"
+
+#. js-lingui-explicit-id
+msgid "chart.footballField.terminalMultipleSolo"
+msgstr "终值 {metric} {implied}"
 
 #. js-lingui-explicit-id
 msgid "coverage.col.mcap"

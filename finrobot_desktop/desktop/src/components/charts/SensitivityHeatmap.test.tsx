@@ -38,11 +38,43 @@ describe('SensitivityHeatmap', () => {
     expect(table).toBeInTheDocument()
   })
 
-  it('renders WACC row labels as percentages', () => {
+  it('renders WACC row labels as percentages to two decimals', () => {
+    // Two decimals on purpose: the base WACC 6.97% used to render as "7.0%",
+    // reading as if the cell were computed at a round 7% (owner review).
     render(<SensitivityHeatmap data={SAMPLE_DATA} title="Sensitivity" />)
-    expect(screen.getByText('8.0%')).toBeInTheDocument()
-    expect(screen.getByText('9.0%')).toBeInTheDocument()
-    expect(screen.getByText('10.0%')).toBeInTheDocument()
+    expect(screen.getByText('8.00%')).toBeInTheDocument()
+    expect(screen.getByText('9.00%')).toBeInTheDocument()
+    expect(screen.getByText('10.00%')).toBeInTheDocument()
+  })
+
+  it('marks the exact base-case cell when the DCF supplies its base assumptions', () => {
+    // Non-round base values in the grid: only the matching (WACC, TGR) cell is
+    // marked — the reader can see the headline cell without guessing.
+    const data = [
+      { wacc: 0.06971583960763642, tg: 0.025, implied_price: 226 },
+      { wacc: 0.06971583960763642, tg: 0.03, implied_price: 240 },
+      { wacc: 0.08, tg: 0.025, implied_price: 180 },
+      { wacc: 0.08, tg: 0.03, implied_price: 190 },
+    ]
+    const { container } = render(
+      <SensitivityHeatmap
+        data={data}
+        title="Sensitivity"
+        baseWacc={0.06971583960763642}
+        baseTg={0.025}
+      />,
+    )
+    const marked = container.querySelectorAll('td[data-base="true"]')
+    expect(marked).toHaveLength(1)
+    expect(marked[0].textContent).toContain('$226.00')
+    // Axis label carries the true base WACC, not a rounded "7.0%".
+    expect(screen.getByText('6.97%')).toBeInTheDocument()
+  })
+
+  it('falls back to the grid-centre marking when no base assumptions are supplied', () => {
+    const { container } = render(<SensitivityHeatmap data={SAMPLE_DATA} title="Sensitivity" />)
+    expect(container.querySelectorAll('td[data-base="true"]')).toHaveLength(0)
+    expect(container.querySelectorAll('td.current')).toHaveLength(1)
   })
 
   it('renders implied prices in cells to the cent (a price is exact — never rounded to whole dollars)', () => {

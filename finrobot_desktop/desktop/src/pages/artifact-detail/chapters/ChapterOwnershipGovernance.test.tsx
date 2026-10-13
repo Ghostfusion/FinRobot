@@ -329,3 +329,91 @@ describe('ChapterOwnershipGovernance signal strip', () => {
     expect(text).toMatch(/95%/) // top 5 of 6 holders = 95e9 / 100e9
   })
 })
+
+describe('ChapterOwnershipGovernance partial 13F coverage', () => {
+  const holder = (
+    name: string,
+    shares: number,
+    value_usd: number,
+    shares_change_pct?: number | null,
+  ): InstitutionalHoldingShape => ({
+    holder_name: name,
+    cusip: '000000000',
+    name_of_issuer: 'ACME',
+    shares,
+    value_usd,
+    period_end: '2026-03-31',
+    ...(shares_change_pct !== undefined ? { shares_change_pct } : {}),
+    provenance: baseProv('13F-HR'),
+  })
+
+  it('measures concentration against the listed base and discloses partial coverage', () => {
+    const ownership: OwnershipGovernanceShape = {
+      // Top 5 hold 300k of the 1M listed shares → 30%. The list itself covers
+      // only 40% of the issuer's institutional shares → partial.
+      institutional_holdings: [
+        holder('A', 100_000, 30e9),
+        holder('B', 90_000, 25e9),
+        holder('C', 50_000, 20e9),
+        holder('D', 40_000, 10e9),
+        holder('E', 20_000, 10e9),
+        holder('F', 10_000, 5e9),
+      ],
+      institutional_shares_listed: 1_000_000,
+      institutional_coverage_pct: 0.4,
+      generated_at: '2026-05-27T09:00:00Z',
+      degraded_sections: [],
+    }
+    const { container } = render(
+      wrap(<ChapterOwnershipGovernance ownership={ownership} reportingCurrency="USD" />),
+    )
+    const text =
+      container.querySelector('[data-testid="ownership-signal-strip"]')?.textContent ?? ''
+    expect(text).toMatch(/30%/) // 300k / 1M listed — the true denominator
+    expect(text).toMatch(/of listed institutional shares/i)
+    // Partial-coverage caveat names the true coverage.
+    const caveat = container.querySelector('[data-testid="ownership-coverage-caveat"]')
+    expect(caveat).not.toBeNull()
+    expect(caveat?.textContent).toMatch(/40%/)
+  })
+
+  it('renders the QoQ reason instead of a bare dash when no prior quarter is cached', () => {
+    const ownership: OwnershipGovernanceShape = {
+      institutional_holdings: [holder('A', 100_000, 30e9), holder('B', 90_000, 25e9)],
+      generated_at: '2026-05-27T09:00:00Z',
+      degraded_sections: [],
+    }
+    render(wrap(<ChapterOwnershipGovernance ownership={ownership} reportingCurrency="USD" />))
+    expect(screen.getAllByText('no prior quarter cached').length).toBeGreaterThan(0)
+  })
+
+  it('keeps real QoQ figures when some holders carry them', () => {
+    const ownership: OwnershipGovernanceShape = {
+      institutional_holdings: [holder('A', 100_000, 30e9, 4.2), holder('B', 90_000, 25e9, null)],
+      generated_at: '2026-05-27T09:00:00Z',
+      degraded_sections: [],
+    }
+    render(wrap(<ChapterOwnershipGovernance ownership={ownership} reportingCurrency="USD" />))
+    expect(screen.getByText('+4.2%')).toBeInTheDocument()
+    // Mixed case → the (unexplained) null keeps the honest dash, not the reason.
+    expect(screen.queryByText('no prior quarter cached')).toBeNull()
+  })
+
+  it('explains a missing CEO pay figure instead of rendering a bare dash', () => {
+    const ownership: OwnershipGovernanceShape = {
+      proxy_compensation: {
+        filing_date: '2026-01-08',
+        accession_no: '0001308179-26-000008',
+        ceo_name: 'Jane Doe',
+        // Pay figure absent (proxy parse missed the number; name still resolved).
+        ceo_total_compensation: null,
+        provenance: baseProv('DEF 14A'),
+      },
+      generated_at: '2026-05-28T01:21:46Z',
+      degraded_sections: [],
+    }
+    render(wrap(<ChapterOwnershipGovernance ownership={ownership} reportingCurrency="USD" />))
+    expect(screen.getByText('Jane Doe')).toBeInTheDocument()
+    expect(screen.getByText('not extracted from proxy')).toBeInTheDocument()
+  })
+})

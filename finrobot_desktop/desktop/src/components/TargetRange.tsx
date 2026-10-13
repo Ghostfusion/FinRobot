@@ -17,7 +17,7 @@
 
 import type { ConfidenceTier } from '../utils/verdict'
 import { confidenceChip } from '../utils/verdict'
-import { formatCurrency } from '../utils/format'
+import { formatCurrency, formatMonthDay } from '../utils/format'
 import { useI18n } from '../i18n'
 
 interface TargetRangeProps {
@@ -36,6 +36,13 @@ interface TargetRangeProps {
   /** Method the point anchors on (e.g. "dcf" / "comps_pe") — shown as a caption
    *  so the analyst sees the point isn't a blended midpoint. */
   anchorMethod?: string | null
+  /** Whether the current-price tick is a LIVE intraday quote (raw_data.market
+   *  .quote_is_live). Absent/false ⇒ the price is a prior close, so the legend
+   *  reads "Close", never the misleading "Live". */
+  quoteIsLive?: boolean
+  /** The quote's as-of date — appended to the "Close" legend when not live
+   *  ("Close $124.42 · Oct 12"). Ignored while live. */
+  quoteAsOf?: string | null
 }
 
 /** Resolve the [low, high] band: explicit ends win; otherwise derive a
@@ -67,6 +74,8 @@ export function TargetRange({
   confidence,
   quoteCurrency,
   anchorMethod = null,
+  quoteIsLive = false,
+  quoteAsOf = null,
 }: TargetRangeProps): React.ReactElement | null {
   const { locale, t } = useI18n()
   const chip = confidenceChip(confidence, locale)
@@ -88,6 +97,11 @@ export function TargetRange({
   const pos = (v: number): number => ((v - vMin) / span) * 100
 
   const cur = (n: number): string => formatCurrency(n, quoteCurrency, locale, 2)
+  // "Live" only when the frozen quote is an intraday tick; otherwise it is a
+  // prior close and must say so (an EHC-class report labelled the Oct 12 close
+  // "Live"). A non-live quote appends its as-of date when one is available.
+  const priceBasisLabel = quoteIsLive ? t('targetRange.legendLive') : t('targetRange.legendClose')
+  const priceAsOfSuffix = !quoteIsLive && quoteAsOf ? ` · ${formatMonthDay(quoteAsOf, locale)}` : ''
   const bandLeft = pos(band.lo)
   const bandWidth = pos(band.hi) - bandLeft
   const withheld = point === null
@@ -252,7 +266,8 @@ export function TargetRange({
         {currentPrice !== null && currentPrice > 0 && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <span style={{ width: 8, height: 2, background: 'var(--accent-cyan)' }} aria-hidden />
-            {t('targetRange.legendLive')} {cur(currentPrice)}
+            {priceBasisLabel} {cur(currentPrice)}
+            {priceAsOfSuffix}
           </span>
         )}
         {!withheld && (

@@ -247,6 +247,18 @@ function MonteCarloPanel({
         />
       </div>
 
+      {/* Assumption-sensitivity disclosure (under the Current Pct figure): the
+          distribution is centred on the base-case DCF assumptions, so its P50
+          merely restates the DCF and its "current percentile" is NOT independent
+          evidence. Rendered unless the backend explicitly marks it independent
+          (never the case today) — legacy artifacts (field absent) still show it,
+          because the disclosure is true of the method itself. */}
+      {mc.assumptions_used?.independent !== true && (
+        <p data-testid="mc-assumptions-note" style={mutedNote}>
+          {t('chapter.technical.mc.assumptionsNote')}
+        </p>
+      )}
+
       {bins.length > 1 && counts.length > 0 && (
         <svg
           role="img"
@@ -396,18 +408,40 @@ function SniperPanel({
   const isShort = !isNeutral && (sniper.direction === 'SHORT' || sniper.sell_mode === true)
 
   if (sniper.ideal_buy != null) {
+    // The entry level can sit ABOVE the market when the required discount is
+    // already met — the backend then clamps `ideal_buy` DOWN to the current
+    // price and flags `ideal_buy_at_market`. Without the sub-label the row read
+    // as a contradiction ("ideal buy 54% above the price, yet Buy now"). We keep
+    // the Ideal Buy label + clamped price and disclose WHY, carrying both the
+    // required and the achieved discount.
+    const required =
+      typeof sniper.safety_margin === 'number' && Number.isFinite(sniper.safety_margin)
+        ? sniper.safety_margin
+        : null
+    const achieved =
+      typeof sniper.safety_margin_achieved === 'number' &&
+      Number.isFinite(sniper.safety_margin_achieved)
+        ? sniper.safety_margin_achieved
+        : null
+    const atMarket = !isShort && sniper.ideal_buy_at_market === true
+    let sub: string | undefined
+    if (atMarket && required !== null && achieved !== null) {
+      sub = t('chapter.technical.sniper.safetyMarginAtMarket', {
+        required: (required * 100).toFixed(0),
+        achieved: (achieved * 100).toFixed(0),
+      })
+    } else if (atMarket) {
+      sub = t('chapter.technical.sniper.safetyMarginAtMarketSolo')
+    } else if (!isShort && required !== null) {
+      sub = t('chapter.technical.sniper.safetyMargin', { pct: (required * 100).toFixed(0) })
+    }
     tacticalCells.push({
       label: isShort
         ? t('chapter.technical.sniper.idealShort')
         : t('chapter.technical.sniper.idealBuy'),
       value: fmtPx(sniper.ideal_buy),
       tone: isShort ? undefined : 'up',
-      sub:
-        !isShort && sniper.safety_margin != null
-          ? t('chapter.technical.sniper.safetyMargin', {
-              pct: (sniper.safety_margin * 100).toFixed(0),
-            })
-          : undefined,
+      sub,
     })
   }
   if (sniper.secondary_buy != null) {

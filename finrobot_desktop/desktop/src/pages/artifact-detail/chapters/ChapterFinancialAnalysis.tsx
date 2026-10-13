@@ -92,11 +92,19 @@ export function ChapterFinancialAnalysis({
   // invented, and the DCF table still lists every projected year under its
   // relative "Year +N" headings.
   const dcfBaseYear = dcf?.assumption_current_actuals_fy ?? historical?.years?.at(-1) ?? null
+  // The DCF base is a TTM figure, so the first labelled forecast year is not
+  // necessarily baseFY + 1 — prefer the backend's forecast_basis provenance when
+  // present (an older artifact lacks it and falls back to the baseFY + 1 rule).
+  const firstForecastYear = dcf?.forecast_basis?.first_forecast_year ?? null
 
   const revenueChartData = (() => {
     const hist = historical ? historicalToRevenueEbitdaData(historical) : []
     if (hasDcfForecast && dcfBaseYear != null) {
-      const fcst = dcfResultToRevenueEbitdaData(dcf as unknown as DCFResult, dcfBaseYear)
+      const fcst = dcfResultToRevenueEbitdaData(
+        dcf as unknown as DCFResult,
+        dcfBaseYear,
+        firstForecastYear,
+      )
       return mergeDcfBaseRow(hist, fcst)
     }
     return hist
@@ -105,7 +113,11 @@ export function ChapterFinancialAnalysis({
   const marginChartData = (() => {
     const hist = historical ? historicalToMarginData(historical) : []
     if (hasDcfForecast && dcfBaseYear != null) {
-      const fcst = dcfResultToMarginData(dcf as unknown as DCFResult, dcfBaseYear)
+      const fcst = dcfResultToMarginData(
+        dcf as unknown as DCFResult,
+        dcfBaseYear,
+        firstForecastYear,
+      )
       return mergeDcfBaseRow(hist, fcst)
     }
     return hist

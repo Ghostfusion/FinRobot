@@ -25,7 +25,25 @@ vi.mock('../../../components/charts/FootballField', () => ({
     return null
   },
 }))
-vi.mock('../../../components/charts/WaterfallChart', () => ({ default: () => null }))
+const waterfallProps = vi.fn()
+vi.mock('../../../components/charts/WaterfallChart', () => ({
+  default: (props: Record<string, unknown>) => {
+    waterfallProps(props)
+    return null
+  },
+}))
+
+type BridgeRow = { label: string; value: number; is_total: boolean }
+const isBridgeRow = (r: unknown): r is BridgeRow =>
+  typeof r === 'object' && r !== null && 'label' in r && 'value' in r && 'is_total' in r
+function lastWaterfallRows(): BridgeRow[] | undefined {
+  const last = waterfallProps.mock.calls.at(-1)
+  if (!last) return undefined
+  const arg: unknown = last[0]
+  if (typeof arg !== 'object' || arg === null || !('data' in arg)) return undefined
+  const data = arg.data
+  return Array.isArray(data) ? data.filter(isBridgeRow) : undefined
+}
 
 const DCF: DcfShape = {
   wacc: 0.0852,
@@ -339,5 +357,95 @@ describe('ChapterValuation football-field target = headline, not the discarded b
       price_target: 205.5, // backend publishes the blend as the headline
     })
     expect(lastTargetBand()?.point).toBe(205.5) // == weighted_price, unchanged
+  })
+})
+
+// DCF bridge: with `financial_modeling.equity_bridge` present, every deduction is
+// rendered EXPLICITLY — deriving net debt as EV − equity would silently absorb the
+// NCI/preferred into the net-debt bar (EHC: residual 3.60B vs true net debt 2.73B).
+describe('ChapterValuation DCF bridge', () => {
+  const PV_FCF = 1.5e12
+  const PV_TERMINAL = 1.7e12
+  const WITH_BRIDGE: DcfShape = {
+    ...DCF,
+    pv_fcf_total: PV_FCF,
+    pv_terminal: PV_TERMINAL,
+    enterprise_value: 3.2e12,
+    equity_value: 2.35e12,
+    equity_bridge: {
+      enterprise_value: 3.2e12,
+      net_debt: 2.73e11,
+      preferred_stock: 5e9,
+      noncontrolling_interest: 8.634e10,
+      equity_value: 2.35e12,
+    },
+  }
+
+  it('renders explicit net-debt + preferred + NCI deduction rows', () => {
+    waterfallProps.mockClear()
+    renderChapter(WITH_BRIDGE)
+    const rows = lastWaterfallRows()
+    expect(rows).toBeDefined()
+    const labels = rows!.map((r) => r.label)
+    expect(labels).toEqual([
+      'PV of FCF',
+      'PV of Terminal',
+      'Enterprise Value',
+      'Less: Net Debt',
+      'Less: Preferred Stock',
+      'Less: Non-controlling Interest',
+      'Equity Value',
+    ])
+    const valueOf = (label: string): number | undefined =>
+      rows!.find((r) => r.label === label)?.value
+    // Net debt is the EXPLICIT input, never the residual (EV − equity = 8.5e11).
+    expect(valueOf('Less: Net Debt')).toBeCloseTo(-2.73e11)
+    expect(valueOf('Less: Preferred Stock')).toBeCloseTo(-5e9)
+    expect(valueOf('Less: Non-controlling Interest')).toBeCloseTo(-8.634e10)
+    expect(valueOf('Equity Value')).toBeCloseTo(2.35e12)
+  })
+
+  it('omits the preferred / NCI bars when the issuer has none (they are zero)', () => {
+    waterfallProps.mockClear()
+    renderChapter({
+      ...WITH_BRIDGE,
+      equity_bridge: {
+        enterprise_value: 3.2e12,
+        net_debt: 2.73e11,
+        preferred_stock: 0,
+        noncontrolling_interest: 0,
+        equity_value: 2.927e12,
+      },
+    })
+    const labels = lastWaterfallRows()!.map((r) => r.label)
+    expect(labels).toEqual([
+      'PV of FCF',
+      'PV of Terminal',
+      'Enterprise Value',
+      'Less: Net Debt',
+      'Equity Value',
+    ])
+  })
+
+  it('falls back to the residual net-debt bar for legacy artifacts (no equity_bridge)', () => {
+    waterfallProps.mockClear()
+    renderChapter({
+      ...DCF,
+      pv_fcf_total: PV_FCF,
+      pv_terminal: PV_TERMINAL,
+      enterprise_value: 3.2e12,
+      equity_value: 3.0e12,
+    })
+    const rows = lastWaterfallRows()
+    const labels = rows!.map((r) => r.label)
+    // Legacy keeps exactly today's behaviour: residual net debt, no NCI/preferred.
+    expect(labels).toEqual([
+      'PV of FCF',
+      'PV of Terminal',
+      'Enterprise Value',
+      'Less: Net Debt',
+      'Equity Value',
+    ])
+    expect(rows!.find((r) => r.label === 'Less: Net Debt')!.value).toBeCloseTo(-2.0e11)
   })
 })

@@ -18,6 +18,40 @@ import type {
   ValuationSynthesisShape,
 } from './types'
 
+/** The backend-persisted equity bridge (`financial_modeling.equity_bridge`). */
+interface EquityBridgeParts {
+  enterprise_value: number
+  net_debt: number
+  preferred_stock: number
+  noncontrolling_interest: number
+  equity_value: number
+}
+
+/** Read + validate the DCF equity bridge. Returns null when the field is absent
+ *  (legacy artifact) or the load-bearing legs (EV / net debt / equity) are not
+ *  finite — the caller then falls back to the residual-derived bridge.
+ *  Preferred / NCI default to 0 when the issuer has none. */
+function readEquityBridge(
+  raw: Record<string, number | null> | null | undefined,
+): EquityBridgeParts | null {
+  if (!raw) return null
+  const num = (k: string): number | null => {
+    const v = raw[k]
+    return typeof v === 'number' && Number.isFinite(v) ? v : null
+  }
+  const enterprise_value = num('enterprise_value')
+  const net_debt = num('net_debt')
+  const equity_value = num('equity_value')
+  if (enterprise_value === null || net_debt === null || equity_value === null) return null
+  return {
+    enterprise_value,
+    net_debt,
+    equity_value,
+    preferred_stock: num('preferred_stock') ?? 0,
+    noncontrolling_interest: num('noncontrolling_interest') ?? 0,
+  }
+}
+
 interface ChapterValuationProps {
   dcf: DcfShape | null
   thesis: ThesisShape | null
@@ -48,6 +82,10 @@ interface ChapterValuationProps {
   // vs the company's own 3-year P25–P75 — the "why" behind that method's target.
   // null on legacy artifacts / when the band could not be computed.
   historicalBand?: HistoricalBandShape | null
+  // Today's EV/EBITDA multiple (raw_data.valuation.ev_ebitda) — the comparison
+  // base rendered beside the DCF's implied TERMINAL EV/EBITDA. null on legacy
+  // artifacts / when the raw valuation snapshot carries no multiple.
+  currentEvEbitda?: number | null
 }
 
 export function ChapterValuation(props: ChapterValuationProps): React.ReactElement {
@@ -75,6 +113,7 @@ export function ValuationBody({
   reportingCurrency,
   numericAudit = null,
   historicalBand = null,
+  currentEvEbitda = null,
 }: ChapterValuationProps): React.ReactElement {
   const { t, locale } = useI18n()
   const overview = thesis?.valuation_overview ?? null
@@ -125,31 +164,105 @@ export function ValuationBody({
     source: m.source,
   }))
 
-  // DCF bridge: PV(FCF) + PV(terminal) → enterprise value → −net debt → equity.
-  // Net debt is implied by EV − equity value (the DCF result doesn't carry it
-  // separately). Only build when the full chain is present so the bridge always
-  // reconciles to the implied equity value.
+  // Independent cross-checks (the issuer's own multiple history applied to TTM
+  // fundamentals): price-space ranges rendered beside the blended methods but
+  // visually distinct — they never vote on the published target. Read every
+  // field defensively so an artifact predating the field still renders.
+  const crossChecks = (valuationSynthesis?.cross_checks ?? [])
+    .filter((c) => Number.isFinite(c.low) && Number.isFinite(c.mid) && Number.isFinite(c.high))
+    .map((c) => ({
+      label: c.label,
+      low: c.low,
+      mid: c.mid,
+      high: c.high,
+      basis: c.basis ?? null,
+      note: c.note ?? null,
+    }))
+  // Implied terminal EV/EBITDA vs today's multiple — a RATIO-space comparison
+  // (it cannot share the price axis), rendered as a labelled row under the plot.
+  const terminalEvEbitda =
+    typeof dcf?.terminal_ev_ebitda === 'number' && Number.isFinite(dcf.terminal_ev_ebitda)
+      ? dcf.terminal_ev_ebitda
+      : null
+  const todayEvEbitda =
+    typeof currentEvEbitda === 'number' && Number.isFinite(currentEvEbitda) ? currentEvEbitda : null
+
+  // DCF bridge: PV(FCF) + PV(terminal) → enterprise value → deductions → equity.
+  // PREFERRED (backend `financial_modeling.equity_bridge`): render each deduction
+  // explicitly, so preferred / non-controlling interest are never silently folded
+  // into the "net debt" bar. Deriving net debt as EV − equity (the legacy path)
+  // becomes WRONG the moment preferred/NCI are deducted — the residual absorbs the
+  // NCI and overstates net debt (EHC: a residual bar read 3.60B vs the true 2.73B).
+  // LEGACY (no bridge): keep exactly the old residual behaviour, no regression.
   const pvFcf = dcf?.pv_fcf_total ?? null
   const pvTerminal = dcf?.pv_terminal ?? null
+  const bridge = readEquityBridge(dcf?.equity_bridge)
   const waterfallRows =
-    pvFcf !== null && pvTerminal !== null && ev !== null && eq !== null
-      ? [
-          { label: t('chapter.valuation.bridge.pvFcf'), value: pvFcf, is_total: false },
-          { label: t('chapter.valuation.bridge.pvTerminal'), value: pvTerminal, is_total: false },
-          { label: t('chapter.valuation.bridge.ev'), value: ev, is_total: true },
-          {
-            // Net debt = EV − equity. Net-cash names (eq > EV) produce a positive
-            // (adding) bar, so the label must flip to "Net Cash" — "Less: Net Debt"
-            // on an additive bar reads as a contradiction.
-            label:
-              ev - eq >= 0
-                ? t('chapter.valuation.bridge.netDebt')
-                : t('chapter.valuation.bridge.netCash'),
-            value: -(ev - eq),
-            is_total: false,
-          },
-          { label: t('chapter.valuation.bridge.equity'), value: eq, is_total: true },
-        ]
+    pvFcf !== null && pvTerminal !== null && (bridge !== null || (ev !== null && eq !== null))
+      ? bridge !== null
+        ? [
+            { label: t('chapter.valuation.bridge.pvFcf'), value: pvFcf, is_total: false },
+            { label: t('chapter.valuation.bridge.pvTerminal'), value: pvTerminal, is_total: false },
+            {
+              label: t('chapter.valuation.bridge.ev'),
+              value: bridge.enterprise_value,
+              is_total: true,
+            },
+            {
+              // Net debt is an explicit bridge input now (never a residual). A
+              // net-cash name (negative net debt) reads "Net Cash" with a
+              // positive (adding) bar — "Less: Net Debt" on an additive bar
+              // would contradict itself.
+              label:
+                bridge.net_debt >= 0
+                  ? t('chapter.valuation.bridge.netDebt')
+                  : t('chapter.valuation.bridge.netCash'),
+              value: -bridge.net_debt,
+              is_total: false,
+            },
+            // Preferred / NCI bars appear ONLY when the issuer actually has them —
+            // a zero bar would be noise (and a false signal on a plain common-equity
+            // name).
+            ...(bridge.preferred_stock !== 0
+              ? [
+                  {
+                    label: t('chapter.valuation.bridge.preferredStock'),
+                    value: -bridge.preferred_stock,
+                    is_total: false,
+                  },
+                ]
+              : []),
+            ...(bridge.noncontrolling_interest !== 0
+              ? [
+                  {
+                    label: t('chapter.valuation.bridge.nonControllingInterest'),
+                    value: -bridge.noncontrolling_interest,
+                    is_total: false,
+                  },
+                ]
+              : []),
+            {
+              label: t('chapter.valuation.bridge.equity'),
+              value: bridge.equity_value,
+              is_total: true,
+            },
+          ]
+        : [
+            { label: t('chapter.valuation.bridge.pvFcf'), value: pvFcf, is_total: false },
+            { label: t('chapter.valuation.bridge.pvTerminal'), value: pvTerminal, is_total: false },
+            { label: t('chapter.valuation.bridge.ev'), value: ev as number, is_total: true },
+            {
+              // Legacy residual: Net debt = EV − equity. Net-cash names (eq > EV)
+              // produce a positive (adding) bar, so the label flips to "Net Cash".
+              label:
+                (ev as number) - (eq as number) >= 0
+                  ? t('chapter.valuation.bridge.netDebt')
+                  : t('chapter.valuation.bridge.netCash'),
+              value: -((ev as number) - (eq as number)),
+              is_total: false,
+            },
+            { label: t('chapter.valuation.bridge.equity'), value: eq as number, is_total: true },
+          ]
       : []
 
   // Visual cell = MetricCell (the `sub` line carries what was the KvGrid `delta`).
@@ -434,6 +547,15 @@ export function ValuationBody({
               low: valuationSynthesis?.target_low ?? null,
               high: valuationSynthesis?.target_high ?? null,
               point: thesis?.price_target ?? null,
+            }}
+            // Independent cross-checks (issuer's own multiple history) — reference
+            // rows, visually distinct, never part of the published target.
+            crossChecks={crossChecks}
+            // Implied terminal EV/EBITDA vs today's multiple (ratio-space).
+            terminalMultiple={{
+              implied: terminalEvEbitda,
+              current: todayEvEbitda,
+              metric: 'EV/EBITDA',
             }}
           />
           {forwardEstimates?.source && (

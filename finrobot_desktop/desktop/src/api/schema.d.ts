@@ -476,6 +476,26 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/settings/credentials': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Credentials Route
+     * @description Credential values for the read-only Settings fields (see the model docstring).
+     */
+    get: operations['credentials_route_api_settings_credentials_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/runs': {
     parameters: {
       query?: never
@@ -904,6 +924,66 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/coverage/owned/{ticker}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    /**
+     * Set Owned
+     * @description Set one ticker's owned flag (the card's checkbox).
+     *
+     *     Ownership is per-ticker and global — the flag shows on that name's card in
+     *     EVERY group — so this clears the whole overview cache rather than one
+     *     group's key. The ticker goes through the same ``validate_ticker`` the
+     *     Studied-member body uses, so an invalid symbol returns the same 422.
+     */
+    put: operations['set_owned_api_coverage_owned__ticker__put']
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/coverage/groups/{group_id}/members/{ticker}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    /**
+     * Delete Member
+     * @description Delete a ticker's card from a group AND purge its stored artifacts.
+     *
+     *     The card's "X" is a desk-level removal: the name leaves THIS group and the
+     *     ticker's stored reports (archived rows included) go with it, so the wall
+     *     never shows a card whose reports no longer exist. The ticker's ``owned``
+     *     flag is deliberately kept — ownership is a portfolio fact, not desk
+     *     membership, and re-opening the ticker re-adds the card (the documented
+     *     auto-add), restoring the checkbox state instead of silently losing it. The
+     *     audit chain is untouched, exactly as the single-artifact DELETE leaves it
+     *     (``audit_chain`` appends on save only).
+     *
+     *     Idempotent by design: a ticker that is not (or no longer) a member still
+     *     has its artifacts purged and reports ``removed_from_group: false`` — a
+     *     re-fired cleanup must not 404 halfway through. Only an unknown GROUP is a
+     *     404; an invalid ticker is the same 422 ``validate_ticker`` gives the owned
+     *     PUT.
+     */
+    delete: operations['delete_member_api_coverage_groups__group_id__members__ticker__delete']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/coverage/groups/{group_id}/overview': {
     parameters: {
       query?: never
@@ -964,6 +1044,54 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/coverage/groups/{group_id}/rerun': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Rerun Group
+     * @description Re-run reports for every selected ticker, throttled to the provider cap.
+     *
+     *     Selection runs over the SAME rows the cards show (the instant cache-only
+     *     overview, which already carries the global owned flags) through the shared
+     *     :func:`select_targets` predicate, so "what you filtered" and "what re-runs"
+     *     never disagree. The batch runs in the background at the concurrency the LIVE
+     *     provider chain allows (see :func:`resolve_run_concurrency`); the rest wait in
+     *     its queue. Returns the batch's initial progress (poll
+     *     ``GET /batches/{batch_id}`` for live counts).
+     */
+    post: operations['rerun_group_api_coverage_groups__group_id__rerun_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/coverage/batches/{batch_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Get Batch
+     * @description Live progress of a re-run-all batch (404 for an unknown id).
+     */
+    get: operations['get_batch_api_coverage_batches__batch_id__get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/dashboard/hit-rate': {
     parameters: {
       query?: never
@@ -984,6 +1112,45 @@ export interface paths {
      *     as `hit_rate=null`. UI renders a "样本不足" hint in that case.
      */
     get: operations['hit_rate_api_dashboard_hit_rate_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/dashboard/calibration': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Calibration
+     * @description Confidence calibration — does the engine's stated confidence predict hits?
+     *
+     *     `window`: "30d" | "90d" | "all" (default "all"), the same cut `/hit-rate`
+     *     applies, evaluated here against `ArtifactSummary.created_at` (the
+     *     aggregation itself is windowless: a row carries no timestamp).
+     *
+     *     Rows are assembled through the same path as `/hit-rate` — one
+     *     `list_by_ticker` page plus one cached quote batch, converted to USD per the
+     *     quote's own currency — and the confidence tier is read from the artifact
+     *     payload's valuation synthesis. A row that cannot be priced keeps
+     *     `signal=None`: it still counts toward `n_total`, never toward `n_closed`, and
+     *     a quote failure never raises out of this endpoint (the buckets degrade to
+     *     `status="insufficient"` rather than 500-ing the landing banner).
+     *
+     *     `avg_excess_return` is reported as null until a benchmark feed is wired: the
+     *     S&P 500 leg at each artifact's entry date is not stored, and a fabricated 0%
+     *     market leg would silently relabel raw return as excess return.
+     *
+     *     Like `/hit-rate`, this never 500s on sparse data — an empty store comes back
+     *     200 with `status="insufficient"` and null rates, never an error.
+     */
+    get: operations['calibration_api_dashboard_calibration_get']
     put?: never
     post?: never
     delete?: never
@@ -1248,6 +1415,7 @@ export interface components {
         | 'comps'
         | 'ddm'
         | 'earnings'
+        | 'fund_research'
         | 'ic_memo'
         | 'equity_research'
         | 'peer_research'
@@ -1257,6 +1425,14 @@ export interface components {
       compute_version: components['schemas']['ArtifactComputeVersion']
       outputs: components['schemas']['ArtifactOutputs']
       meta: components['schemas']['ArtifactMeta']
+      /**
+       * Schema Version
+       * @description Payload contract version. Defaults to the current version so every writer produces it; legacy stored artifacts (written before the field existed) deserialize as the default, and `seal.required_fields` decides what a given version must carry.
+       * @default 1.0.0
+       */
+      schema_version: string
+      /** @description Content hash, decision hash, idempotency key and expiry, added by the store on save. None for legacy artifacts and for artifacts built in-process but never persisted (a builder's return value, a test fixture). */
+      seal?: components['schemas']['ArtifactSeal'] | null
     }
     /**
      * ArtifactAssumptions
@@ -1394,6 +1570,42 @@ export interface components {
       warnings?: string[]
     }
     /**
+     * ArtifactSeal
+     * @description Tamper-evidence and identity for a stored artifact.
+     *
+     *     Written by the store as the LAST step before persisting, which is why it is a nested
+     *     object: the two hashes cover the body *excluding* the seal, so re-sealing a re-read
+     *     artifact is stable instead of self-referential.
+     *
+     *     * ``artifact_sha256`` — the whole body (inputs, assumptions, compute version,
+     *       outputs, meta) minus the seal. A changed byte anywhere is detectable.
+     *     * ``decision_hash`` — only the *decision* subset (ticker, type, verdict, target,
+     *       target date). Two re-emits whose prose differs but whose call is identical share
+     *       this hash, which is what makes "same call" checkable without diffing prose.
+     *     * ``idempotency_key`` — ``meta.created_at`` based, so re-saving the same run yields
+     *       the same key (a re-emit is not a second signal) while a genuine re-run does not.
+     *     * ``expires_at`` — when the report stops being current (see
+     *       :func:`finrobot.artifact.seal.next_session_expiry`).
+     */
+    ArtifactSeal: {
+      /** Artifact Sha256 */
+      artifact_sha256: string
+      /** Decision Hash */
+      decision_hash: string
+      /** Idempotency Key */
+      idempotency_key: string
+      /**
+       * Sealed At
+       * Format: date-time
+       */
+      sealed_at: string
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string
+    }
+    /**
      * ArtifactSummary
      * @description Sidebar / Library view — strips heavy fields.
      *
@@ -1419,6 +1631,7 @@ export interface components {
         | 'comps'
         | 'ddm'
         | 'earnings'
+        | 'fund_research'
         | 'ic_memo'
         | 'equity_research'
         | 'peer_research'
@@ -1452,6 +1665,16 @@ export interface components {
        * @description Deadline for the thesis (defaults to created_at + 365 days, set in the thesis step). None when target_price itself is None.
        */
       target_date?: string | null
+      /**
+       * Target Low
+       * @description Low end of the cross-method fair-value band (USD/share). Mirrors outputs.structured.valuation_synthesis.target_low — the fair-value band shown when the point target is withheld. Populated by summary_extractor.extract_target_range; None when the artifact has no valuation_synthesis block, the bound is absent, or it is non-numeric / non-finite.
+       */
+      target_low?: number | null
+      /**
+       * Target High
+       * @description High end of the cross-method fair-value band (USD/share). Mirrors outputs.structured.valuation_synthesis.target_high — the fair-value band shown when the point target is withheld. Populated by summary_extractor.extract_target_range; None when the artifact has no valuation_synthesis block, the bound is absent, or it is non-numeric / non-finite.
+       */
+      target_high?: number | null
       /**
        * Signal
        * @description Lazy-computed realised-vs-target signal (hit / watching / failed) — never persisted. Route handlers call finrobot.engine.compute.operators.signal.compute_signal at list time using a fresh quote. None when any of entry_price / target_price / current_price are unavailable. DO NOT confuse with `verdict` — signal is the post-trade outcome, verdict is the LLM's pre-trade BUY/HOLD/SELL call.
@@ -1594,6 +1817,63 @@ export interface components {
         [key: string]: string
       }[]
     }
+    /**
+     * CalibrationBucket
+     * @description One confidence-tier (or overall) calibration snapshot.
+     */
+    CalibrationBucket: {
+      /** N Total */
+      n_total: number
+      /** N Closed */
+      n_closed: number
+      /** N Hit */
+      n_hit: number
+      /** Hit Rate */
+      hit_rate: number | null
+      /** Avg Excess Return */
+      avg_excess_return: number | null
+      /** Lift Vs Overall */
+      lift_vs_overall: number | null
+      /** Status */
+      status: string
+    }
+    /**
+     * CalibrationOverviewResponse
+     * @description Response for /api/dashboard/calibration.
+     *
+     *     Answers the question the hit-rate banner cannot: does the engine's own
+     *     stated confidence predict its outcomes? `by_confidence` always carries the
+     *     four tiers plus "unknown"; `status` is the whole table's state (it mirrors
+     *     the overall row, since with no measured base rate no lift is readable).
+     */
+    CalibrationOverviewResponse: {
+      /** Window */
+      window: string
+      /** Status */
+      status: string
+      /** Min Closed */
+      min_closed: number
+      overall: components['schemas']['CalibrationBucket']
+      /** By Confidence */
+      by_confidence: {
+        [key: string]: components['schemas']['CalibrationBucket']
+      }
+      /**
+       * Generated At
+       * Format: date-time
+       */
+      generated_at: string
+      /**
+       * Is Sampled
+       * @default false
+       */
+      is_sampled: boolean
+      /**
+       * Sample Size
+       * @default 500
+       */
+      sample_size: number
+    }
     /** CancelRunResponse */
     CancelRunResponse: {
       /** Run Id */
@@ -1668,6 +1948,64 @@ export interface components {
        * @default false
        */
       blocks_attribution: boolean
+    }
+    /**
+     * CoverageBatchItemProgress
+     * @description One ticker's position in the batch — what the UI renders per row.
+     */
+    CoverageBatchItemProgress: {
+      /** Ticker */
+      ticker: string
+      /** State */
+      state: string
+      /** Run Id */
+      run_id?: string | null
+      /** Error */
+      error?: string | null
+    }
+    /**
+     * CoverageBatchProgress
+     * @description A batch's live progress plus the plan that produced its concurrency cap.
+     *
+     *     Carries the resolved plan (``limit``/``ceiling``/``binding_provider``/
+     *     ``binding_reason``/``providers``/``undeclared_count``) so the UI can show
+     *     which provider set the cap and why, not just a bare number.
+     */
+    CoverageBatchProgress: {
+      /** Batch Id */
+      batch_id: string
+      /** Group Id */
+      group_id: string
+      /** Pipeline Type */
+      pipeline_type: string
+      /** State */
+      state: string
+      /** Limit */
+      limit: number
+      /** Ceiling */
+      ceiling: number
+      /** Binding Provider */
+      binding_provider: string | null
+      /** Binding Reason */
+      binding_reason: string
+      /** Providers */
+      providers: components['schemas']['ProviderLimitView'][]
+      /** Undeclared Count */
+      undeclared_count: number
+      /** Total */
+      total: number
+      /** Queued */
+      queued: number
+      /** Running */
+      running: number
+      /** Completed */
+      completed: number
+      /** Failed */
+      failed: number
+      /** Items */
+      items: components['schemas']['CoverageBatchItemProgress'][]
+      /** Created At */
+      created_at: string
     }
     /**
      * CoverageGroupDetail
@@ -1797,6 +2135,11 @@ export interface components {
       ticker: string
       /** Company */
       company?: string | null
+      /**
+       * Owned
+       * @default false
+       */
+      owned: boolean
       /** Price */
       price?: number | null
       /** Change Pct 1D */
@@ -1908,6 +2251,75 @@ export interface components {
       created_at: string
     }
     /**
+     * CredentialsResponse
+     * @description Live credential VALUES behind the Settings screen's read-only fields.
+     *
+     *     ``GET /api/settings`` deliberately carries only ``*_set`` booleans, but the
+     *     Settings screen renders each credential in a read-only field and therefore
+     *     needs the strings themselves. They are read back through the configured
+     *     :class:`~finrobot.secret_store.SecretStore`, so this endpoint can only echo
+     *     what the repo-root ``.env`` already holds in plaintext on disk: it decrypts
+     *     nothing and reveals no value the running app could not already use.
+     *
+     *     ``data_keys`` is keyed by settings field name (``fmp_api_key`` …),
+     *     ``provider_keys`` by LLM provider id (``openrouter`` …). An unset credential
+     *     is ``""``, not null, so the client renders it without a nil check.
+     */
+    CredentialsResponse: {
+      /** Data Keys */
+      data_keys: {
+        [key: string]: string
+      }
+      /** Provider Keys */
+      provider_keys: {
+        [key: string]: string
+      }
+    }
+    /**
+     * CrossCheck
+     * @description One triangulation cross-check displayed beside the football field.
+     *
+     *     NOT a valuation method: a cross-check never enters the confidence-weighted
+     *     published target (the blend keeps its existing method weighting). It exists so
+     *     the reader can see whether the published target is consistent with an
+     *     independent, non-blended read of the same business — the owner-review defect
+     *     where a target implying ~17x TTM EBITDA sat beside the issuer's own 5-year
+     *     EV/EBITDA band whose p90 was 12.2x, and nothing in the report said so.
+     *
+     *     ``low``/``mid``/``high`` are per-share values implied by one multiple band
+     *     applied to the run's TTM EBITDA:
+     *     ``equity = multiple × ttm_ebitda − net_debt − preferred_stock − NCI`` then
+     *     ``/ shares_outstanding``.
+     */
+    CrossCheck: {
+      /**
+       * Name
+       * @description Stable id, e.g. ``ev_ebitda_band``.
+       */
+      name: string
+      /**
+       * Label
+       * @description Human-readable label for the football field row.
+       */
+      label: string
+      /** Low */
+      low: number
+      /** Mid */
+      mid: number
+      /** High */
+      high: number
+      /**
+       * Basis
+       * @description Names the metric, the look-back window and the TTM EBITDA basis the band was applied to — so the multiple is never cited naked.
+       */
+      basis: string
+      /**
+       * Note
+       * @description Says plainly that this is a mean-reversion cross-check excluded from the published target blend.
+       */
+      note: string
+    }
+    /**
      * DCFInputs
      * @description Inputs for DCF calculation. Built by ``seed_dcf_inputs`` from real
      *     filings (3y historical medians) + Damodaran industry fallback. The LLM
@@ -1948,11 +2360,6 @@ export interface components {
        */
       nwc_pct_revenue: number
       /**
-       * Terminal Nwc Pct Revenue
-       * @description Steady-state ΔNWC as % of revenue for the Gordon perpetuity, seeded as marginal NWC ratio median(ΔNWC/Δrevenue) × terminal growth. The explicit-window nwc_pct_revenue embeds the historical growth rate, so holding it into a low-growth perpetuity overstates the drag (or the subsidy) several-fold. None = fall back to nwc_pct_revenue (inputs built without multi-year history, e.g. direct REST payloads).
-       */
-      terminal_nwc_pct_revenue?: number | null
-      /**
        * Da Pct Revenue
        * @description D&A as % of revenue, carrying the tax shield in the FCF formula. Default 0.0 means no shield; seed_dcf_inputs always sets a non-zero value from 3y filings or Damodaran fallback. Direct callers may omit it.
        * @default 0
@@ -1981,6 +2388,12 @@ export interface components {
        * @description Long-term growth rate
        */
       terminal_growth_rate: number
+      /**
+       * Terminal Roic
+       * @description Assumed return on new invested capital (ROIC) funding the perpetual growth. Terminal reinvestment is sized by the textbook identity g/ROIC (Damodaran), so terminal FCF = terminal NOPAT × (1 − g/ROIC): a 3% perpetuity at a 15% ROIC reinvests 20% of NOPAT, the new investment a growing firm must actually make. Default 0.15 is the Damodaran mature-firm ROIC; direct callers may override.
+       * @default 0.15
+       */
+      terminal_roic: number
       /** Shares Outstanding */
       shares_outstanding: number
       /**
@@ -1988,6 +2401,20 @@ export interface components {
        * @description Total debt - cash. Negative if net cash.
        */
       net_debt: number
+      /** Ttm Period End */
+      ttm_period_end?: string | null
+      /**
+       * Noncontrolling Interest
+       * @description Noncontrolling (minority) interest, in the same currency as net_debt. A claim on the enterprise senior to common equity, so it is deducted alongside net debt and preferred stock in the EV → equity bridge. Defaults to 0.0 for direct/legacy construction and issuers that carry none; seed_dcf_inputs reads it from the balance sheet.
+       * @default 0
+       */
+      noncontrolling_interest: number
+      /**
+       * Preferred Stock
+       * @description Preferred equity, in the same currency as net_debt. Deducted alongside net debt and noncontrolling interest in the EV → equity bridge (same claim-on-the-enterprise logic as calculate_ev). Defaults to 0.0 for direct/legacy construction; seed_dcf_inputs reads it from the balance sheet.
+       * @default 0
+       */
+      preferred_stock: number
       /**
        * Currency
        * @description ISO 4217 quote currency of the per-share / equity outputs (``implied_price`` is ``equity_value / shares_outstanding``, a market quote, so it follows ``FinancialData.quote_currency`` — TWD for TSM, EUR for SAP). Threaded by ``seed_dcf_inputs`` from the financials snapshot; ``calculate_dcf`` passes it through to ``DCFResult`` so the artifact carries a real currency tag and the diff formatter never has to assume USD. Defaults to USD so direct callers and JSON-round-tripped legacy artifacts (no ``currency`` key) still validate — same read-compat precedent as ``ttm_quarter_ends``.
@@ -2036,6 +2463,20 @@ export interface components {
       pv_terminal: number
       /** Terminal Fcf */
       terminal_fcf?: number | null
+      /** Terminal Nopat */
+      terminal_nopat?: number | null
+      /** Terminal Reinvestment Rate */
+      terminal_reinvestment_rate?: number | null
+      /** Terminal Ev Ebitda */
+      terminal_ev_ebitda?: number | null
+      /** Equity Bridge */
+      equity_bridge?: {
+        [key: string]: number
+      } | null
+      /** Forecast Basis */
+      forecast_basis?: {
+        [key: string]: unknown
+      } | null
       /** Pv Fcf Total */
       pv_fcf_total: number
       /** Enterprise Value */
@@ -2061,6 +2502,8 @@ export interface components {
       } | null
       /** Assumption Current Actuals Fy */
       assumption_current_actuals_fy?: number | null
+      /** Assumption Current Actuals Capex Ttm */
+      assumption_current_actuals_capex_ttm?: boolean | null
       market_implied?: components['schemas']['MarketImpliedCheck'] | null
       inputs: components['schemas']['DCFInputs']
     }
@@ -2269,6 +2712,24 @@ export interface components {
       tg_values: number[]
       /** Implied Prices */
       implied_prices: (number | null)[][]
+    }
+    /**
+     * DeleteMemberResponse
+     * @description Outcome of a card's "X": desk membership + the ticker's stored reports.
+     *
+     *     ``removed_from_group`` is False when the ticker was not (or no longer) a
+     *     member — the artifact purge still ran, so a re-fired cleanup is a clean
+     *     no-op rather than a 404 halfway through.
+     */
+    DeleteMemberResponse: {
+      /** Ticker */
+      ticker: string
+      /** Removed From Group */
+      removed_from_group: boolean
+      /** Artifacts Deleted */
+      artifacts_deleted: number
+      /** Artifact Ids */
+      artifact_ids: string[]
     }
     /**
      * DeltaItem
@@ -2593,6 +3054,8 @@ export interface components {
       operating_income?: number | null
       /** Depreciation Amortization */
       depreciation_amortization?: number | null
+      /** Capital Expenditure */
+      capital_expenditure?: number | null
       /** Rd Expense */
       rd_expense?: number | null
       /** Sga Expense */
@@ -2839,10 +3302,21 @@ export interface components {
       current_price: number
       /** Pe Ratio */
       pe_ratio?: number | null
+      /** Pe Basis */
+      pe_basis?: string | null
+      /**
+       * Quote Is Live
+       * @default false
+       */
+      quote_is_live: boolean
+      /** Quote As Of */
+      quote_as_of?: string | null
       /** Price 52W High */
       price_52w_high?: number | null
       /** Price 52W Low */
       price_52w_low?: number | null
+      /** Trailing 1Y Return Pct */
+      trailing_1y_return_pct?: number | null
       /** Industry */
       industry?: string | null
       /** Sector */
@@ -3076,6 +3550,21 @@ export interface components {
       artifact_id?: string | null
     }
     /**
+     * OwnedTickerRequest
+     * @description Set one ticker's global owned flag from a card's checkbox.
+     */
+    OwnedTickerRequest: {
+      /** Owned */
+      owned: boolean
+    }
+    /** OwnedTickerResponse */
+    OwnedTickerResponse: {
+      /** Ticker */
+      ticker: string
+      /** Owned */
+      owned: boolean
+    }
+    /**
      * ProviderConfig
      * @description One LLM provider in the model registry.
      *
@@ -3165,6 +3654,19 @@ export interface components {
       key_set: boolean
       /** Is Builtin */
       is_builtin: boolean
+    }
+    /** ProviderLimitView */
+    ProviderLimitView: {
+      /** Provider */
+      provider: string
+      /** Max Concurrency */
+      max_concurrency: number | null
+      /** Source */
+      source: string | null
+      /** Declared */
+      declared: boolean
+      /** Binding */
+      binding: boolean
     }
     /** QuotesWarmedStatus */
     QuotesWarmedStatus: {
@@ -3256,6 +3758,28 @@ export interface components {
       finished_at?: string | null
       /** Error */
       error?: string | null
+    }
+    /**
+     * RerunRequest
+     * @description Filters + pipeline selection for the "re-run all reports" control.
+     *
+     *     ``owned`` / ``ratings`` are the same filters the sort/filter UI offers;
+     *     ``None`` means "no filter on this axis". ``ratings`` tokens are the verdicts
+     *     the artifact store records (uppercase) plus ``UNRATED`` for names with no
+     *     verdict yet.
+     */
+    RerunRequest: {
+      /** Owned */
+      owned?: boolean | null
+      /** Ratings */
+      ratings?: ('BUY' | 'HOLD' | 'SELL' | 'UNRATED')[] | null
+      /**
+       * Pipeline Type
+       * @default research
+       */
+      pipeline_type: string
+      /** Language */
+      language?: ('en' | 'zh') | null
     }
     /**
      * ReverseSolveReason
@@ -3557,7 +4081,7 @@ export interface components {
        * @default keychain
        * @enum {string}
        */
-      secret_storage_mode: 'keychain' | 'plaintext'
+      secret_storage_mode: 'keychain' | 'plaintext' | 'env'
     }
     /** SettingsUpdate */
     SettingsUpdate: {
@@ -3604,6 +4128,13 @@ export interface components {
       position_size_pct: number | null
       /** Safety Margin */
       safety_margin: number | null
+      /**
+       * Ideal Buy At Market
+       * @default false
+       */
+      ideal_buy_at_market: boolean
+      /** Safety Margin Achieved */
+      safety_margin_achieved?: number | null
       /** Support Level */
       support_level: number
       /** Resistance Level */
@@ -3744,6 +4275,11 @@ export interface components {
       as_of: string
       /** Methods */
       methods: components['schemas']['ValuationMethodRange'][]
+      /**
+       * Cross Checks
+       * @description Non-blended triangulation reads displayed beside the football field rows (e.g. the target's own 5-year EV/EBITDA band applied to its TTM EBITDA). Never enters the confidence-weighted point synthesis; empty when a cross-check input was unavailable.
+       */
+      cross_checks?: components['schemas']['CrossCheck'][]
       /** Warnings */
       warnings?: string[]
       /** Forward Fiscal Period */
@@ -4516,6 +5052,26 @@ export interface operations {
       }
     }
   }
+  credentials_route_api_settings_credentials_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['CredentialsResponse']
+        }
+      }
+    }
+  }
   list_runs_api_runs_get: {
     parameters: {
       query?: {
@@ -4716,6 +5272,7 @@ export interface operations {
               | 'comps'
               | 'ddm'
               | 'earnings'
+              | 'fund_research'
               | 'ic_memo'
               | 'equity_research'
               | 'peer_research'
@@ -5065,6 +5622,73 @@ export interface operations {
       }
     }
   }
+  set_owned_api_coverage_owned__ticker__put: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        ticker: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['OwnedTickerRequest']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['OwnedTickerResponse']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  delete_member_api_coverage_groups__group_id__members__ticker__delete: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        group_id: string
+        ticker: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['DeleteMemberResponse']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
   group_overview_api_coverage_groups__group_id__overview_get: {
     parameters: {
       query?: {
@@ -5133,6 +5757,72 @@ export interface operations {
       }
     }
   }
+  rerun_group_api_coverage_groups__group_id__rerun_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        group_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RerunRequest']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['CoverageBatchProgress']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_batch_api_coverage_batches__batch_id__get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        batch_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['CoverageBatchProgress']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
   hit_rate_api_dashboard_hit_rate_get: {
     parameters: {
       query?: {
@@ -5152,6 +5842,37 @@ export interface operations {
         }
         content: {
           'application/json': components['schemas']['HitRateOverview']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  calibration_api_dashboard_calibration_get: {
+    parameters: {
+      query?: {
+        window?: string
+      }
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['CalibrationOverviewResponse']
         }
       }
       /** @description Validation Error */

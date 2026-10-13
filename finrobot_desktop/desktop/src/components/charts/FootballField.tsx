@@ -22,6 +22,32 @@ interface ChartProps {
   // + band vs current price read in one glance (the traceable form of a fair-value
   // gauge; the band widens as the confidence dial drops). Parts render only when finite.
   targetBand?: { low?: number | null; high?: number | null; point?: number | null } | null
+  // Independent cross-checks (e.g. the issuer's OWN EV/EBITDA history applied to
+  // TTM EBITDA) → implied price ranges. Rendered as visually-distinct reference
+  // rows that are explicitly NOT part of the published target blend; `basis`/
+  // `note` ride as tooltips. Absent/legacy ⇒ no reference rows.
+  crossChecks?: CrossCheckRow[] | null
+  // Implied terminal EV/EBITDA vs today's multiple — a RATIO-space comparison
+  // (cannot share the price axis), rendered as a labelled row under the plot.
+  terminalMultiple?: TerminalMultipleRow | null
+}
+
+/** An independent cross-check range on the price axis. */
+export interface CrossCheckRow {
+  label: string
+  low: number
+  mid: number
+  high: number
+  basis?: string | null
+  note?: string | null
+}
+
+/** Implied terminal multiple vs today's, in multiple-space. */
+export interface TerminalMultipleRow {
+  implied?: number | null
+  current?: number | null
+  /** Multiple name, e.g. "EV/EBITDA". Defaults to EV/EBITDA when absent. */
+  metric?: string | null
 }
 
 export const METHOD_LABEL: Record<string, string> = {
@@ -43,6 +69,12 @@ interface Row {
   low: number
   mid: number
   high: number
+  /** 'method' = a bar that votes on the published target; 'crosscheck' = an
+   *  independent reference range (distinct styling, never part of the target). */
+  kind: 'method' | 'crosscheck'
+  /** Cross-check provenance prose (basis / note) — exposed as a tooltip. */
+  basis?: string | null
+  note?: string | null
 }
 
 function formatFiscalPeriod(period: string): string {
@@ -90,33 +122,54 @@ export default function FootballField({
   forwardFiscalPeriod,
   historicalBand,
   targetBand,
+  crossChecks,
+  terminalMultiple,
 }: ChartProps) {
   const { t } = useI18n()
-  const rows: Row[] = useMemo(
-    () =>
-      (data ?? [])
-        .map((d) => {
-          const method = String(d.method)
-          const source = typeof d.source === 'string' ? d.source : null
-          const comps = method === 'comps_pe' ? compsPeLabel(source, forwardFiscalPeriod) : null
-          const fyTag =
-            FORWARD_METHODS.has(method) && forwardFiscalPeriod
-              ? `forward · ${formatFiscalPeriod(forwardFiscalPeriod)}`
-              : method === 'ev_ebitda'
-                ? 'trailing band × TTM EBITDA'
-                : null
-          return {
-            method,
-            label: comps?.label ?? METHOD_LABEL[method] ?? method.toUpperCase(),
-            sublabel: comps?.sublabel ?? fyTag,
-            low: Number(d.low),
-            mid: Number(d.mid),
-            high: Number(d.high),
-          }
-        })
-        .filter((r) => Number.isFinite(r.low) && Number.isFinite(r.mid) && Number.isFinite(r.high)),
-    [data, forwardFiscalPeriod],
-  )
+  // Method bars first (they vote on the target), cross-checks after — appended
+  // as distinctly-styled reference rows so the reader can compare the issuer's
+  // own multiple history against the blended methods. Only finite ranges render.
+  const rows: Row[] = useMemo(() => {
+    const finiteRow = (low: number, mid: number, high: number): boolean =>
+      Number.isFinite(low) && Number.isFinite(mid) && Number.isFinite(high)
+    const methodRows: Row[] = (data ?? [])
+      .map((d) => {
+        const method = String(d.method)
+        const source = typeof d.source === 'string' ? d.source : null
+        const comps = method === 'comps_pe' ? compsPeLabel(source, forwardFiscalPeriod) : null
+        const fyTag =
+          FORWARD_METHODS.has(method) && forwardFiscalPeriod
+            ? `forward · ${formatFiscalPeriod(forwardFiscalPeriod)}`
+            : method === 'ev_ebitda'
+              ? 'trailing band × TTM EBITDA'
+              : null
+        return {
+          method,
+          label: comps?.label ?? METHOD_LABEL[method] ?? method.toUpperCase(),
+          sublabel: comps?.sublabel ?? fyTag,
+          low: Number(d.low),
+          mid: Number(d.mid),
+          high: Number(d.high),
+          kind: 'method' as const,
+        }
+      })
+      .filter((r) => finiteRow(r.low, r.mid, r.high))
+    const crossRows: Row[] = (crossChecks ?? [])
+      .map((c, i) => ({
+        // Namespaced key so a cross-check label can never collide with a method key.
+        method: `crosscheck:${c.label}:${i}`,
+        label: c.label,
+        sublabel: c.basis ?? null,
+        low: Number(c.low),
+        mid: Number(c.mid),
+        high: Number(c.high),
+        kind: 'crosscheck' as const,
+        basis: c.basis ?? null,
+        note: c.note ?? null,
+      }))
+      .filter((r) => finiteRow(r.low, r.mid, r.high))
+    return [...methodRows, ...crossRows]
+  }, [data, forwardFiscalPeriod, crossChecks])
 
   if (rows.length === 0) return null
 
@@ -253,36 +306,60 @@ export default function FootballField({
               gap: ROW_HEIGHT - 18,
             }}
           >
-            {rows.map((r) => (
-              <div
-                key={r.method}
-                style={{
-                  height: 18,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  fontFamily: 'var(--font-mono)',
-                  fontSize: 11.5,
-                  color: 'var(--text-primary)',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                <span style={{ textTransform: 'uppercase' }}>{r.label}</span>
-                {r.sublabel && (
-                  <span
-                    style={{
-                      fontSize: 9,
-                      color: 'var(--text-muted)',
-                      textTransform: 'none',
-                      letterSpacing: '0.02em',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {r.sublabel}
+            {rows.map((r) => {
+              const isCross = r.kind === 'crosscheck'
+              return (
+                <div
+                  key={r.method}
+                  // Cross-checks expose their basis/note prose as a hover tooltip.
+                  title={isCross ? (r.note ?? r.basis ?? undefined) : undefined}
+                  style={{
+                    height: 18,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    fontFamily: 'var(--font-mono)',
+                    fontSize: 11.5,
+                    color: isCross ? 'var(--text-muted)' : 'var(--text-primary)',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  <span style={{ textTransform: 'uppercase' }}>
+                    {r.label}
+                    {isCross && (
+                      <span
+                        data-testid="football-crosscheck-tag"
+                        style={{
+                          marginLeft: 6,
+                          fontSize: 8.5,
+                          letterSpacing: '0.1em',
+                          color: 'var(--text-dim)',
+                          border: '1px solid var(--border-soft)',
+                          borderRadius: 3,
+                          padding: '1px 4px',
+                          verticalAlign: 'middle',
+                        }}
+                      >
+                        {t('chart.footballField.crossCheckTag')}
+                      </span>
+                    )}
                   </span>
-                )}
-              </div>
-            ))}
+                  {r.sublabel && (
+                    <span
+                      style={{
+                        fontSize: 9,
+                        color: 'var(--text-muted)',
+                        textTransform: 'none',
+                        letterSpacing: '0.02em',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {r.sublabel}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
           </div>
 
           {/* Plot */}
@@ -333,20 +410,29 @@ export default function FootballField({
               const xMid = xPctFor(r.mid)
               const xHigh = xPctFor(r.high)
               const topPx = TOP_PAD + i * ROW_HEIGHT
+              const isCross = r.kind === 'crosscheck'
               return (
                 <div key={r.method}>
                   <div
+                    data-testid={isCross ? 'football-crosscheck-bar' : 'football-method-bar'}
                     style={{
                       position: 'absolute',
                       top: topPx,
                       left: `${xLow}%`,
                       width: `${Math.max(0.4, xHigh - xLow)}%`,
                       height: BAR_THICKNESS,
-                      background:
-                        'linear-gradient(90deg, color-mix(in srgb, var(--primary) 35%, transparent), color-mix(in srgb, var(--secondary) 55%, transparent))',
-                      border: '1px solid color-mix(in srgb, var(--secondary) 55%, transparent)',
+                      // Cross-checks are muted + dashed vs the solid neon method
+                      // bars — visually NOT part of the published-target blend.
+                      background: isCross
+                        ? 'color-mix(in srgb, var(--text-muted) 16%, transparent)'
+                        : 'linear-gradient(90deg, color-mix(in srgb, var(--primary) 35%, transparent), color-mix(in srgb, var(--secondary) 55%, transparent))',
+                      border: isCross
+                        ? '1px dashed color-mix(in srgb, var(--text-muted) 55%, transparent)'
+                        : '1px solid color-mix(in srgb, var(--secondary) 55%, transparent)',
                       borderRadius: 4,
-                      boxShadow: '0 0 18px color-mix(in srgb, var(--primary) 18%, transparent)',
+                      boxShadow: isCross
+                        ? 'none'
+                        : '0 0 18px color-mix(in srgb, var(--primary) 18%, transparent)',
                     }}
                   />
                   {/* Low tick */}
@@ -388,9 +474,9 @@ export default function FootballField({
                       left: `calc(${xMid}% - 5px)`,
                       width: 10,
                       height: 10,
-                      background: 'var(--accent-cyan)',
+                      background: isCross ? 'var(--text-muted)' : 'var(--accent-cyan)',
                       borderRadius: '50%',
-                      boxShadow: '0 0 8px var(--accent-cyan)',
+                      boxShadow: isCross ? 'none' : '0 0 8px var(--accent-cyan)',
                     }}
                     title={`${t('chart.footballField.mid')} ${fmtPrice(r.mid)}`}
                   />
@@ -511,6 +597,7 @@ export default function FootballField({
             {rows.map((r) => {
               const upside = cp !== null && cp > 0 ? ((r.mid - cp) / cp) * 100 : null
               const up = upside !== null && upside >= 0
+              const isCross = r.kind === 'crosscheck'
               return (
                 <div
                   key={r.method}
@@ -524,7 +611,7 @@ export default function FootballField({
                     color: 'var(--text-secondary)',
                   }}
                 >
-                  <span style={{ color: 'var(--accent-cyan)' }}>
+                  <span style={{ color: isCross ? 'var(--text-muted)' : 'var(--accent-cyan)' }}>
                     {t('chart.footballField.mid')} {fmtPrice(r.mid)}
                   </span>
                   {upside !== null && (
@@ -538,6 +625,60 @@ export default function FootballField({
             })}
           </div>
         </div>
+
+        {rows.some((r) => r.kind === 'crosscheck') && (
+          <p
+            data-testid="football-crosscheck-note"
+            style={{
+              margin: '10px 0 0',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10.5,
+              lineHeight: 1.5,
+              color: 'var(--text-muted)',
+            }}
+          >
+            {t('chart.footballField.crossCheckNote')}
+          </p>
+        )}
+
+        {(() => {
+          const implied =
+            typeof terminalMultiple?.implied === 'number' &&
+            Number.isFinite(terminalMultiple.implied)
+              ? terminalMultiple.implied
+              : null
+          const today =
+            typeof terminalMultiple?.current === 'number' &&
+            Number.isFinite(terminalMultiple.current)
+              ? terminalMultiple.current
+              : null
+          if (implied === null) return null
+          const metric = terminalMultiple?.metric ?? 'EV/EBITDA'
+          const impliedStr = `${implied.toFixed(1)}x`
+          return (
+            <p
+              data-testid="football-terminal-multiple"
+              style={{
+                margin: '8px 0 0',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 10.5,
+                lineHeight: 1.5,
+                color: 'var(--text-secondary)',
+              }}
+            >
+              {today !== null
+                ? t('chart.footballField.terminalMultiple', {
+                    metric,
+                    implied: impliedStr,
+                    current: `${today.toFixed(1)}x`,
+                  })
+                : t('chart.footballField.terminalMultipleSolo', {
+                    metric,
+                    implied: impliedStr,
+                  })}
+            </p>
+          )
+        })()}
 
         {band && (
           <HistoryRail

@@ -121,6 +121,72 @@ describe('FootballField calibrated synthesis target overlay', () => {
   })
 })
 
+describe('FootballField independent cross-checks', () => {
+  const CROSS = [
+    {
+      label: 'Issuer EV/EBITDA band',
+      low: 150,
+      mid: 175,
+      high: 205,
+      basis: 'median 10.6x × TTM EBITDA',
+      note: 'The issuer trades at a FAIR multiple vs its own 5y history.',
+    },
+  ]
+
+  it('renders cross-checks as distinctly-labelled reference rows (never as a method)', () => {
+    render(<FootballField data={KEYED_ROWS} title="FF" crossChecks={CROSS} currentPrice={124.4} />)
+    // The row carries its label + a "cross-check" tag.
+    expect(screen.getByText('Issuer EV/EBITDA band')).toBeInTheDocument()
+    expect(screen.getAllByTestId('football-crosscheck-tag').length).toBeGreaterThan(0)
+    // Its bar is tagged distinctly from the method bars.
+    expect(screen.getAllByTestId('football-crosscheck-bar').length).toBe(1)
+    // The explanatory note is present.
+    expect(screen.getByTestId('football-crosscheck-note')).toBeInTheDocument()
+    // The basis/note ride as a tooltip on the label column.
+    expect(screen.getByText('median 10.6x × TTM EBITDA')).toBeInTheDocument()
+  })
+
+  it('renders no cross-check chrome when none are supplied (back-compat)', () => {
+    render(<FootballField data={KEYED_ROWS} title="FF" />)
+    expect(screen.queryByTestId('football-crosscheck-note')).toBeNull()
+    expect(screen.queryByTestId('football-crosscheck-tag')).toBeNull()
+    expect(screen.queryAllByTestId('football-crosscheck-bar')).toHaveLength(0)
+  })
+})
+
+describe('FootballField implied terminal multiple row', () => {
+  it('renders the terminal vs today comparison defensively', () => {
+    render(
+      <FootballField
+        data={KEYED_ROWS}
+        title="FF"
+        terminalMultiple={{ implied: 18.2, current: 10.8, metric: 'EV/EBITDA' }}
+      />,
+    )
+    const row = screen.getByTestId('football-terminal-multiple')
+    expect(row.textContent).toContain('18.2x')
+    expect(row.textContent).toContain('10.8x')
+  })
+
+  it("renders the implied terminal alone when today's multiple is missing", () => {
+    render(
+      <FootballField
+        data={KEYED_ROWS}
+        title="FF"
+        terminalMultiple={{ implied: 18.2, current: null }}
+      />,
+    )
+    const row = screen.getByTestId('football-terminal-multiple')
+    expect(row.textContent).toContain('18.2x')
+    expect(row.textContent).not.toContain('vs')
+  })
+
+  it('omits the terminal row when the DCF carries no terminal multiple', () => {
+    render(<FootballField data={KEYED_ROWS} title="FF" />)
+    expect(screen.queryByTestId('football-terminal-multiple')).toBeNull()
+  })
+})
+
 // 🔴 Surface gate #2 (render): the ONLY number the football field labels "Target"
 // is targetBand.point. When the headline is anchored ($188) the DISCARDED weighted
 // blend ($209) can still surface as a method-bar mid — but it must NEVER carry a

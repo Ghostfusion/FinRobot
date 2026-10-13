@@ -1282,6 +1282,14 @@ input[type='range']::-moz-range-thumb {
   outline-offset: -2px;
   font-weight: 700;
 }
+/* Base-case cell: the (WACC, terminal-growth) pair the DCF actually used —
+   marked so the headline cell is unambiguous (the axis labels now carry two
+   decimals precisely because the centre value no longer rounds to the base). */
+.heatmap td.base {
+  outline: 2px solid var(--accent-cyan);
+  outline-offset: -2px;
+  font-weight: 700;
+}
 
 /* Keyboard focus ring for div/article-based custom controls (Coverage cards are
    role="link" with tabIndex=0; older custom surfaces still use role="button").

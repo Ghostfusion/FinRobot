@@ -8,7 +8,7 @@ import { ReverseDcfHeadline } from './ReverseDcfHeadline'
 import { ConfidenceChip } from '../../../components/ConfidenceChip'
 import { TargetRange } from '../../../components/TargetRange'
 import { verdictLabel, verdictTone, normalizeConfidence } from '../../../utils/verdict'
-import { formatCurrency, formatDate } from '../../../utils/format'
+import { formatCurrency, formatDate, formatMonthDay } from '../../../utils/format'
 import { METHOD_LABEL } from '../../../components/charts/FootballField'
 import { useI18n } from '../../../i18n'
 import type { Locale } from '../../../i18n'
@@ -54,6 +54,12 @@ interface ChapterCoverProps {
    * the out-of-consensus clause rides the same line when the target sits entirely
    * outside the band. null only when the sell-side fetch failed / no data exists. */
   streetContext?: string | null
+  /** Whether `currentPrice` is a LIVE intraday quote (raw_data.market
+   *  .quote_is_live). Absent/false ⇒ a prior close, so every price surface on
+   *  the cover reads "Close", never the misleading "Live". */
+  quoteIsLive?: boolean
+  /** As-of date appended to the non-live "Close" stamp. */
+  quoteAsOf?: string | null
 }
 
 export function ChapterCover({
@@ -76,6 +82,8 @@ export function ChapterCover({
   methods = [],
   outlierMethods = [],
   streetContext = null,
+  quoteIsLive = false,
+  quoteAsOf = null,
 }: ChapterCoverProps): React.ReactElement {
   const { locale, t } = useI18n()
   const verdict = (thesis?.recommendation ?? '').toUpperCase()
@@ -176,6 +184,8 @@ export function ChapterCover({
             confidence={tier}
             quoteCurrency={quoteCurrency}
             anchorMethod={anchorMethod}
+            quoteIsLive={quoteIsLive}
+            quoteAsOf={quoteAsOf}
           />
         )}
       </div>
@@ -208,6 +218,8 @@ export function ChapterCover({
             high={targetHigh}
             currentPrice={currentPrice}
             quoteCurrency={quoteCurrency}
+            quoteIsLive={quoteIsLive}
+            quoteAsOf={quoteAsOf}
             locale={locale}
           />
         ) : (
@@ -353,6 +365,8 @@ function PriceTargetReadout({
   high,
   currentPrice,
   quoteCurrency,
+  quoteIsLive,
+  quoteAsOf,
   locale,
 }: {
   methods: ValuationMethodShape[]
@@ -362,10 +376,21 @@ function PriceTargetReadout({
   high: number | null
   currentPrice: number | null
   quoteCurrency: string
+  quoteIsLive: boolean
+  quoteAsOf: string | null
   locale: Locale
 }): React.ReactElement {
   const en = locale === 'en'
   const cur = (n: number): string => formatCurrency(n, quoteCurrency, locale, 0)
+  // Price-basis word: "Live" only for an intraday tick; otherwise "Close" + the
+  // as-of date. A stale close labelled "Live" was the owner-review defect.
+  const basisWord = quoteIsLive ? (en ? 'Live' : '现价') : en ? 'Close' : '收盘价'
+  const asOfSuffix =
+    !quoteIsLive && quoteAsOf
+      ? en
+        ? ` (${formatMonthDay(quoteAsOf, locale)})`
+        : `（${formatMonthDay(quoteAsOf, locale)}）`
+      : ''
   // Ascending by mid so dispersion reads left→right — a tight cluster then any
   // high outlier sits visibly at the end.
   const sorted = [...methods].sort((a, b) => a.mid - b.mid)
@@ -377,24 +402,25 @@ function PriceTargetReadout({
   let position: { text: string; tone: string } | null = null
   if (currentPrice !== null && low !== null && high !== null) {
     if (currentPrice > high) {
+      const price = `${basisWord} ${cur(currentPrice)}${asOfSuffix}`
       position = {
         text: en
-          ? `Live ${cur(currentPrice)} sits above the entire range — no margin of safety`
-          : `现价 ${cur(currentPrice)} 高于整个区间上沿,无安全边际`,
+          ? `${price} sits above the entire range — no margin of safety`
+          : `${price} 高于整个区间上沿,无安全边际`,
         tone: 'var(--danger)',
       }
     } else if (currentPrice < low) {
+      const price = `${basisWord} ${cur(currentPrice)}${asOfSuffix}`
       position = {
         text: en
-          ? `Live ${cur(currentPrice)} sits below the entire range — margin of safety`
-          : `现价 ${cur(currentPrice)} 低于整个区间下沿,有安全边际`,
+          ? `${price} sits below the entire range — margin of safety`
+          : `${price} 低于整个区间下沿,有安全边际`,
         tone: 'var(--success)',
       }
     } else {
+      const price = `${basisWord} ${cur(currentPrice)}${asOfSuffix}`
       position = {
-        text: en
-          ? `Live ${cur(currentPrice)} sits within the range`
-          : `现价 ${cur(currentPrice)} 落在区间内`,
+        text: en ? `${price} sits within the range` : `${price} 落在区间内`,
         tone: 'var(--text-muted)',
       }
     }

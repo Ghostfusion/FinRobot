@@ -41,6 +41,30 @@ export interface DcfShape {
    * marginal ratio) — NOT projected_fcf[-1]; disclosed so the terminal value
    * is reconstructible from printed inputs. Absent on legacy artifacts. */
   terminal_fcf?: number | null
+  /** Implied terminal-year EV/EBITDA (terminal value ÷ terminal EBITDA) — the
+   *  exit multiple the perpetuity embeds, compared against today's multiple.
+   *  Absent on legacy artifacts. */
+  terminal_ev_ebitda?: number | null
+  /** Terminal-year NOPAT re-investment rate (capex − D&A + ΔNWC) ÷ NOPAT — the
+   *  growth-funding assumption behind the perpetuity. Absent on legacy. */
+  terminal_reinvestment_rate?: number | null
+  /** Terminal-year NOPAT (EBIT × (1 − tax)). Absent on legacy artifacts. */
+  terminal_nopat?: number | null
+  /** Equity bridge components (EV → net debt → equity, incl. NCI) persisted so
+   *  the DCF result is reconstructible. Keyed dict, absent on legacy. */
+  equity_bridge?: Record<string, number | null> | null
+  /** Forecast-basis provenance: the explicit DCF window starts from a TTM base,
+   *  so the first labelled projection year is NOT necessarily baseFY + 1. When
+   *  present, `first_forecast_year` is the authority for the axis. Absent on
+   *  legacy artifacts → the client falls back to baseFY + 1. */
+  forecast_basis?: {
+    /** 'ttm' when the model is anchored on a trailing-twelve-month figure. */
+    base?: string | null
+    /** ISO date of the TTM base window end, or null. */
+    base_period_end?: string | null
+    /** First labelled forecast year (e.g. 2027), or null. */
+    first_forecast_year?: number | null
+  } | null
   pv_fcf_total?: number
   enterprise_value?: number
   equity_value?: number
@@ -286,6 +310,19 @@ export interface PeerCompsShape {
   positioning_narrative?: string
 }
 
+/** Distribution parameters the Monte Carlo recorded. `centered_on` / `independent`
+ *  let the chapter state — honestly — that the distribution is centred on the
+ *  base-case DCF assumptions (an assumption-sensitivity band, NOT independent
+ *  evidence). Both absent on artifacts written before the fields existed. */
+export interface MonteCarloAssumptionsShape {
+  /** What the simulated distribution is centred on, e.g. "base_case_dcf". */
+  centered_on?: string | null
+  /** False when the distribution is NOT independent evidence (the default read:
+   *  it perturbs the base-case DCF it is compared against). */
+  independent?: boolean | null
+  [key: string]: unknown
+}
+
 export interface MonteCarloShape {
   implied_prices?: number[]
   percentiles?: Record<string, number>
@@ -294,7 +331,7 @@ export interface MonteCarloShape {
   current_price_percentile?: number
   histogram_bins?: number[]
   histogram_counts?: number[]
-  assumptions_used?: Record<string, unknown>
+  assumptions_used?: MonteCarloAssumptionsShape | null
   n_valid?: number
 }
 
@@ -315,6 +352,14 @@ export interface SniperShape {
   // trade, only support/resistance. Absent on legacy artifacts (treat as LONG).
   direction?: string
   sell_mode?: boolean
+  // True when the margin-of-safety dial's entry level sat ABOVE the market, so
+  // `ideal_buy` was clamped DOWN to the current price (the "buy now" is honest:
+  // the required discount is already met). Absent on legacy artifacts → the
+  // ideal-buy cell keeps its old sub-label.
+  ideal_buy_at_market?: boolean | null
+  // The discount the market already offers (1 - current/target). Rendered beside
+  // `ideal_buy_at_market` so the clamped entry carries the achieved margin.
+  safety_margin_achieved?: number | null
   invariant_warnings?: string[]
 }
 
@@ -458,6 +503,18 @@ export interface OwnershipGovernanceShape {
   generated_at?: string
   degraded_sections?: string[]
   // ^ e.g. ["institutional_holdings"] when sec_holdings_cache is empty.
+  /** Fraction (0–1) of the issuer's institutionally-held shares the cached 13F
+   *  holder list actually covers. < 1 ⇒ the list is a partial sample, so a
+   *  client-side concentration must not be presented as the issuer's holder base.
+   *  Absent on artifacts written before the field. */
+  institutional_coverage_pct?: number | null
+  /** Total shares held across the listed institutional holders — the denominator
+   *  the concentration is measured against. Absent on legacy artifacts. */
+  institutional_shares_listed?: number | null
+  /** Non-fatal disclosure strings from the SEC ownership step (e.g. partial 13F
+   *  coverage). Reader-facing; the chapter surfaces them under the institutions
+   *  table. Absent on legacy artifacts. */
+  warnings?: string[]
   degraded_reasons?: Partial<Record<string, OwnershipDegradedReason>>
   // ^ section key (matches degraded_sections entries) → reason code.
   // UI maps reason → i18n key for accurate messaging instead of one-size-fits-all.
@@ -537,6 +594,12 @@ export interface XbrlFactShape {
   period_end?: string | null
   units?: string | null
   matched_concept?: string | null
+  /** Set when the fact must not be read as current — e.g. the derived-Q4 caveat,
+   * or staleness ("the newest reported period is X, this fact is Y"): EHC stopped
+   * tagging OperatingIncomeLoss after FY2022, so the snapshot row would otherwise
+   * present a four-year-old number as the operating income (owner review
+   * 2026-10-13). */
+  warning?: string | null
 }
 
 /** Sparse bag keyed by us-gaap concept (each key owns its fact list). */
@@ -611,8 +674,28 @@ export interface ValuationMethodShape {
   assumptions?: string | null
 }
 
+/** An INDEPENDENT cross-check on the valuation — e.g. the issuer's OWN EV/EBITDA
+ *  history applied to TTM EBITDA → an implied price range. Rendered beside the
+ *  blended methods but visually distinct: it is NOT part of the published target
+ *  blend (it never votes on the headline). `basis`/`note` are analyst prose
+ *  (verbatim) exposed as tooltips. */
+export interface CrossCheckShape {
+  name?: string | null
+  label: string
+  low: number
+  mid: number
+  high: number
+  basis?: string | null
+  note?: string | null
+}
+
 export interface ValuationSynthesisShape {
   methods: ValuationMethodShape[]
+  /** Independent cross-checks on the valuation (e.g. the issuer's own EV/EBITDA
+   *  history applied to TTM EBITDA). NOT part of the published target — the
+   *  football field renders them as distinct reference rows. Absent on legacy
+   *  artifacts. */
+  cross_checks?: CrossCheckShape[] | null
   weighted_price?: number | null
   /** The quote the whole report is anchored to — frozen at data-fetch time. */
   current_price: number

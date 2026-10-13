@@ -209,6 +209,10 @@ msgid "targetRange.legendLive"
 msgstr "Live"
 
 #. js-lingui-explicit-id
+msgid "targetRange.legendClose"
+msgstr "Close"
+
+#. js-lingui-explicit-id
 msgid "targetRange.legendTarget"
 msgstr "Target"
 
@@ -517,6 +521,14 @@ msgid "chapter.valuation.bridge.netDebt"
 msgstr "Less: Net Debt"
 
 #. js-lingui-explicit-id
+msgid "chapter.valuation.bridge.preferredStock"
+msgstr "Less: Preferred Stock"
+
+#. js-lingui-explicit-id
+msgid "chapter.valuation.bridge.nonControllingInterest"
+msgstr "Less: Non-controlling Interest"
+
+#. js-lingui-explicit-id
 msgid "chapter.valuation.bridge.equity"
 msgstr "Equity Value"
 
@@ -641,6 +653,10 @@ msgid "chart.sensitivity.legend.higher"
 msgstr "Higher implied value"
 
 #. js-lingui-explicit-id
+msgid "chart.sensitivity.baseCell"
+msgstr "Base case · WACC {wacc}% / TGR {tg}%"
+
+#. js-lingui-explicit-id
 msgid "chart.priceTrend.close"
 msgstr "Close"
 
@@ -757,12 +773,24 @@ msgid "chapter.technical.mc.sims"
 msgstr "Sims"
 
 #. js-lingui-explicit-id
+msgid "chapter.technical.mc.assumptionsNote"
+msgstr "This distribution is centred on the base-case DCF assumptions, so its P50 restates the DCF and its percentile measures assumption sensitivity within one method — it is not independent evidence."
+
+#. js-lingui-explicit-id
 msgid "chapter.technical.sniper.idealBuy"
 msgstr "Ideal Buy"
 
 #. js-lingui-explicit-id
 msgid "chapter.technical.sniper.safetyMargin"
 msgstr "safety {pct}%"
+
+#. js-lingui-explicit-id
+msgid "chapter.technical.sniper.safetyMarginAtMarket"
+msgstr "at or below this level · safety required {required}%, already achieved {achieved}%"
+
+#. js-lingui-explicit-id
+msgid "chapter.technical.sniper.safetyMarginAtMarketSolo"
+msgstr "at or below this level · required discount already met"
 
 #. js-lingui-explicit-id
 msgid "chapter.technical.sniper.secondaryBuy"
@@ -863,6 +891,22 @@ msgstr "top {n} holders"
 #. js-lingui-explicit-id
 msgid "chapter.ownership.signal.ofTotal"
 msgstr "of 13F value"
+
+#. js-lingui-explicit-id
+msgid "chapter.ownership.signal.ofListed"
+msgstr "of listed institutional shares"
+
+#. js-lingui-explicit-id
+msgid "chapter.ownership.signal.coveragePartial"
+msgstr "13F holder list is partial — it covers {pct}% of institutionally-held shares, so this concentration is measured against the listed base, not the issuer's full holder base."
+
+#. js-lingui-explicit-id
+msgid "chapter.ownership.qoq.noPriorQuarter"
+msgstr "no prior quarter cached"
+
+#. js-lingui-explicit-id
+msgid "chapter.ownership.ceoPay.unavailable"
+msgstr "not extracted from proxy"
 
 #. js-lingui-explicit-id
 msgid "chapter.ownership.heading.insiders"
@@ -2579,6 +2623,22 @@ msgstr "now"
 #. js-lingui-explicit-id
 msgid "chart.footballField.target"
 msgstr "Target"
+
+#. js-lingui-explicit-id
+msgid "chart.footballField.crossCheckTag"
+msgstr "cross-check"
+
+#. js-lingui-explicit-id
+msgid "chart.footballField.crossCheckNote"
+msgstr "Dashed reference rows are independent cross-checks (e.g. the issuer's own multiple history applied to TTM fundamentals). They are not part of the published target — shown for triangulation only."
+
+#. js-lingui-explicit-id
+msgid "chart.footballField.terminalMultiple"
+msgstr "Terminal {metric} {implied} vs {current} today"
+
+#. js-lingui-explicit-id
+msgid "chart.footballField.terminalMultipleSolo"
+msgstr "Terminal {metric} {implied}"
 
 #. js-lingui-explicit-id
 msgid "coverage.col.mcap"
