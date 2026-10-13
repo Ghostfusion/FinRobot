@@ -405,22 +405,19 @@ export const CoverageCard = memo(function CoverageCard({
         </div>
       )}
 
+      {/* Two lines: the report summary gets the full width to itself (it was
+          ellipsised away behind the status pill and the checkbox when all three
+          shared one row), and the freshness pill and the owned checkbox drop to
+          the line below. */}
       <footer className="coverage-card__footer">
-        <span
-          className={`coverage-card__status coverage-card__status--${status.tone}`}
-          title={status.title}
-        >
-          {status.text}
-        </span>
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 10,
-            minWidth: 0,
-          }}
-        >
-          <span className="coverage-card__report">{reportSummary}</span>
+        <span className="coverage-card__report">{reportSummary}</span>
+        <span className="coverage-card__footer-meta">
+          <span
+            className={`coverage-card__status coverage-card__status--${status.tone}`}
+            title={status.title}
+          >
+            {status.text}
+          </span>
           <OwnedToggle
             ticker={row.ticker}
             owned={row.owned}

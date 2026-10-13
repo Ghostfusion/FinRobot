@@ -3093,6 +3093,10 @@ msgid "coverage.sort.rating"
 msgstr "评级"
 
 #. js-lingui-explicit-id
+msgid "coverage.sort.owned"
+msgstr "持有"
+
+#. js-lingui-explicit-id
 msgid "coverage.sort.dirToggle"
 msgstr "切换排序方向"
 

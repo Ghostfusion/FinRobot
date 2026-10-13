@@ -218,3 +218,50 @@ describe('normaliseCoverageSort', () => {
     expect(normaliseCoverageSort({ dir: 'asc' })).toBeNull()
   })
 })
+
+describe('ownership sort key', () => {
+  // Deliberately NOT in name order, so a pass can only come from the comparator.
+  const rows = [
+    row({ ticker: 'ZZZ', owned: true }),
+    row({ ticker: 'AAA', owned: false }),
+    row({ ticker: 'MMM', owned: true }),
+    row({ ticker: 'BBB', owned: false }),
+  ]
+
+  it('groups owned names first, each group in ascending name order', () => {
+    // The ask behind the key: your holdings at the top, alphabetical inside.
+    expect(sortCoverageRows(rows, { key: 'owned', dir: 'desc' }).map((r) => r.ticker)).toEqual([
+      'MMM',
+      'ZZZ',
+      'AAA',
+      'BBB',
+    ])
+  })
+
+  it('flips the GROUPS on direction, never the name order inside them', () => {
+    expect(sortCoverageRows(rows, { key: 'owned', dir: 'asc' }).map((r) => r.ticker)).toEqual([
+      'AAA',
+      'BBB',
+      'MMM',
+      'ZZZ',
+    ])
+  })
+
+  it('degrades to a plain name sort when nothing is owned', () => {
+    const none = [row({ ticker: 'ZZZ' }), row({ ticker: 'AAA' }), row({ ticker: 'MMM' })]
+    expect(sortCoverageRows(none, { key: 'owned', dir: 'desc' }).map((r) => r.ticker)).toEqual([
+      'AAA',
+      'MMM',
+      'ZZZ',
+    ])
+  })
+
+  it('is a recognised key, so a persisted pick survives a reload', () => {
+    // normaliseCoverageSort rejects unknown keys and the page falls back to its
+    // default order — `owned` must not silently become one of those.
+    expect(normaliseCoverageSort({ key: 'owned', dir: 'desc' })).toEqual({
+      key: 'owned',
+      dir: 'desc',
+    })
+  })
+})

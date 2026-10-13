@@ -378,3 +378,24 @@ describe('CoverageCard delete control', () => {
     expect(dialog).not.toHaveTextContent('0 stored artifacts')
   })
 })
+
+describe('CoverageCard footer layout', () => {
+  it('gives the report summary its own row, with the status pill and owned checkbox below', () => {
+    // The three used to share one row, which ellipsised the summary away behind
+    // the pill and the checkbox ("1 reports - lat…"). The summary now owns the
+    // row; both controls drop to the row beneath it.
+    renderCard({ ticker: 'NFLX', artifact_count: 3, research_count: 3 })
+    const footer = document.querySelector('.coverage-card__footer')
+    expect(footer).not.toBeNull()
+    const summary = footer?.querySelector('.coverage-card__report')
+    const meta = footer?.querySelector('.coverage-card__footer-meta')
+    expect(summary).not.toBeNull()
+    expect(meta).not.toBeNull()
+    // Summary first, and NOT part of the secondary row.
+    expect(footer?.firstElementChild).toBe(summary)
+    expect(meta?.contains(summary as Node)).toBe(false)
+    // Both controls now live in that second row.
+    expect(meta?.querySelector('.coverage-card__status')).not.toBeNull()
+    expect(meta?.querySelector('input[type="checkbox"]')).not.toBeNull()
+  })
+})

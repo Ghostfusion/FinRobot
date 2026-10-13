@@ -41,16 +41,19 @@ const DEFAULT_SORT: CoverageSort = { key: 'needs_action', dir: 'desc' }
 // The three keys the sort box exposes (a deliberate subset of CoverageSortKey).
 // `defaultDir` is the direction a key snaps to when picked, so "rating" opens
 // best-first (BUY first) rather than inheriting the needs-attention desc.
-const SORT_SELECT_KEYS: readonly CoverageSortKey[] = ['needs_action', 'ticker', 'rating']
+const SORT_SELECT_KEYS: readonly CoverageSortKey[] = ['needs_action', 'ticker', 'rating', 'owned']
 const SORT_KEY_LABEL: Record<string, string> = {
   needs_action: 'coverage.sort.needsAction',
   ticker: 'coverage.sort.name',
   rating: 'coverage.sort.rating',
+  owned: 'coverage.sort.owned',
 }
 const SORT_DEFAULT_DIR: Partial<Record<CoverageSortKey, SortDir>> = {
   needs_action: 'desc',
   ticker: 'asc',
   rating: 'asc',
+  // desc = owned names first (see sortCoverageRows' compound branch).
+  owned: 'desc',
 }
 
 export function CoveragePage(): React.ReactElement {

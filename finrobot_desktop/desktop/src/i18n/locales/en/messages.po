@@ -3093,6 +3093,10 @@ msgid "coverage.sort.rating"
 msgstr "Rating"
 
 #. js-lingui-explicit-id
+msgid "coverage.sort.owned"
+msgstr "Ownership"
+
+#. js-lingui-explicit-id
 msgid "coverage.sort.dirToggle"
 msgstr "Toggle sort direction"
 

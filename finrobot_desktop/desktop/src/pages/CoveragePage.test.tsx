@@ -199,13 +199,14 @@ describe('CoveragePage header rail', () => {
     hooks.batch = { data: undefined, isError: false }
   })
 
-  it('renders the sort box with exactly the three surfaced keys', () => {
+  it('renders the sort box with the surfaced keys, ownership last', () => {
     renderPage()
     const select = screen.getByTestId('coverage-sort-select') as HTMLSelectElement
     expect(Array.from(select.options).map((o) => o.textContent)).toEqual([
       'Needs attention',
       'Name',
       'Rating',
+      'Ownership',
     ])
   })
 

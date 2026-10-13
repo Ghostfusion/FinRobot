@@ -1,8 +1,13 @@
 // Coverage card sorting — pure, so it unit-tests without the DOM, and the page
 // and store share one definition of "what's sortable" and "how nulls sort". The
-// page exposes a small sort box (needs-attention / name / rating + a direction
-// toggle) and persists the pick in coverageStore; the 3-key box is a deliberate
-// subset of what this core can order (see SORT_SELECT_KEYS in CoveragePage).
+// page exposes a small sort box (needs-attention / name / rating / ownership + a
+// direction toggle) and persists the pick in coverageStore; the boxed keys are a
+// deliberate subset of what this core can order (see SORT_SELECT_KEYS in
+// CoveragePage).
+//
+// `owned` is the one COMPOUND key — it orders by the flag first and then by name
+// ascending, so picking it groups your holdings at the top of the wall
+// alphabetically rather than merely ranking ticked cards above unticked ones.
 //
 // Missing values (null/undefined) always sink to the bottom regardless of
 // direction: an analyst scanning a column wants the real numbers grouped at the
@@ -25,6 +30,7 @@ export type CoverageSortKey =
   | 'pe'
   | 'artifact_count'
   | 'rating'
+  | 'owned'
 
 export type SortDir = 'asc' | 'desc'
 
@@ -49,6 +55,7 @@ const SORT_KEYS: Record<CoverageSortKey, true> = {
   pe: true,
   artifact_count: true,
   rating: true,
+  owned: true,
 }
 
 // Verdict → rank. Direction is the caller's: asc = BUY, HOLD, SELL (best first);
@@ -64,6 +71,10 @@ function sortValue(row: CoverageRow, key: CoverageSortKey): number | string | nu
   if (key === 'latest_report') return row.latest_at ? Date.parse(row.latest_at) : null
   if (key === 'rating') return RATING_RANK[(row.latest_verdict ?? '').toUpperCase()] ?? null
   if (key === 'ticker') return row.ticker
+  // `owned` is answered by sortCoverageRows' own compound comparator before the
+  // generic path, so it never arrives here — returned as a null rather than
+  // `row[key]` (a boolean) to keep this function's scalar type honest.
+  if (key === 'owned') return null
   return row[key]
 }
 
@@ -86,6 +97,21 @@ export function sortCoverageRows(rows: CoverageRow[], sort: CoverageSort | null)
   if (!sort) return rows
   const { key, dir } = sort
   const factor = dir === 'asc' ? 1 : -1
+  // The compound key: flag first, then name ASCENDING inside each group. `dir`
+  // flips the GROUPS only (desc = owned first, the direction this key is picked
+  // with) — the grouping is the point of the key, so a name-descending tail on a
+  // flipped ownership sort would be an odd thing to hand the user. Name order
+  // uses the same localeCompare the `ticker` key does, so "A→Z" means one thing
+  // everywhere on this screen.
+  if (key === 'owned') {
+    const ownedFirst = dir !== 'asc'
+    return [...rows].sort((a, b) => {
+      const rankA = a.owned ? 0 : 1
+      const rankB = b.owned ? 0 : 1
+      if (rankA !== rankB) return ownedFirst ? rankA - rankB : rankB - rankA
+      return a.ticker.localeCompare(b.ticker)
+    })
+  }
   return [...rows].sort((a, b) => {
     const av = sortValue(a, key)
     const bv = sortValue(b, key)
