@@ -108,8 +108,13 @@ class MarketData(BaseModel):
     pe_ratio: float | None = None
     price_52w_high: float | None = None
     price_52w_low: float | None = None
-    # Trailing-52-week PRICE return (NOT total return — dividends excluded), in
-    # PERCENT units (e.g. -20.5 means -20.5%). Mirrors
+    # Trailing-52-week return in PERCENT units (e.g. -20.5 means -20.5%), computed
+    # over the provider's adjusted bar basis — yfinance `auto_adjust=True`, FMP
+    # `/historical-price-eod/dividend-adjusted`, EODHD `adjusted_close` — so it is
+    # dividend-INCLUSIVE, not a bare price return. (An earlier version of this
+    # comment claimed "dividends excluded"; no arm has ever served that basis for
+    # PRICE, and the one that came closest — EODHD's raw `close` — was 10x wrong
+    # across a split, fixed 2026-10-12.) Mirrors
     # ``NormalizedPrice.trailing_1y_return_pct()`` verbatim — same bars, same
     # earliest-close-to-latest-close convention — so it agrees with the
     # price_52w_high/low above (all three derive from the SAME canonical PRICE

@@ -141,42 +141,56 @@ def _num(value: Any) -> float | None:
 
 
 def _bar(row: dict[str, Any]) -> dict[str, Any] | None:
-    """One canonical PRICE bar ({date, open, high, low, close, volume}), or None.
+    """One canonical PRICE bar ({date, open, high, low, close, volume}) on the
+    ADJUSTED basis, or None.
 
-    A row without a date or close is unusable and skipped rather than emitted
-    with fabricated placeholders. Values keep their provider form (None when
-    absent); the canonical layer coerces them.
+    ``/eod`` carries ``close`` (as traded) BESIDE ``adjusted_close``. Every other
+    provider in the chain serves ONE adjusted series — FMP's
+    ``/historical-price-eod/dividend-adjusted`` ``adjClose`` (whose mapper documents
+    itself as "the yfinance auto_adjust convention") and yfinance's
+    ``auto_adjust=True`` — so emitting the traded close here put a RAW series into
+    the canonical PRICE whenever EODHD served it, mixing bases inside a single
+    window for any issuer that split or paid a dividend. Measured live 2026-10-12 on
+    NFLX (10:1 split 2025-11-17): raw rows put the 52-week high at **1248.60**
+    against a split-adjusted 124.86 — a 10x error that fed
+    ``MarketData.price_52w_high`` and ``trailing_1y_return_pct`` (published -94.2%
+    where the adjusted series gives roughly -40%), with nothing in the run flagging
+    it because both figures derived from the same wrong bars.
+
+    ``adjusted_close`` sets the close basis and OHLC are scaled by
+    ``adjusted_close / close`` so the bar stays internally consistent (the legacy
+    FMP convention). A row without a usable adjusted column keeps its traded values
+    — the bar is still a bar, and ``_fetch_price_range``'s ``adjusted`` flag reports
+    the mixed case honestly.
     """
     date = row.get("date")
-    close = row.get("close")
+    close = _num(row.get("close"))
     if not date or close is None:
         return None
+    adjusted = _num(row.get("adjusted_close"))
+    if adjusted is None or adjusted <= 0 or close <= 0:
+        return {
+            "date": str(date)[:10],
+            "open": row.get("open"),
+            "high": row.get("high"),
+            "low": row.get("low"),
+            "close": close,
+            "volume": row.get("volume"),
+        }
+    factor = adjusted / close
+
+    def _scaled(value: Any) -> float | None:
+        num = _num(value)
+        return None if num is None else num * factor
+
     return {
         "date": str(date)[:10],
-        "open": row.get("open"),
-        "high": row.get("high"),
-        "low": row.get("low"),
-        "close": close,
+        "open": _scaled(row.get("open")),
+        "high": _scaled(row.get("high")),
+        "low": _scaled(row.get("low")),
+        "close": adjusted,
         "volume": row.get("volume"),
     }
-
-
-def _range_bar(row: dict[str, Any]) -> dict[str, Any] | None:
-    """One canonical PRICE_RANGE bar on the ADJUSTED basis, or None.
-
-    ``/eod`` carries ``close`` (as traded) beside ``adjusted_close`` (split- and
-    dividend-adjusted). Every other PRICE_RANGE arm serves a single adjusted
-    series — FMP ``adjClose``, yfinance ``auto_adjust=True`` — so a caller
-    comparing windows across providers must get the same basis here. A symbol
-    with no adjusted column keeps its raw ``close`` rather than dropping the bar.
-    """
-    bar = _bar(row)
-    if bar is None:
-        return None
-    adjusted = _num(row.get("adjusted_close"))
-    if adjusted is not None and adjusted > 0:
-        bar["close"] = adjusted
-    return bar
 
 
 def _sentiment_series(payload: Any) -> list[dict[str, Any]]:
@@ -497,9 +511,10 @@ class EODHDProvider(DataProvider):
         """Arbitrary-range OHLCV from /eod (canonical PRICE_RANGE shape).
 
         One request covers the whole window — /eod returns the full ``from..to``
-        array (the paged/``bulk`` variants are a different endpoint) — and the
-        bars are pivoted to the ADJUSTED basis (``adjusted_close``), matching FMP
-        and yfinance so a caller's multi-year series is not split-broken. Bars
+        array (the paged/``bulk`` variants are a different endpoint) — and ``_bar``
+        puts each bar on the ADJUSTED basis, matching FMP and yfinance so a
+        caller's multi-year series is not split-broken (the same mapper the PRICE
+        door uses, so the two doors can never disagree about a split again). Bars
         are oldest-first; an empty window is a ProviderError rather than a
         silently empty series.
 
@@ -526,7 +541,7 @@ class EODHDProvider(DataProvider):
         )
         raw = resp.json()
         rows = [row for row in (raw if isinstance(raw, list) else []) if isinstance(row, dict)]
-        bars = [bar for bar in (_range_bar(row) for row in rows) if bar is not None]
+        bars = [bar for bar in (_bar(row) for row in rows) if bar is not None]
         bars.sort(key=lambda b: b["date"])
         if not bars:
             raise ProviderError(f"EODHD /eod returned no bars for '{ticker}' {start}..{end}")

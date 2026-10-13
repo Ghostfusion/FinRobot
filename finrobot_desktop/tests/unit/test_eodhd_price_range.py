@@ -12,6 +12,10 @@ assertion is that ``close`` is read from ``adjusted_close``: reading the raw
 ``close`` would hand the caller an unadjusted, split-broken series while every
 other provider serves an adjusted one (FMP ``adjClose``, yfinance
 ``auto_adjust=True``).
+
+Both doors share one bar mapper, so the basis is pinned once here — a split inside
+the window must not leak a pre-split price into the series (see TestSplitBasis for
+the live 10x that motivated it).
 """
 
 from __future__ import annotations
@@ -103,6 +107,68 @@ class TestRequestShape:
         with _provider_with([]) as (provider, _):
             with pytest.raises(ProviderError, match="no bars"):
                 await _fetch(provider)
+
+
+#: One NFLX row from BEFORE its real 10:1 split (2025-11-17), as /eod returns it:
+#: the traded close sits beside the split-restated one. The factor is exactly 0.1.
+_SPLIT_ROW: dict[str, object] = {
+    "date": "2025-11-14",
+    "open": 1240.0,
+    "high": 1250.0,
+    "low": 1230.0,
+    "close": 1248.6,
+    "adjusted_close": 124.86,
+    "volume": 3_000_000,
+}
+
+
+class TestSplitBasis:
+    """A split inside the window must not leak a pre-split price into the series.
+
+    Measured live 2026-10-12 on NFLX (10:1 split 2025-11-17): reading the traded
+    ``close`` put the canonical PRICE's 52-week high at **1248.60** against a
+    split-adjusted 124.86 and published a -94.2% trailing return where the adjusted
+    series gives roughly -40%. Both figures come from the same bars, so nothing in
+    the run flagged the 10x — it reached the report header unflagged.
+    """
+
+    async def test_price_door_serves_the_adjusted_series(self) -> None:
+        rows = [
+            _SPLIT_ROW,
+            {
+                "date": "2025-11-17",
+                "open": 125.0,
+                "high": 126.0,
+                "low": 124.0,
+                "close": 125.5,
+                "adjusted_close": 125.5,
+                "volume": 9_000_000,
+            },
+        ]
+        provider = EODHDProvider("test-token")
+        response = httpx.Response(
+            200,
+            request=httpx.Request("GET", "https://eodhd.com/api/eod/NFLX"),
+            json=rows,
+        )
+        with patch.object(provider, "_get", AsyncMock(return_value=response)):
+            result = await provider.fetch("NFLX", DataType.PRICE)
+
+        closes = [bar["close"] for bar in result.data["price_history"]]
+        assert closes == [124.86, 125.5]
+        # A raw read would make the 52-week high 1248.6 — the live failure.
+        assert max(closes) < 200
+
+    async def test_split_bar_scales_ohlc_so_the_bar_stays_consistent(self) -> None:
+        with _provider_with([_SPLIT_ROW]) as (provider, _):
+            result = await _fetch(provider)
+
+        bar = result.data["bars"][0]
+        assert bar["close"] == pytest.approx(124.86)
+        assert bar["open"] == pytest.approx(124.0)
+        assert bar["high"] == pytest.approx(125.0)
+        assert bar["low"] == pytest.approx(123.0)
+        assert bar["low"] <= bar["close"] <= bar["high"]
 
 
 class TestBars:

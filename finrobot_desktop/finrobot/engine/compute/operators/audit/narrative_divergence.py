@@ -54,9 +54,11 @@ class MomentumContext:
     / ``price_52w_low`` — self-consistent, currency-invariant).
 
     Fields:
-        one_year_return_pct:        trailing-52-week PRICE return in percent
-            (dividends excluded — see ``MarketData.trailing_1y_return_pct``
-            docstring). None when the price series is too short.
+        one_year_return_pct:        trailing-52-week return in percent, on the
+            provider's adjusted bar basis (yfinance ``auto_adjust=True`` / FMP
+            ``dividend-adjusted`` / EODHD ``adjusted_close``), so it is
+            dividend-INCLUSIVE — see ``MarketData.trailing_1y_return_pct``
+            docstring. None when the price series is too short.
         range_position_52w:         ``(current - low) / (high - low)``, 0.0 =
             sitting at the 52-week low, 1.0 = sitting at the 52-week high. Can
             read slightly outside [0, 1] on a live new-high/new-low print made

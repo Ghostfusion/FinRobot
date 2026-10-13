@@ -195,6 +195,17 @@ Only steps 2, 7, 8 (plus LLM peer *selection*) involve the LLM; steps 4/5/6 igno
   `historical_metrics.years`) — **never the browser clock**. `chartAdapters.mergeDcfBaseRow`
   drops the DCF base row only when the historical series already carries that year, so the axis
   stays contiguous (last reported FY → FY+1E … FY+NE) instead of skipping the current year.
+- **One price basis:** every PRICE / PRICE_RANGE arm serves a **split- and
+  dividend-adjusted** series — yfinance `auto_adjust=True` (its own default), FMP
+  `/historical-price-eod/dividend-adjusted`, EODHD `adjusted_close` with OHLC
+  scaled by `adjusted_close / close`. A provider serving the traded close is not
+  "another valid view": NFLX's 10:1 split (2025-11-17) put the canonical PRICE's
+  52-week high at 1248.60 against a split-adjusted 124.86 and published a −94%
+  trailing return, and NOTHING flagged it because `price_52w_high` and
+  `trailing_1y_return_pct` are derived from those same bars — a self-consistent
+  wrong number passes every gate. `MarketData.trailing_1y_return_pct` is therefore
+  dividend-INCLUSIVE, not the "price return, dividends excluded" older comments
+  claimed.
 - **One-shot entrypoint teardown:** a process that builds its own `DataLayer` must shut it
   down on the **same event loop** it used — `factory.shutdown_data_layer(layer)` — never from a
   second `asyncio.run`. Every `scripts/*` tool called it; the CLI never did, so each pipeline
