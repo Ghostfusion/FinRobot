@@ -10,12 +10,15 @@ Architectural rules sealed by spec v4 §5 + 门 1 probe:
   - All edgartools calls run in ``asyncio.to_thread`` (the library is
     sync-blocking; nest-asyncio handles the loop). 门 1 实测 uvicorn
     lifespan serve 起停 10/10 通过 0 异常.
-  - Section access uses **typed attributes** (``tenk.business`` etc.) not
-    ``tenk.sections()``; edgartools 5.31 the latter is non-callable.
+  - Section access goes through ``_extract_tenk_section``: typed attributes
+    (``tenk.business`` etc.), then the ``tenk["Item 1"]`` / ``tenk.sections``
+    dict API, then a heading-based split of the filing's raw corpus. An Item
+    that is still empty is warned BY NAME — edgartools 5.31 returned ``""`` for
+    every Item with no signal when its ``document`` failed to parse.
   - 10-K/A amended filings: typed attrs return empty strings → adapter
     re-fetches ``get_filings("10-K", amendments=False)``.
   - Financial-institution MD&A may be < 1000 chars due to edgartools'
-    parser limits → adapter falls back to ``filing.text()`` so downstream
+    parser limits → adapter falls back to the full filing corpus so downstream
     BM25 (``engine/primitives/rag.py``) still has something to index.
   - 13F reverse lookup goes through the local cache
     (``sec_holdings_cache``); never scans all 13F-HR filings on a request.
@@ -33,11 +36,12 @@ Probe evidence: ``specs/research/edgartools_probe_findings_2026-05-27.md``.
 from __future__ import annotations
 
 import asyncio
+import html as html_mod
 import logging
 import math
 import re
 from datetime import date, datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Callable, cast
 
 import httpx
 
@@ -246,6 +250,35 @@ def _provider_error(msg: str, cause: BaseException) -> ProviderError:
 # downstream BM25 index isn't blank. Probe 2026-05-27 saw JPM 10-K
 # management_discussion = 396 chars (real text is ~100 pages).
 _MIN_VALID_SECTION_CHARS = 1000
+
+# Canonical SEC Item number for each narrative section (bare, lowercase-comparable
+# form — ``_split_tenk_items`` keys on the same). edgartools' ``TenK`` exposes the
+# same content three ways — the typed property (``tenk.business``), the item dict
+# (``tenk["Item 1"]``) and ``tenk.sections`` — and in some versions one works when
+# another is silently broken (edgartools 5.31's ``document`` is a
+# ``cached_property`` that swallows a parser failure, warns and returns ``None``,
+# after which every typed property raises a hidden ``AttributeError``). The label
+# lets the extractor cross-check all three and split the Item out of the corpus.
+_SECTION_ITEM_LABELS: dict[str, str] = {
+    "item_1_business": "1",
+    "item_1a_risk_factors": "1A",
+    "item_7_mdna": "7",
+    "item_10_directors_officers": "10",
+}
+
+# Body-level 10-K Item heading: ``Item 1. Business`` / ``ITEM 1A. RISK
+# FACTORS``. Requiring a capitalized title AFTER the period is what separates a
+# real section heading from a Table-of-Contents line (``  Item 1.        ...``,
+# where the title sits in a stripped column and is not on the same line) and
+# from in-prose cross references ("see Item 1A").
+_TENK_ITEM_HEADING = re.compile(
+    r"(?m)^[ \t]*ITEM[ \t]+(\d{1,2}[A-C]?)\.[ \t]*([A-Z][^\n]{0,120})",
+    re.IGNORECASE,
+)
+
+# Overall ``sections_extraction_quality`` vocabulary (rendered by the desktop
+# ChapterFilings panel): "ok" | "amended_redirected" | "fallback_to_full_text".
+# A section recovered from the raw corpus — or left empty — is NOT "ok".
 
 
 # ---------------------------------------------------------------------------
@@ -562,9 +595,13 @@ def _select_latest_fact(
     the subset (MET 31× understated). With totals ranked first (see
     ``_LATEST_REVENUE_CONCEPTS``), a same-period tie resolves to the total while a
     newer concept still wins across periods (AAPL's live revenue is ASC-606 only,
-    its ``Revenues`` froze at FY2018). Default False keeps first-match for the
-    unambiguous concepts (net income / gross profit / balance sheet) — no
-    subset/total split there, and recency-first is unvalidated for them.
+    its ``Revenues`` froze at FY2018). The annual P&L points (revenue, operating
+    income, net income, gross profit) all pass ``prefer_recent=True``: a concept
+    that stopped being tagged (EHC's ``us-gaap:OperatingIncomeLoss`` is frozen at
+    period_end 2022-12-31 while the live line moved to another tag) must not win
+    over a newer one. Default False keeps first-match for the balance-sheet
+    points (``annual=False``) where there is no subset/total split and the
+    tiered synonym lists are the intended priority.
 
     BUG-037: a fact whose ``unit`` is a non-USD currency (a 20-F foreign private
     issuer's native EUR/GBP/CHF/JPY) is rejected — edgartools applies no FX, so
@@ -798,6 +835,205 @@ def build_rag_chunks(sections: list[dict[str, Any]], filing_date: Any) -> list[d
             d["chunk_index"] = len(out)  # global, sequential, unique across sections
             out.append(d)
     return out
+
+
+def _html_to_text(html: str) -> str:
+    """Best-effort HTML→text for the full-text fallback.
+
+    Only reached when ``Filing.text()`` is unavailable, so it does not need to
+    be a parser — it strips scripts/styles, turns block-level tags into line
+    breaks (so the ``Item N.`` headings stay anchored at line start, which the
+    splitter needs) and drops the remaining tags.
+    """
+    text = re.sub(r"(?is)<(script|style)\b.*?</\1>", " ", html)
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+    text = re.sub(r"(?i)</(p|div|tr|h[1-6]|li|table|section|article)>", "\n", text)
+    text = re.sub(r"(?s)<[^>]+>", " ", text)
+    text = html_mod.unescape(text)
+    text = re.sub(r"[ \t\u00a0]+", " ", text)
+    text = re.sub(r"\n[ \t]+", "\n", text)
+    return text.strip()
+
+
+def _edgar_object_text(raw: Any) -> str:
+    """Return narrative text for a typed edgartools section value.
+
+    ``business`` / ``risk_factors`` / ``management_discussion`` are plain
+    ``str``. ``subsidiaries`` is a ``SubsidiaryList`` and ``notes`` a ``Notes``
+    object, so ``str(raw)`` would store a padded table / ``"Notes(20 notes)"``
+    repr — never the section text. Handle those explicitly via their documented
+    exporters; a value we cannot turn into text returns ``""`` (→ the caller's
+    warning) rather than a repr.
+    """
+    if isinstance(raw, str):
+        return raw
+    if raw is None:
+        return ""
+    for exporter in ("to_dataframe", "to_markdown"):
+        fn = getattr(raw, exporter, None)
+        if not callable(fn):
+            continue
+        try:
+            produced = fn()
+        except _ADAPTER_CATCH:
+            continue
+        if isinstance(produced, str):
+            if produced:
+                return produced
+            continue
+        # pandas DataFrame (subsidiaries): a tabular frame → CSV text.
+        to_csv = getattr(produced, "to_csv", None)
+        if callable(to_csv):
+            try:
+                csv_text = to_csv(index=False)
+            except _ADAPTER_CATCH:
+                continue
+            if isinstance(csv_text, str) and csv_text:
+                return csv_text
+    # ``tenk.sections[...]`` returns a ``Section`` node carrying ``.text``.
+    node_text = getattr(raw, "text", None)
+    if isinstance(node_text, str):
+        return node_text
+    return ""
+
+
+class _FullTextUnavailable(Exception):
+    """No usable full-text corpus could be read from the filing."""
+
+
+def _filing_full_text(filing: Any) -> str:
+    """Raw filing corpus via the primary document, guarded.
+
+    edgartools 5.31's ``Filing.text()`` crashed with
+    ``AttributeError: 'NoneType' object has no attribute 'download'``
+    (``primary_html_document`` is ``Optional``) and that was swallowed into a
+    warning that repaired nothing. Try ``text()``, then ``html()`` (stripped),
+    swallowing neither reason — both exceptions are returned to the caller.
+    """
+    reasons: list[str] = []
+    for method in ("text", "html"):
+        fn = getattr(filing, method, None)
+        if not callable(fn):
+            continue
+        try:
+            value = fn()
+        except _ADAPTER_CATCH as exc:
+            reasons.append(f"filing.{method}() failed: {safe_error_text(exc)}")
+            continue
+        if isinstance(value, str) and value.strip():
+            return _html_to_text(value) if method == "html" else value
+        reasons.append(f"filing.{method}() returned no text")
+    if reasons:
+        raise _FullTextUnavailable("; ".join(reasons))
+    return ""
+
+
+def _split_tenk_items(full_text: str) -> dict[str, str]:
+    """Slice a 10-K corpus into ``{item_label: text}`` by body Item headings.
+
+    A 10-K mentions every Item twice — once in the Table of Contents, once as
+    the real section — so for each label keep the LONGEST slice (the body, which
+    always spans more characters than its TOC line).
+    """
+    if not full_text:
+        return {}
+    matches = list(_TENK_ITEM_HEADING.finditer(full_text))
+    out: dict[str, str] = {}
+    for i, match in enumerate(matches):
+        label = match.group(1).lower()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(full_text)
+        text = full_text[match.start() : end]
+        if len(text) > len(out.get(label, "")):
+            out[label] = text
+    return out
+
+
+def _section_candidates(
+    tenk: Any,
+    attr_name: str,
+    item_label: str | None,
+    attempts: list[str],
+) -> list[tuple[str, str]]:
+    """Collect ``(text, provenance)`` for one section from the structured API.
+
+    Tries the typed attribute, then the canonical label via ``tenk[label]`` and
+    ``tenk.sections[label]``. Unlike the old ``getattr(tenk, attr, "")`` this
+    NEVER hides the failure: an ``AttributeError`` raised *inside* the property
+    (edgartools 5.31 when ``tenk.document`` is ``None``) is recorded on
+    ``attempts`` instead of being silently converted to ``""``.
+    """
+    candidates: list[tuple[str, str]] = []
+    raw: Any = None
+    try:
+        raw = getattr(tenk, attr_name)
+    except AttributeError as exc:
+        attempts.append(f"typed attribute {attr_name!r} raised {type(exc).__name__}: {exc}")
+    except _ADAPTER_CATCH as exc:
+        attempts.append(f"typed attribute {attr_name!r} raised {type(exc).__name__}: {exc}")
+    if raw is not None:
+        text = _edgar_object_text(raw)
+        if text:
+            # Typed attribute is the highest-priority source; nothing can beat
+            # it, so don't pay for the dict API.
+            return [(text, "edgartools_attribute")]
+        attempts.append(f"typed attribute {attr_name!r} yielded no text")
+
+    if item_label:
+        # edgartools' dict / ``sections`` API keys on the human label ("Item 1").
+        dict_label = f"Item {item_label}"
+        node: Any = None
+        try:
+            node = tenk[dict_label]
+        except (KeyError, IndexError):
+            attempts.append(f"tenk[{dict_label!r}] not found")
+        except _ADAPTER_CATCH as exc:
+            attempts.append(f"tenk[{dict_label!r}] raised {type(exc).__name__}: {exc}")
+        if node is None:
+            sections_obj = getattr(tenk, "sections", None)
+            if sections_obj is not None:
+                try:
+                    node = sections_obj[dict_label]
+                except (KeyError, IndexError):
+                    attempts.append(f"tenk.sections[{dict_label!r}] not found")
+                except _ADAPTER_CATCH as exc:
+                    attempts.append(
+                        f"tenk.sections[{dict_label!r}] raised {type(exc).__name__}: {exc}"
+                    )
+        if node is not None:
+            text = _edgar_object_text(node)
+            if text:
+                candidates.append((text, "edgartools_item_lookup"))
+    return candidates
+
+
+def _extract_tenk_section(
+    tenk: Any,
+    attr_name: str,
+    item_label: str | None,
+    split_provider: Callable[[], dict[str, str]],
+) -> tuple[str, str, list[str]]:
+    """Return ``(text, extracted_via, attempts)`` for one 10-K section.
+
+    Tries the structured API first (typed attribute, then canonical label) and
+    returns the first non-empty text. Only when that yields NOTHING does it pay
+    for the raw filing corpus (``split_provider`` — lazy, memoised by the
+    caller) and slice the Item out by its heading. ``extracted_via`` names the
+    source that actually won, so a section recovered from the raw corpus is
+    never mislabelled ``edgartools_attribute``.
+    """
+    attempts: list[str] = []
+    candidates = _section_candidates(tenk, attr_name, item_label, attempts)
+    if candidates:
+        return candidates[0][0], candidates[0][1], attempts
+
+    if item_label:
+        split_items = split_provider()
+        split_text = split_items.get(item_label.lower(), "")
+        if split_text:
+            return split_text, "full_text_item_split", attempts
+        attempts.append(f"full-text Item split found no 'Item {item_label}' heading")
+
+    return "", "", attempts
 
 
 def _issuer_token(value: str | None) -> str:
@@ -1780,51 +2016,86 @@ class EdgarToolsProvider(DataProvider):
                 warnings.append("no non-amended 10-K available; section quality may degrade")
 
         tenk = filing.obj()
+
+        # Lazy, memoised raw-corpus loader. Fetching the filing's primary
+        # document costs a network round-trip + parse, so it is only pulled
+        # when the structured API actually leaves something empty (or when the
+        # MD&A repair below needs it). ``corpus_error`` keeps the REAL reason a
+        # failed read was unusable (edgartools 5.31: "'NoneType' object has no
+        # attribute 'download'") instead of letting it vanish.
+        corpus: dict[str, Any] = {}
+        corpus_error: dict[str, str] = {}
+
+        def _load_corpus() -> dict[str, str]:
+            if "split" not in corpus:
+                try:
+                    text = _filing_full_text(filing)
+                except _FullTextUnavailable as exc:
+                    text = ""
+                    corpus_error["msg"] = safe_error_text(exc)
+                corpus["text"] = text
+                corpus["split"] = _split_tenk_items(text)
+            return cast("dict[str, str]", corpus["split"])
+
         sections: list[dict[str, Any]] = []
         items: dict[str, str] = {}
         for canonical_id, attr_name, display_title in self._SECTION_ATTRS:
-            raw = getattr(tenk, attr_name, "") or ""
-            text = str(raw)
+            item_label = _SECTION_ITEM_LABELS.get(canonical_id)
+            text, extracted_via, attempts = _extract_tenk_section(
+                tenk, attr_name, item_label, _load_corpus
+            )
+            if not text.strip():
+                if corpus_error.get("msg"):
+                    attempts.append(f"raw filing corpus unavailable: {corpus_error['msg']}")
+                warnings.append(
+                    f"10-K section {display_title!r} ({canonical_id}) extracted 0 chars; "
+                    f"attempts: {'; '.join(attempts) or 'none'}"
+                )
             sections.append(
                 {
                     "canonical_id": canonical_id,
                     "title": display_title,
                     "text": text,
                     "char_count": len(text),
-                    "extracted_via": "edgartools_attribute",
+                    "extracted_via": extracted_via or "unavailable",
                 }
             )
             items[canonical_id] = text
 
-        # Fallback: financial institutions (JPM probe) parsing comes up short.
+        # Legacy repair for the section downstream BM25 leans on most: a
+        # genuinely short MD&A (financial-institution parser limits — the JPM
+        # probe saw 396 chars) is replaced by the whole corpus so run_qa still
+        # has something to index. Other Items are never padded like this; the
+        # per-Item split above already recovers each from its own heading.
         mdna = items.get("item_7_mdna", "")
-        if not mdna or len(mdna) < _MIN_VALID_SECTION_CHARS:
+        if len(mdna) < _MIN_VALID_SECTION_CHARS:
             warnings.append(
                 f"management_discussion too short ({len(mdna)} chars); "
-                "falling back to filing.text() full corpus for BM25 indexing"
+                "falling back to full filing corpus for BM25 indexing"
             )
-            sections_extraction_quality = "fallback_to_full_text"
-            try:
-                full_text = filing.text() or ""
-            except _ADAPTER_CATCH as e:
-                # ``safe_error_text`` is the sanitized home for this: it strips any
-                # URL (the reason this used to be type-name only — the raw str()
-                # embeds the SEC URL and this line rides to the report) while
-                # keeping the part a reader needs. "filing.text() also failed:
-                # AttributeError" told an analyst nothing about WHY the corpus came
-                # back empty; live 2026-10-12 on NFLX the real message was
-                # "'NoneType' object has no attribute 'download'".
-                warnings.append(f"filing.text() also failed: {safe_error_text(e)}")
-                full_text = ""
+            _load_corpus()
+            full_text = corpus.get("text", "")
             if full_text:
                 items["item_7_mdna"] = full_text
-                # Replace the empty section text so downstream renderers /
-                # RAG see something coherent.
+                # Replace the section text so downstream renderers / RAG see
+                # something coherent.
                 for s in sections:
                     if s["canonical_id"] == "item_7_mdna":
                         s["text"] = full_text
                         s["char_count"] = len(full_text)
                         s["extracted_via"] = "filing_text_fallback"
+                sections_extraction_quality = "fallback_to_full_text"
+            elif corpus_error.get("msg"):
+                warnings.append(f"full filing text unavailable: {corpus_error['msg']}")
+
+        # Truthful overall quality flag. ``amended_redirected`` describes WHICH
+        # filing was read, so it stays sticky; otherwise a section recovered
+        # from the raw corpus — or left empty — makes the payload NOT "ok".
+        if sections_extraction_quality != "amended_redirected" and (
+            any(s["extracted_via"] == "full_text_item_split" for s in sections)
+            or any(not s["text"].strip() for s in sections)
+        ):
+            sections_extraction_quality = "fallback_to_full_text"
 
         data: dict[str, Any] = {
             "company_name": getattr(c, "name", None),
@@ -2048,13 +2319,25 @@ class EdgarToolsProvider(DataProvider):
                 facts, _LATEST_REVENUE_CONCEPTS, annual=True, prefer_recent=True, warnings=warnings
             ),
             "latest_net_income": _select_latest_fact(
-                facts, _LATEST_NET_INCOME_CONCEPTS, annual=True, warnings=warnings
+                facts,
+                _LATEST_NET_INCOME_CONCEPTS,
+                annual=True,
+                prefer_recent=True,
+                warnings=warnings,
             ),
             "latest_gross_profit": _select_latest_fact(
-                facts, _LATEST_GROSS_PROFIT_CONCEPTS, annual=True, warnings=warnings
+                facts,
+                _LATEST_GROSS_PROFIT_CONCEPTS,
+                annual=True,
+                prefer_recent=True,
+                warnings=warnings,
             ),
             "latest_operating_income": _select_latest_fact(
-                facts, _LATEST_OPERATING_INCOME_CONCEPTS, annual=True, warnings=warnings
+                facts,
+                _LATEST_OPERATING_INCOME_CONCEPTS,
+                annual=True,
+                prefer_recent=True,
+                warnings=warnings,
             ),
             "latest_total_assets": _select_latest_fact(
                 facts, _LATEST_TOTAL_ASSETS_CONCEPTS, annual=False, warnings=warnings

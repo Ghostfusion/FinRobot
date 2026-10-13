@@ -40,7 +40,7 @@ dependencies = [
     "numpy>=1.26",
     "jinja2>=3.1",
     "rank-bm25>=0.2.2",
-    "edgartools>=5.31.5",
+    "edgartools>=5.62.0",
     "ddgs>=9.14.4",
 ]
 
@@ -117,10 +117,19 @@ module = [
     "rank_bm25.*",
     "aiosqlite.*",
     "backtrader.*",
-    "edgar.*",        # edgartools 5.31 ships without py.typed
+    "edgar.*",        # edgartools ships without usable type hints (see below)
     "nest_asyncio",   # transitive via edgartools
 ]
 ignore_missing_imports = true
+
+# edgartools 5.62 added a py.typed marker but its internals are un-annotated, so
+# mypy (strict) now descends into them and reports ~20 errors in the adapter's
+# own defensive import-fallback assignments (lines 66-74) plus the typed
+# ``EntityFilings`` union on ``get_filings(...).latest()``. ``skip`` keeps the
+# pre-5.62 "treat edgar as Any" behaviour, scoped to edgar only.
+[[tool.mypy.overrides]]
+module = ["edgar.*"]
+follow_imports = "skip"
 
 # backtrader exposes Strategy as Any, so any subclass triggers
 # "Class cannot subclass Strategy (has type Any)" in --strict.

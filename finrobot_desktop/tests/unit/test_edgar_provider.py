@@ -2148,3 +2148,276 @@ class TestBuildSecYearlyFinancials:
         from finrobot.engine.data.providers.edgar_provider import _build_sec_yearly_financials
 
         assert _build_sec_yearly_financials({"facts": {"us-gaap": {}}}, 10) == []
+
+
+# ---------------------------------------------------------------------------
+# _fetch_10k extraction hardening (EHC 10-K review, 2026-10-13)
+# ---------------------------------------------------------------------------
+#
+# The owner's EHC report shipped four 10-K Items (1 / 1A / 7 / 10) at
+# ``char_count=0`` labelled ``extracted_via="edgartools_attribute"`` with NO
+# warning (only MD&A was guarded), and the ``filing.text()`` fallback died with
+# ``AttributeError: 'NoneType' object has no attribute 'download'``. These tests
+# pin the three defences added to ``_fetch_10k``:
+#   - an empty Item can never ship silently (per-Item warning + honest quality),
+#   - an Item the structured API cannot serve is split out of the filing corpus,
+#   - ``tenk.document is None`` (5.31) surfaces the real AttributeError.
+
+
+def _stub_tenk_empty_attrs() -> MagicMock:
+    """A TenK stub whose typed properties are all empty (parser came up short).
+
+    Mirrors what edgartools 5.31 shipped for EHC. ``MagicMock``'s ``__getitem__``
+    / ``sections`` return non-strings, so the structured API genuinely yields
+    nothing and the full-text split must take over.
+    """
+    tenk = MagicMock()
+    for attr in (
+        "business",
+        "risk_factors",
+        "management_discussion",
+        "directors_officers_and_governance",
+        "subsidiaries",
+        "notes",
+    ):
+        setattr(tenk, attr, "")
+    return tenk
+
+
+# A TOC block AND the real body sections, so the splitter must prefer the body.
+_FULL_TEXT_FIXTURE = (
+    "TABLE OF CONTENTS\n"
+    "  Item 1.                                        Business          4\n"
+    "  Item 1A.                                       Risk Factors      9\n"
+    "  Item 7.                                        MD&A              15\n"
+    "  Item 10.                                       Directors         20\n"
+    "\n"
+    "Item 1. Business\n"
+    + ("Encompass business narrative. " * 200)
+    + "\nItem 1A. Risk Factors\n"
+    + ("Risk factor narrative. " * 200)
+    + "\nItem 7. Management's Discussion and Analysis\n"
+    + ("MD&A narrative. " * 200)
+    + "\nItem 10. Directors and Executive Officers\n"
+    + ("Governance narrative. " * 60)
+    + "\nItem 11. Executive Compensation\n"
+    + ("Comp narrative. " * 20)
+)
+
+
+class _DocumentNoneTenK:
+    """edgartools 5.31 when ``tenk.document`` is ``None``.
+
+    Every typed property raises ``AttributeError`` internally; the old
+    ``getattr(tenk, attr, "")`` converted that to a silent ``""``.
+    """
+
+    document = None
+
+    def __getattr__(self, name: str) -> Any:
+        raise AttributeError("'NoneType' object has no attribute 'sections'")
+
+    def __getitem__(self, key: str) -> Any:
+        raise AttributeError("sections unavailable")
+
+    @property
+    def sections(self) -> Any:
+        raise AttributeError("sections unavailable")
+
+
+@pytest.mark.asyncio
+async def test_fetch_10k_empty_item_emits_named_warning() -> None:
+    """An Item that stays empty must be named in a warning, never shipped as
+    ``extracted_via="edgartools_attribute"`` with 0 chars and no signal."""
+    p = EdgarToolsProvider("Jane Doe jane@example.com")
+    filing = MagicMock()
+    filing.form = "10-K"
+    filing.accession_no = "0000785161-26-000001"
+    filing.filing_date = date(2026, 2, 20)
+    filing.homepage_url = None
+    filing.obj.return_value = _stub_tenk_empty_attrs()
+    filing.text.return_value = ""
+    filing.html.return_value = ""
+    c = MagicMock()
+    c.name = "Encompass Health"
+    c.cik = 785161
+    c.latest.return_value = filing
+
+    data, warnings = p._fetch_10k(c, want_rag=False)
+
+    warn = next(w for w in warnings if "item_1_business" in w and "0 chars" in w)
+    assert "Item 1 — Business" in warn
+    assert "raw filing corpus unavailable" in warn
+    section = next(s for s in data["sections"] if s["canonical_id"] == "item_1_business")
+    assert section["char_count"] == 0
+    assert section["extracted_via"] != "edgartools_attribute"
+    # NOT "ok": an empty section can never masquerade as a clean extraction.
+    assert data["sections_extraction_quality"] == "fallback_to_full_text"
+
+
+@pytest.mark.asyncio
+async def test_fetch_10k_full_text_item_split_rescues_empty_items() -> None:
+    """When the structured API yields nothing, each Item is split out of the
+    filing corpus by its heading — the EHC 5.31 recovery path — and the
+    provenance names the split, not ``edgartools_attribute``."""
+    p = EdgarToolsProvider("Jane Doe jane@example.com")
+    filing = MagicMock()
+    filing.form = "10-K"
+    filing.accession_no = "0000785161-26-000001"
+    filing.filing_date = date(2026, 2, 20)
+    filing.homepage_url = None
+    filing.obj.return_value = _stub_tenk_empty_attrs()
+    filing.text.return_value = _FULL_TEXT_FIXTURE
+    c = MagicMock()
+    c.name = "Encompass Health"
+    c.cik = 785161
+    c.latest.return_value = filing
+
+    data, warnings = p._fetch_10k(c, want_rag=False)
+
+    items = data["items"]
+    assert items["item_1_business"].startswith("Item 1. Business")
+    assert "Encompass business narrative" in items["item_1_business"]
+    assert items["item_1a_risk_factors"].startswith("Item 1A. Risk Factors")
+    assert items["item_7_mdna"].startswith("Item 7.")
+    assert items["item_10_directors_officers"].startswith("Item 10.")
+    by_id = {s["canonical_id"]: s for s in data["sections"]}
+    assert by_id["item_1_business"]["extracted_via"] == "full_text_item_split"
+    assert by_id["item_7_mdna"]["extracted_via"] == "full_text_item_split"
+    assert data["sections_extraction_quality"] == "fallback_to_full_text"
+    # The four narrative Items were recovered; no silence.
+    assert warnings == [] or all("0 chars" not in w for w in warnings if "item_1_" in w)
+
+
+@pytest.mark.asyncio
+async def test_fetch_10k_document_none_is_not_silently_swallowed() -> None:
+    """``tenk.document is None`` raises AttributeError inside every typed
+    property; that reason must reach the operator, not vanish into ``""``."""
+    p = EdgarToolsProvider("Jane Doe jane@example.com")
+    filing = MagicMock()
+    filing.form = "10-K"
+    filing.accession_no = "0000785161-26-000001"
+    filing.filing_date = date(2026, 2, 20)
+    filing.homepage_url = None
+    filing.obj.return_value = _DocumentNoneTenK()
+    filing.text.side_effect = AttributeError("'NoneType' object has no attribute 'download'")
+    filing.html.side_effect = AttributeError("'NoneType' object has no attribute 'download'")
+    c = MagicMock()
+    c.name = "Encompass Health"
+    c.cik = 785161
+    c.latest.return_value = filing
+
+    data, warnings = p._fetch_10k(c, want_rag=False)
+
+    warn = next(w for w in warnings if "item_1_business" in w)
+    assert "AttributeError" in warn
+    assert "NoneType" in warn
+    assert "download" in warn  # the real filing.text() failure is named
+    section = next(s for s in data["sections"] if s["canonical_id"] == "item_1_business")
+    assert section["text"] == ""
+    assert section["extracted_via"] != "edgartools_attribute"
+
+
+def test_split_tenk_items_prefers_body_over_toc_line() -> None:
+    from finrobot.engine.data.providers.edgar_provider import _split_tenk_items
+
+    items = _split_tenk_items(_FULL_TEXT_FIXTURE)
+    assert items["1"].startswith("Item 1. Business")
+    assert "Encompass business narrative" in items["1"]
+    assert "Business          4" not in items["1"]  # TOC row rejected
+    assert items["10"].startswith("Item 10.")
+    assert "Governance narrative" in items["10"]
+    assert "Comp narrative" not in items["10"]  # Item 11's body is not included
+    assert "7a" not in items  # no Item 7A heading in the fixture
+
+
+def test_edgar_object_text_handles_subsidiaries_and_notes_not_repr() -> None:
+    from finrobot.engine.data.providers.edgar_provider import _edgar_object_text
+
+    class _DataFrame:
+        def to_csv(self, index: bool = False) -> str:
+            return "Name,Jurisdiction\nAnMed Encompass,SC\n"
+
+    class _FakeSubsidiaries:
+        def to_dataframe(self) -> _DataFrame:
+            return _DataFrame()
+
+    class _FakeNotes:
+        def to_markdown(self) -> str:
+            return "Note 1 — Significant Accounting Policies.\n"
+
+    class _Opaque:
+        def __repr__(self) -> str:  # a repr that MUST NOT be stored
+            return "<Opaque object>"
+
+    assert _edgar_object_text("plain text") == "plain text"
+    assert "Name,Jurisdiction" in _edgar_object_text(_FakeSubsidiaries())
+    assert _edgar_object_text(_FakeNotes()).startswith("Note 1")
+    # No string exporter → empty, never the repr.
+    assert _edgar_object_text(_Opaque()) == ""
+
+
+def test_html_to_text_anchors_item_headings() -> None:
+    from finrobot.engine.data.providers.edgar_provider import _html_to_text
+
+    out = _html_to_text(
+        "<html><body><p>Item 1. Business</p><p>Hello &amp; world</p>"
+        "<script>x()</script></body></html>"
+    )
+    assert "Item 1. Business" in out
+    assert "Hello & world" in out
+    assert "<" not in out and "x()" not in out
+
+
+def test_select_latest_fact_annual_pl_prefers_recent() -> None:
+    """The EHC operating-income freeze: with ``prefer_recent`` the annual P&L
+    point follows the live concept's newer period instead of latching the first
+    (frozen) one, and the selected period_end stays auditable."""
+    from finrobot.engine.data.providers.edgar_provider import (
+        _LATEST_OPERATING_INCOME_CONCEPTS,
+        _select_latest_fact,
+    )
+
+    facts = _FakeLatestFacts(
+        annual={
+            "us-gaap:OperatingIncomeLoss": _FakeFinancialFact(
+                "us-gaap:OperatingIncomeLoss", 539_500_000, date(2022, 12, 31)
+            ),
+            "us-gaap:OperatingIncome": _FakeFinancialFact(
+                "us-gaap:OperatingIncome", 900_000_000, date(2025, 12, 31)
+            ),
+        }
+    )
+    frozen = _select_latest_fact(facts, _LATEST_OPERATING_INCOME_CONCEPTS, annual=True)
+    live = _select_latest_fact(
+        facts, _LATEST_OPERATING_INCOME_CONCEPTS, annual=True, prefer_recent=True
+    )
+    assert frozen is not None and frozen["period_end"] == date(2022, 12, 31)
+    assert live is not None
+    assert live["period_end"] == date(2025, 12, 31)
+    assert live["value"] == 900_000_000
+    assert live["concept"] == "us-gaap:OperatingIncome"
+
+
+@pytest.mark.asyncio
+async def test_fetch_xbrl_operating_income_prefers_recent_period() -> None:
+    """``_fetch_xbrl`` wires ``prefer_recent=True`` into every annual P&L point
+    (revenue / operating income / net income / gross profit)."""
+    p = EdgarToolsProvider("Jane Doe jane@example.com")
+    facts = _FakeLatestFacts(
+        annual={
+            "us-gaap:OperatingIncomeLoss": _FakeFinancialFact(
+                "us-gaap:OperatingIncomeLoss", 539_500_000, date(2022, 12, 31)
+            ),
+            "us-gaap:OperatingIncome": _FakeFinancialFact(
+                "us-gaap:OperatingIncome", 900_000_000, date(2025, 12, 31)
+            ),
+        }
+    )
+    c = MagicMock()
+    c.get_facts.return_value = facts
+
+    data, _ = p._fetch_xbrl(c)
+
+    assert data["latest_operating_income"]["value"] == 900_000_000
+    assert data["latest_operating_income"]["period_end"] == date(2025, 12, 31)
