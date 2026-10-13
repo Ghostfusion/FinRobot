@@ -195,6 +195,24 @@ Only steps 2, 7, 8 (plus LLM peer *selection*) involve the LLM; steps 4/5/6 igno
   `historical_metrics.years`) — **never the browser clock**. `chartAdapters.mergeDcfBaseRow`
   drops the DCF base row only when the historical series already carries that year, so the axis
   stays contiguous (last reported FY → FY+1E … FY+NE) instead of skipping the current year.
+- **One-shot entrypoint teardown:** a process that builds its own `DataLayer` must shut it
+  down on the **same event loop** it used — `factory.shutdown_data_layer(layer)` — never from a
+  second `asyncio.run`. Every `scripts/*` tool called it; the CLI never did, so each pipeline
+  command printed its whole report and then never returned (`finrobot fund IEI` alive minutes
+  later, exit 124 under `timeout`). `cli._run_with_teardown` now wraps every pipeline command
+  (and `backtest` calls the helper instead of a bare `data_layer.close()`, which left the
+  quote-batch singleton open). The server is unaffected — its FastAPI lifespan owns teardown.
+- **Provider capability declaration:** a `DataType` is served only where the provider declares
+  it (`_SUPPORTED_TYPES` / `capabilities()`), and `categories._TYPE_CATEGORY` maps it to a
+  chain. An undeclared type is a SILENT gap, not a vendor limitation: EODHD's `/eod` accepted
+  `from`/`to` all along, but with `PRICE_RANGE` undeclared every multi-year series logged "not
+  supported by EODHD" and fell through to yfinance.
+- **Plan gate is not ill-health:** a 403 that names the subscription is typed
+  `ProviderPlanError` — logged at INFO as "plan-gated (no breaker charge)", never charged to
+  the circuit breaker, classified `plan` (not `error`) by the settings probe, and skipped by
+  the chain. EODHD's Fundamentals feed is gated on the current plan (403 on every symbol, AAPL
+  included) while its fund-profile arm is implemented and unit-tested — upgrading the plan
+  needs no code change.
 - **Instrument routing:** `engine/data/instrument.py` is the ONE place that maps a
   provider's own `quote_type` (Yahoo `EQUITY`/`ETF`/`MUTUALFUND`, EODHD
   `Common Stock`/`ETF`/`FUND`) onto the internal vocabulary. A fund goes to the
@@ -211,6 +229,14 @@ Only steps 2, 7, 8 (plus LLM peer *selection*) involve the LLM; steps 4/5/6 igno
   pinned by probe evidence in the provider arm. A fund has no revenue, EBITDA,
   FCF or enterprise value — DCF/EV/multiples/LBO are undefined for it, which is
   why it gets its own pipeline rather than a branch inside the equity one.
+- **Fund NAV series:** the metrics are computed from the `PRICE_RANGE` door over
+  **six** calendar years (chain `core_stock_apis` = eodhd → moomoo → fmp →
+  yfinance), with the canonical ~1y `PRICE` as an honest, warned fallback. A
+  window of N years needs `N*252+1` points, so the trailing PRICE cannot span the
+  1y/3y/5y CAGRs or a multi-year drawdown (IEI: 251 bars against a 5y window);
+  the window anchors are calendar-based, because a window of exactly N years can
+  never measure an N-year CAGR (a 6-year fetch returns 4.988 years at the 5-year
+  boundary once you count holidays).
 
 **Implicit (follow the pattern):**
 

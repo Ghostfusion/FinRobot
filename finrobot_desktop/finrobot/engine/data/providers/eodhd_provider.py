@@ -44,6 +44,11 @@ _PRICE_HISTORY_DAYS = 372
 _QUOTE_WINDOW_DAYS = 10
 _NEWS_LIMIT = 50
 
+#: Canonical PRICE_RANGE interval → EODHD ``period`` code. ``/eod`` serves only
+#: these three grains, so an unlisted interval is refused instead of silently
+#: answered at daily resolution (which would mislabel a weekly series as daily).
+_PERIOD_BY_INTERVAL = {"1d": "d", "1wk": "w", "1mo": "m"}
+
 # Body substrings that mark an HTTP 403 as a plan/entitlement gate (the key is
 # valid, the subscription does not include the endpoint). Key-free by
 # construction; the request URL (which carries ``api_token``) is never read.
@@ -60,6 +65,13 @@ _CATEGORIES: list[str | DataType | Category] = [
 
 _SUPPORTED_TYPES: tuple[DataType, ...] = (
     DataType.PRICE,
+    # Arbitrary-range OHLCV from the SAME /eod endpoint (caller-chosen window).
+    # Added 2026-10-12: the fund pipeline's 6-year NAV series and the backtest
+    # engine both need far more than PRICE's trailing ~1y, and while this was
+    # undeclared every such fetch logged "not supported by EODHD" and fell
+    # through to yfinance — even though /eod accepts from/to and has always
+    # served the venue's whole history.
+    DataType.PRICE_RANGE,
     DataType.QUOTE,
     DataType.NEWS,
     DataType.SENTIMENT,
@@ -147,6 +159,24 @@ def _bar(row: dict[str, Any]) -> dict[str, Any] | None:
         "close": close,
         "volume": row.get("volume"),
     }
+
+
+def _range_bar(row: dict[str, Any]) -> dict[str, Any] | None:
+    """One canonical PRICE_RANGE bar on the ADJUSTED basis, or None.
+
+    ``/eod`` carries ``close`` (as traded) beside ``adjusted_close`` (split- and
+    dividend-adjusted). Every other PRICE_RANGE arm serves a single adjusted
+    series — FMP ``adjClose``, yfinance ``auto_adjust=True`` — so a caller
+    comparing windows across providers must get the same basis here. A symbol
+    with no adjusted column keeps its raw ``close`` rather than dropping the bar.
+    """
+    bar = _bar(row)
+    if bar is None:
+        return None
+    adjusted = _num(row.get("adjusted_close"))
+    if adjusted is not None and adjusted > 0:
+        bar["close"] = adjusted
+    return bar
 
 
 def _sentiment_series(payload: Any) -> list[dict[str, Any]]:
@@ -371,6 +401,13 @@ class EODHDProvider(DataProvider):
                 return await self._fetch_price(ticker, quote_only=False)
             if data_type == DataType.QUOTE:
                 return await self._fetch_price(ticker, quote_only=True)
+            if data_type == DataType.PRICE_RANGE:
+                return await self._fetch_price_range(
+                    ticker,
+                    start=kwargs["start"],
+                    end=kwargs["end"],
+                    interval=kwargs.get("interval", "1d"),
+                )
             if data_type == DataType.NEWS:
                 return await self._fetch_news(ticker)
             if data_type == DataType.SENTIMENT:
@@ -452,6 +489,60 @@ class EODHDProvider(DataProvider):
             ticker=ticker,
             data_type=DataType.PRICE,
             timestamp=timestamp,
+        )
+
+    async def _fetch_price_range(
+        self, ticker: str, *, start: str, end: str, interval: str = "1d"
+    ) -> DataResult:
+        """Arbitrary-range OHLCV from /eod (canonical PRICE_RANGE shape).
+
+        One request covers the whole window — /eod returns the full ``from..to``
+        array (the paged/``bulk`` variants are a different endpoint) — and the
+        bars are pivoted to the ADJUSTED basis (``adjusted_close``), matching FMP
+        and yfinance so a caller's multi-year series is not split-broken. Bars
+        are oldest-first; an empty window is a ProviderError rather than a
+        silently empty series.
+
+        The vendor emits a row for the CURRENT day (a partial session, or the last
+        print on a market holiday) where Yahoo stops at the last completed
+        session. Measured 2026-10-12 on IEI over one 6-year window: 1507 bars vs
+        Yahoo's 1506, agreeing to ~0.02% on the robust aggregates (vol 4.487% vs
+        4.489%, max drawdown 14.254% vs 14.256%, Sharpe -0.0497 vs -0.0495) while
+        the calendar-anchored window CAGRs moved up to ~0.5pp on the 1y (a
+        duration-3.5 bond fund, so one session is worth real money there). The row
+        is kept — it is a real current price, the same convention yfinance itself
+        uses intraday — but a cross-provider comparison of window returns must not
+        assume byte-identical sessions.
+        """
+        period = _PERIOD_BY_INTERVAL.get(interval)
+        if period is None:
+            raise ProviderError(
+                f"EODHD price_range supports intervals {sorted(_PERIOD_BY_INTERVAL)}, "
+                f"got {interval!r}"
+            )
+        resp = await self._get(
+            f"/eod/{ticker}",
+            params={"from": start, "to": end, "period": period, "fmt": "json"},
+        )
+        raw = resp.json()
+        rows = [row for row in (raw if isinstance(raw, list) else []) if isinstance(row, dict)]
+        bars = [bar for bar in (_range_bar(row) for row in rows) if bar is not None]
+        bars.sort(key=lambda b: b["date"])
+        if not bars:
+            raise ProviderError(f"EODHD /eod returned no bars for '{ticker}' {start}..{end}")
+        return DataResult(
+            data={
+                "ticker": ticker.upper(),
+                "interval": interval,
+                "bars": bars,
+                "adjusted": bool(rows)
+                and all(_num(row.get("adjusted_close")) is not None for row in rows),
+                "source_provider": self.name,
+            },
+            provider=self.name,
+            ticker=ticker,
+            data_type=DataType.PRICE_RANGE,
+            timestamp=datetime.now(tz=timezone.utc),
         )
 
     async def _fetch_news(self, ticker: str) -> DataResult:

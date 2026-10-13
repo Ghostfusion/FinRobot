@@ -185,6 +185,20 @@ its provider module for the tested verdict), so Yahoo serves in practice. The
 order is kept so EODHD takes over the moment the plan includes the feed, with no
 code change.
 
+**EODHD now serves the multi-year series (2026-10-12).** `price_range` was
+undeclared on the EODHD arm, so every fund NAV series (6 calendar years) and every
+backtest window logged `data_type 'price_range' is not supported by EODHD` and fell
+through to yfinance — even though `/eod/{ticker}` has always accepted `from`/`to`.
+The arm now serves it (one request per window, pivoted to `adjusted_close` so the
+series is on the same adjusted basis as FMP's `adjClose` and yfinance's
+`auto_adjust`). Verified live on IEI: the cache records `provider='eodhd'` for the
+1507-bar window, and the fund report's numbers match that window exactly (vol
+4.49%, max drawdown 14.25%, 3y CAGR +3.69%) against yfinance's near-identical
+4.489%/14.256%/+3.52% — EODHD emits a row for the current day that Yahoo omits
+(1507 vs 1506 bars), which is worth up to ~0.5pp on a 1y window for a bond fund.
+`fundamental_data` still leads with FMP, and `fund_data` still leads with EODHD
+whose Fundamentals entitlement is the only remaining gap.
+
 **Capability audit (2026-10-12).** Comparing every row of this table against each
 provider's own `capabilities()` found entries that name a provider which does NOT
 declare the category — the layer skips those, so they are silent no-ops: `moomoo`
