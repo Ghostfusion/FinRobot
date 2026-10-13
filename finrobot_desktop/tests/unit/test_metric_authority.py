@@ -20,18 +20,33 @@ from __future__ import annotations
 import dataclasses
 import importlib
 import math
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
 from finrobot.engine.models.metric_authority import (
+    COMPARABILITY_CLASSES,
+    CONSUMER_IDS,
+    DECISION_REASON_CODES,
+    DECISION_STATUSES,
     DECLINED_REASON_CODES,
     METRIC_REGISTRY,
     METRIC_REGISTRY_BY_NAME,
     METRIC_TOLERANCE_PCT,
+    POLICY_VERSION,
+    MetricDecision,
+    MetricObservation,
     MetricRow,
+    ReconciliationReport,
+    canonical_source_id,
+    compared_fields,
     duplicate_metric_names,
+    key_fields,
     resolve_metric,
+    resolve_metric_observations,
 )
+
+_UTC = timezone.utc
 
 _VALID: dict[str, object] = {
     "metric": "unit_test_metric",
@@ -331,3 +346,809 @@ def test_row_is_immutable() -> None:
     row = METRIC_REGISTRY_BY_NAME["wacc"]
     with pytest.raises(dataclasses.FrozenInstanceError):
         row.metric = "renamed"  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# The new fields on MetricRow — closed vocabularies and refusals
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("overrides", "reason"),
+    [
+        ({"comparability": "nonsense"}, "comparability"),
+        ({"consumers": ("marketing",)}, "consumer"),
+        ({"consumers": ("valuation", "made_up")}, "consumer"),
+        ({"tolerance_abs": 0.0}, "tolerance_abs"),
+        ({"tolerance_abs": float("nan")}, "tolerance_abs"),
+        ({"tolerance_abs": -0.5}, "tolerance_abs"),
+        ({"freshness_max_age_s": 0.0}, "freshness_max_age_s"),
+        ({"freshness_max_age_s": float("inf")}, "freshness_max_age_s"),
+    ],
+)
+def test_new_field_refusals(overrides: dict[str, object], reason: str) -> None:
+    with pytest.raises(ValueError, match=reason):
+        _row(**overrides)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"consumers": ("audit",)},
+        {"key_field": True},
+        {"tolerance_abs": 0.01},
+        {"cross_validated": True},
+    ],
+)
+def test_declined_rows_refuse_the_dependency_graph(overrides: dict[str, object]) -> None:
+    """An unowned number has no consumer graph, no key divergence and no band."""
+    with pytest.raises(ValueError, match="declined row must not carry"):
+        _declined(**overrides)
+
+
+def test_vocabularies_are_closed_tuples() -> None:
+    assert set(COMPARABILITY_CLASSES) == {
+        "exact",
+        "as_reported_period",
+        "balance_period",
+        "session_price",
+        "caliber_divergent",
+    }
+    assert set(DECISION_STATUSES) == {
+        "accepted",
+        "fallback",
+        "conflict",
+        "unavailable",
+        "definition_mismatch",
+    }
+    assert "non_independent_agreement" in DECISION_REASON_CODES
+    assert set(CONSUMER_IDS) == {"valuation", "technical", "narrative", "screening", "audit"}
+    assert POLICY_VERSION == "metric_authority_v1"
+
+
+# ---------------------------------------------------------------------------
+# The new registry rows — declared, resolvable, and consistent
+# ---------------------------------------------------------------------------
+
+
+_NEW_ROWS = (
+    "revenue",
+    "net_income",
+    "total_cash",
+    "market_cap",
+    "current_price",
+    "shares_outstanding",
+    "ebitda",
+    "total_debt",
+    "gross_margin",
+)
+
+
+def test_new_rows_declare_the_contract_fields() -> None:
+    expected = {
+        # metric: (unit, comparability, tolerance_pct, tolerance_abs, positive, key_field)
+        "revenue": ("USD", "as_reported_period", 0.15, None, False, True),
+        "net_income": ("USD", "as_reported_period", 0.15, None, False, True),
+        "total_cash": ("USD", "balance_period", 0.10, None, False, False),
+        "market_cap": ("USD", "exact", 0.05, None, True, False),
+        "current_price": ("USD", "session_price", 0.05, 0.01, True, False),
+        "shares_outstanding": ("shares", "balance_period", 0.05, None, True, False),
+        "ebitda": ("USD", "caliber_divergent", 0.15, None, False, False),
+        "total_debt": ("USD", "caliber_divergent", 0.20, None, False, False),
+        "gross_margin": ("ratio", "caliber_divergent", 0.10, None, False, False),
+    }
+    for metric, (unit, comparability, tol, tol_abs, positive, key) in expected.items():
+        row = METRIC_REGISTRY_BY_NAME[metric]
+        assert row.unit == unit, metric
+        assert row.comparability == comparability, metric
+        assert row.tolerance_pct == tol, metric
+        assert row.tolerance_abs == tol_abs, metric
+        assert row.positive is positive, metric
+        assert row.key_field is key, metric
+        assert row.status == "ok" and row.producer_id and row.implementation_ref, metric
+        assert row.definition_version == f"{metric}_1", metric
+        assert row.basis, metric
+
+    assert METRIC_REGISTRY_BY_NAME["current_price"].freshness_max_age_s == 5 * 24 * 3600
+
+
+def test_every_consumer_id_is_declared() -> None:
+    for row in METRIC_REGISTRY:
+        for consumer in row.consumers:
+            assert consumer in CONSUMER_IDS, f"{row.metric}: {consumer}"
+
+
+def test_every_decision_constant_is_used_by_a_row_or_vocabulary() -> None:
+    """The rows' comparability classes come from the vocabulary, never free text."""
+    for row in METRIC_REGISTRY:
+        assert row.comparability in COMPARABILITY_CLASSES, row.metric
+
+
+def test_compared_fields_is_the_cross_provider_view() -> None:
+    """This set IS the validator's ``_RELATIVE_FIELDS`` table — byte-for-byte the
+    pre-reconciliation values, so warning coverage cannot drift."""
+    compared = compared_fields()
+    assert set(compared) == {"revenue", "net_income", "total_cash", "market_cap"}
+    assert {metric: row.tolerance_pct for metric, row in compared.items()} == {
+        "revenue": 0.15,
+        "net_income": 0.15,
+        "total_cash": 0.10,
+        "market_cap": 0.05,
+    }
+    # Comparability-in-principle rows that are NOT in the warning table still get
+    # decision records, but never a prose warning.
+    for excluded in (
+        "preferred_stock",
+        "noncontrolling_interest",
+        "shares_outstanding",
+        "ebitda",
+        "total_debt",
+        "gross_margin",
+        "current_price",
+        "enterprise_value",
+    ):
+        assert excluded not in compared
+
+
+def test_key_fields_are_the_key_divergence_metrics_sorted() -> None:
+    assert key_fields() == ("net_income", "revenue")
+
+
+def test_current_price_owner_tracks_the_core_stock_apis_priority_leader() -> None:
+    """The registry may not contradict the priority table it is authoritative about.
+
+    ``engine.data`` is imported INSIDE the test body — the leaf itself must not import
+    it (ADR-0005 leaf rule) — so the registry can never silently drift from
+    ``categories.PRIORITY``: with FMP as owner, every live price decision read "the
+    producer of record never spoke" (EHC log: eodhd 124.33 →
+    ``owner_absent_alternative_selected``).
+    """
+    from finrobot.engine.data.categories import PRIORITY, Category
+
+    chain = PRIORITY[Category.CORE_STOCK_APIS]
+    row = METRIC_REGISTRY_BY_NAME["current_price"]
+    assert row.producer_id is not None
+    assert row.producer_id.startswith(f"{chain[0]}.")
+    assert row.calibers == chain[: len(row.calibers)]
+    assert row.calibers == ("eodhd", "moomoo", "fmp", "yfinance")
+
+
+def test_only_the_chain_leader_is_the_price_owner() -> None:
+    """Listing the whole chain must not make every provider an owner."""
+    decision = resolve_metric_observations(
+        "current_price",
+        [_obs(metric="current_price", source="eodhd", value=124.33, period_basis="session")],
+        clock=_clock(),
+    )
+    assert decision.status == "accepted"
+    assert decision.is_authoritative is True
+    assert decision.reason_code == "within_tolerance"
+
+
+def test_a_non_leader_price_source_is_not_the_owner() -> None:
+    decision = resolve_metric_observations(
+        "current_price",
+        [_obs(metric="current_price", source="fmp", value=124.33, period_basis="session")],
+        clock=_clock(),
+    )
+    assert decision.status == "accepted"
+    assert decision.is_authoritative is False
+    assert decision.reason_code == "owner_absent_alternative_selected"
+
+
+# ---------------------------------------------------------------------------
+# canonical_source_id — collapse cache variants and map runtime names
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("fmp", "fmp"),
+        ("fmp:provider-cache", "fmp"),
+        ("fmp:cache", "fmp"),
+        ("fmp-cache", "fmp"),
+        ("fmp:some-other-variant", "fmp"),
+        ("  yfinance  ", "yfinance"),
+    ],
+)
+def test_canonical_source_id_collapses_variants(raw: str, expected: str) -> None:
+    assert canonical_source_id(raw) == expected
+
+
+def test_canonical_source_id_maps_through_the_supplied_registry_view() -> None:
+    mapped = {"yahoo": "yfinance", "fmp": "fmp"}
+    assert canonical_source_id("yahoo:cache", registry_name_by_id=mapped) == "yfinance"
+    assert canonical_source_id("fmp", registry_name_by_id=mapped) == "fmp"
+
+
+# ---------------------------------------------------------------------------
+# resolve_metric_observations — the rules, in order
+# ---------------------------------------------------------------------------
+
+
+def _obs(**overrides: object) -> MetricObservation:
+    """A valid revenue observation (owner source ``fmp``); each test overrides one axis."""
+    base: dict[str, object] = {
+        "metric": "revenue",
+        "source": "fmp",
+        "value": 100.0,
+        "unit": "USD",
+        "currency": "USD",
+        "period_end": date(2025, 12, 31),
+        "period_basis": "ttm",
+    }
+    base.update(overrides)
+    return MetricObservation(**base)  # type: ignore[arg-type]
+
+
+def _clock() -> datetime:
+    return datetime(2026, 1, 20, tzinfo=_UTC)
+
+
+def test_unknown_and_declined_metrics_are_unavailable_never_a_value() -> None:
+    unknown = resolve_metric_observations(
+        "not_a_metric", [_obs(metric="not_a_metric", source="anyone")], clock=_clock()
+    )
+    assert unknown.status == "unavailable"
+    assert unknown.reason_code == "no_eligible_observation"
+    assert unknown.value is None
+    assert unknown.selected_source is None
+    assert unknown.candidates == ()
+
+    declined = resolve_metric_observations("sec_xbrl_preferred_stock_fill", [], clock=_clock())
+    assert declined.status == "unavailable"
+    assert declined.value is None
+
+
+def test_no_eligible_observation_is_none_never_zero_and_never_an_average() -> None:
+    """Two non-owner sources disagree without an owner: pick ONE (named), never its
+    mean, and an absent owner is ``None`` — not 0."""
+    absent = resolve_metric_observations(
+        "revenue", [_obs(source="fmp", value=None)], clock=_clock()
+    )
+    assert absent.status == "unavailable"
+    assert absent.value is None
+
+    two_alt = resolve_metric_observations(
+        "revenue",
+        [_obs(source="yfinance", value=100.0), _obs(source="sec_edgar", value=110.0)],
+        clock=_clock(),
+    )
+    # Owner absent (never contributed) + eligible alternatives within tolerance:
+    # accepted but not authoritative; the value is ONE source's, never the mean.
+    assert two_alt.status == "accepted"
+    assert two_alt.reason_code == "owner_absent_alternative_selected"
+    assert two_alt.value in (100.0, 110.0)
+    assert two_alt.value != 105.0  # never the average
+    assert two_alt.is_authoritative is False
+
+
+def test_owner_selected_is_authoritative() -> None:
+    decision = resolve_metric_observations("revenue", [_obs()], clock=_clock())
+    assert decision.status == "accepted"
+    # Rule 3 tags the SELECTED candidate with the authority reason; Rule 5 fixes the
+    # decision-level reason (no other eligible source, so within_tolerance).
+    assert decision.reason_code == "within_tolerance"
+    assert decision.candidates[0].reason_code == "authoritative_selected"
+    assert decision.is_authoritative is True
+    assert decision.value == 100.0
+    assert decision.policy_version == POLICY_VERSION
+    assert decision.basis == METRIC_REGISTRY_BY_NAME["revenue"].basis
+
+
+def test_measured_payload_labels_still_compare_and_surface_the_gap() -> None:
+    """Measured live ``financials:v5`` shapes: FMP carries ``period_basis="ttm"`` with
+    ``fiscal_year`` 2026-07-03; yfinance has NO ``period_basis`` key and 2026-06-30
+    (3 days apart). A strict key equality would call every such pair a
+    ``definition_mismatch_period`` and silently disable the BUG-007 divergence
+    channel — so an 18% revenue gap must come out as a CONFLICT."""
+    decision = resolve_metric_observations(
+        "revenue",
+        [
+            _obs(source="fmp", value=1_000.0, period_end=date(2026, 7, 3), period_basis="ttm"),
+            _obs(source="yfinance", value=1_180.0, period_end=date(2026, 6, 30), period_basis=None),
+        ],
+        clock=_clock(),
+    )
+    assert decision.status == "conflict"
+    assert decision.reason_code == "above_tolerance_published_flagged"
+    assert all(c.reason_code != "definition_mismatch_period" for c in decision.candidates)
+    alternative = next(c for c in decision.candidates if c.source == "yfinance")
+    assert alternative.eligible is True
+    assert alternative.reason_code == "above_tolerance_published_flagged"
+
+
+def test_a_genuinely_different_period_is_a_definition_mismatch() -> None:
+    """Adjacent periods are >= ~84 days apart, so 45 days separates "same period,
+    different label" from two providers reporting different fiscal periods."""
+    decision = resolve_metric_observations(
+        "revenue",
+        [
+            _obs(source="fmp", value=1_000.0, period_end=date(2026, 6, 30)),
+            _obs(source="yfinance", value=1_000.0, period_end=date(2025, 12, 31)),
+        ],
+        clock=_clock(),
+    )
+    assert decision.status == "accepted"
+    assert (
+        next(c for c in decision.candidates if c.source == "yfinance").reason_code
+        == "definition_mismatch_period"
+    )
+
+
+def test_unknown_basis_and_a_near_period_end_are_comparable() -> None:
+    decision = resolve_metric_observations(
+        "net_income",
+        [
+            _obs(metric="net_income", source="fmp", value=100.0, period_basis="ttm"),
+            _obs(
+                metric="net_income",
+                source="yfinance",
+                value=104.0,
+                period_basis=None,
+                period_end=date(2025, 12, 27),
+            ),
+        ],
+        clock=_clock(),
+    )
+    assert decision.status == "accepted"
+    assert decision.reason_code == "sources_agree"
+    assert all(c.eligible for c in decision.candidates)
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        {"period_end": date(2025, 9, 30)},
+        {"period_basis": "annual"},
+    ],
+)
+def test_differing_period_is_a_definition_mismatch_that_leaves_status_accepted(
+    override: dict[str, object],
+) -> None:
+    decision = resolve_metric_observations(
+        "revenue", [_obs(), _obs(source="yfinance", **override)], clock=_clock()
+    )
+    assert decision.status == "accepted"
+    other = next(c for c in decision.candidates if c.source == "yfinance")
+    assert other.eligible is False
+    assert other.reason_code == "definition_mismatch_period"
+
+
+def test_unit_and_currency_mismatches_are_named_in_order() -> None:
+    unit = resolve_metric_observations(
+        "revenue", [_obs(), _obs(source="yfinance", unit="EUR")], clock=_clock()
+    )
+    assert next(c for c in unit.candidates if c.source == "yfinance").reason_code == (
+        "definition_mismatch_unit"
+    )
+    currency = resolve_metric_observations(
+        "revenue", [_obs(), _obs(source="yfinance", currency="EUR")], clock=_clock()
+    )
+    assert next(c for c in currency.candidates if c.source == "yfinance").reason_code == (
+        "definition_mismatch_currency"
+    )
+    both = resolve_metric_observations(
+        "revenue", [_obs(), _obs(source="yfinance", currency="EUR", unit="EUR")], clock=_clock()
+    )
+    assert next(c for c in both.candidates if c.source == "yfinance").reason_code == (
+        "definition_mismatch_currency"
+    )
+
+
+def test_caliber_divergent_never_reports_conflict() -> None:
+    """EBITDA operating vs reported: an eligible alternative is recorded as a
+    caliber mismatch, so a 60% gap can never masquerade as a conflict."""
+    decision = resolve_metric_observations(
+        "ebitda",
+        [
+            _obs(metric="ebitda", value=1_000.0),
+            _obs(metric="ebitda", source="yfinance", value=1_600.0),
+        ],
+        clock=_clock(),
+    )
+    assert decision.status == "accepted"
+    assert decision.reason_code == "within_tolerance"
+    assert decision.is_authoritative is True
+    assert all(c.reason_code != "above_tolerance_published_flagged" for c in decision.candidates)
+    alternative = next(c for c in decision.candidates if c.source == "yfinance")
+    assert alternative.eligible is False
+    assert alternative.reason_code == "definition_mismatch_caliber"
+
+
+@pytest.mark.parametrize(
+    ("metric", "unit", "value"),
+    [
+        ("ebitda", "USD", 1_463_500_032.0),
+        ("gross_margin", "ratio", 0.43865),
+        ("total_debt", "USD", 2_842_299_904.0),
+    ],
+)
+def test_lone_alternative_on_a_caliber_divergent_row_is_a_value_not_an_absence(
+    metric: str, unit: str, value: float
+) -> None:
+    """Live EHC run: FMP never answered, only yfinance did. The report DID publish an
+    EBITDA / gross margin / total debt, so a caliber caveat must not masquerade as an
+    ``unavailable`` value. ``caliber_divergent`` forbids comparing a gap against a
+    SELECTED observation — it does not mean a lone reading supplies nothing."""
+    decision = resolve_metric_observations(
+        metric,
+        [_obs(metric=metric, source="yfinance", unit=unit, value=value)],
+        clock=_clock(),
+    )
+    assert decision.status == "accepted"
+    assert decision.is_authoritative is False
+    assert decision.reason_code == "owner_absent_alternative_selected"
+    assert decision.value == value
+    assert decision.disagreement_pct is None
+    assert decision.comparability == "caliber_divergent"
+    candidate = decision.candidates[0]
+    assert candidate.eligible is True
+    assert candidate.reason_code != "definition_mismatch_caliber"
+
+
+def test_caliber_divergent_row_with_no_observation_is_unavailable() -> None:
+    decision = resolve_metric_observations("ebitda", [], clock=_clock())
+    assert decision.status == "unavailable"
+    assert decision.reason_code == "no_eligible_observation"
+    assert decision.value is None
+
+
+@pytest.mark.parametrize(
+    "owner_override",
+    [
+        {"value": float("nan")},
+        {"value": 0.0},  # market_cap is positive=True
+    ],
+)
+def test_invalid_owner_with_a_fresh_alternative_falls_back_and_names_it(
+    owner_override: dict[str, object],
+) -> None:
+    decision = resolve_metric_observations(
+        "market_cap",
+        [
+            _obs(metric="market_cap", **owner_override),
+            _obs(metric="market_cap", source="yfinance", value=2_000_000_000.0),
+        ],
+        clock=_clock(),
+    )
+    assert decision.status == "fallback"
+    assert decision.is_authoritative is False
+    assert decision.reason_code == "canonical_value_invalid_fallback_selected"
+    assert decision.value == 2_000_000_000.0
+    assert decision.selected_source == "yfinance"
+
+
+def test_stale_owner_falls_back_to_a_fresh_alternative() -> None:
+    clock = _clock()
+    owner = _obs(
+        metric="current_price",
+        source="eodhd",
+        value=100.0,
+        period_basis="session",
+        period_end=date(2026, 1, 19),
+        effective_at=clock - timedelta(days=10),
+    )
+    alternative = _obs(
+        metric="current_price",
+        source="yfinance",
+        value=101.0,
+        period_basis="session",
+        period_end=date(2026, 1, 19),
+        effective_at=clock,
+    )
+    decision = resolve_metric_observations("current_price", [owner, alternative], clock=clock)
+    assert decision.status == "fallback"
+    assert decision.value == 101.0
+    assert decision.selected_source == "yfinance"
+    stale = next(c for c in decision.candidates if c.source == "eodhd")
+    assert stale.reason_code == "stale_beyond_freshness_policy"
+
+
+def test_live_retrieval_after_the_run_ceiling_is_never_lookahead() -> None:
+    """``engine/pipelines/runner.py`` pins the ceiling at the run's START, so every
+    live fetch has ``retrieved_at > run_as_of`` by construction. That is when WE
+    looked, not what the source knew — it must stay eligible. (Regression: gating on
+    ``retrieved_at`` turned all eight decisions of the live EHC artifact
+    ``art_2026-10-13T22:36:11_EHC_equity_research_dfa427`` into
+    ``unavailable``/``after_run_as_of`` and caveated a healthy fetch.)"""
+    clock = _clock()
+    run_as_of = clock - timedelta(seconds=5)  # set_run_as_of(now) at run start
+    decision = resolve_metric_observations(
+        "revenue",
+        [_obs(source="fmp", retrieved_at=clock)],
+        clock=clock,
+        run_as_of=run_as_of,
+    )
+    assert decision.status == "accepted"
+    assert decision.reason_code == "within_tolerance"
+    assert decision.candidates[0].eligible is True
+    assert decision.candidates[0].reason_code != "after_run_as_of"
+
+
+def test_published_at_gates_only_when_known_and_later_than_the_ceiling() -> None:
+    clock = _clock()
+    ceiling = clock - timedelta(days=1)
+
+    late = resolve_metric_observations(
+        "revenue",
+        [_obs(source="fmp", published_at=clock)],
+        clock=clock,
+        run_as_of=ceiling,
+    )
+    assert late.status == "unavailable"
+    assert late.reason_code == "after_run_as_of"
+    assert late.value is None
+
+    known_before = resolve_metric_observations(
+        "revenue",
+        [_obs(source="fmp", published_at=ceiling - timedelta(days=1))],
+        clock=clock,
+        run_as_of=ceiling,
+    )
+    assert known_before.status == "accepted"
+    assert known_before.candidates[0].eligible is True
+
+
+def test_unknown_published_at_cannot_fire_the_as_of_gate() -> None:
+    """A vendor statement read carries ``published_at=None``, so a retrieval after
+    the ceiling must not be relabelled as lookahead — only the freshness policy may
+    exclude it."""
+    clock = _clock()
+    decision = resolve_metric_observations(
+        "revenue",
+        [_obs(source="fmp", published_at=None, retrieved_at=clock + timedelta(days=30))],
+        clock=clock,
+        run_as_of=clock - timedelta(seconds=1),
+    )
+    assert decision.status == "accepted"
+    assert decision.candidates[0].eligible is True
+    assert decision.candidates[0].reason_code != "after_run_as_of"
+
+
+def test_colineage_agreement_is_flagged_non_independent() -> None:
+    decision = resolve_metric_observations(
+        "revenue",
+        [_obs(source="fmp", value=100.0), _obs(source="fmp:provider-cache", value=100.0)],
+        clock=_clock(),
+    )
+    assert decision.agreement_is_independent is False
+    cached = next(c for c in decision.candidates if c.source == "fmp:provider-cache")
+    assert cached.non_independent is True
+    assert cached.reason_code == "non_independent_agreement"
+    # The decision itself still stands on the owner.
+    assert decision.status == "accepted"
+    assert decision.reason_code == "sources_agree"
+    assert decision.selected_source == "fmp"
+    owner_candidate = next(c for c in decision.candidates if c.source == "fmp")
+    assert owner_candidate.reason_code == "authoritative_selected"
+
+
+def test_derived_agreement_is_non_independent() -> None:
+    decision = resolve_metric_observations(
+        "revenue",
+        [
+            _obs(source="fmp", value=100.0),
+            _obs(source="yfinance", value=100.0, derived_from=("fmp", "market_cap")),
+        ],
+        clock=_clock(),
+    )
+    assert decision.agreement_is_independent is False
+    assert (
+        next(c for c in decision.candidates if c.source == "yfinance").reason_code
+        == "non_independent_agreement"
+    )
+
+
+def test_independent_agreement_within_tolerance_reports_sources_agree() -> None:
+    decision = resolve_metric_observations(
+        "revenue",
+        [_obs(source="fmp", value=100.0), _obs(source="yfinance", value=100.5)],
+        clock=_clock(),
+    )
+    assert decision.status == "accepted"
+    assert decision.reason_code == "sources_agree"
+    assert decision.agreement_is_independent is True
+    assert decision.disagreement_pct is None
+
+
+def test_over_tolerance_is_a_conflict_with_the_widest_deviation() -> None:
+    decision = resolve_metric_observations(
+        "revenue",
+        [
+            _obs(source="fmp", value=100.0),
+            _obs(source="yfinance", value=140.0),
+            _obs(source="sec_edgar", value=118.0),
+        ],
+        clock=_clock(),
+    )
+    assert decision.status == "conflict"
+    assert decision.reason_code == "above_tolerance_published_flagged"
+    assert decision.value == 100.0  # the owner's number still stands
+    assert decision.disagreement_pct == pytest.approx(40.0 / 140.0, rel=1e-3)
+    flagged = {
+        c.source
+        for c in decision.candidates
+        if c.reason_code == "above_tolerance_published_flagged"
+    }
+    assert flagged == {"yfinance", "sec_edgar"}
+
+
+def test_absolute_tolerance_is_a_floor_not_an_alternative_band() -> None:
+    """The price rule is "greater of one tick or 0.05%": a gap is a conflict only
+    when the RELATIVE band AND the absolute floor are both exceeded."""
+    clock = _clock()
+    common = {"period_basis": "session", "effective_at": clock, "retrieved_at": clock}
+    # 2 cents on a $0.50 stock: 3.8% relative (INSIDE the 5% band), 0.02 absolute
+    # (over the 0.01 floor) — the vendors agree in every meaningful sense.
+    inside_band = resolve_metric_observations(
+        "current_price",
+        [
+            _obs(metric="current_price", source="eodhd", value=0.50, **common),
+            _obs(metric="current_price", source="yfinance", value=0.52, **common),
+        ],
+        clock=clock,
+    )
+    assert inside_band.status == "accepted"
+    assert inside_band.reason_code == "sources_agree"
+
+    # Over BOTH the relative band and the floor -> conflict.
+    over_both = resolve_metric_observations(
+        "current_price",
+        [
+            _obs(metric="current_price", source="eodhd", value=100.0, **common),
+            _obs(metric="current_price", source="yfinance", value=120.0, **common),
+        ],
+        clock=clock,
+    )
+    assert over_both.status == "conflict"
+    assert over_both.reason_code == "above_tolerance_published_flagged"
+
+
+def test_derived_candidate_never_manufactures_a_conflict() -> None:
+    """A count rederived as market_cap/price is a re-expression, not a second
+    opinion: it must be set aside, not turned into a caveating conflict."""
+    decision = resolve_metric_observations(
+        "market_cap",
+        [
+            _obs(metric="market_cap", source="yfinance", value=100.0),
+            _obs(
+                metric="market_cap",
+                source="zprovider",
+                value=106.0,
+                derived_from=("market_cap", "current_price"),
+            ),
+        ],
+        clock=_clock(),
+    )
+    assert decision.selected_source == "yfinance"
+    assert decision.status == "accepted"
+    assert decision.reason_code == "owner_absent_alternative_selected"
+    derived = next(c for c in decision.candidates if c.source == "zprovider")
+    assert derived.eligible is False
+    assert derived.non_independent is True
+    assert derived.reason_code == "non_independent_agreement"
+    assert decision.disagreement_pct is None
+    assert decision.agreement_is_independent is True
+
+
+def test_derived_selected_with_an_independent_candidate_is_a_real_conflict() -> None:
+    """The asymmetry: non-independence is a property of the CANDIDATE. When the
+    derived count IS the selected value, an independent count that contradicts it
+    is a genuine conflict."""
+    decision = resolve_metric_observations(
+        "shares_outstanding",
+        [
+            _obs(
+                metric="shares_outstanding",
+                source="fmp",
+                unit="shares",
+                value=100.0,
+                derived_from=("market_cap", "current_price"),
+            ),
+            _obs(
+                metric="shares_outstanding",
+                source="yfinance",
+                unit="shares",
+                value=94.0,
+            ),
+        ],
+        clock=_clock(),
+    )
+    assert decision.selected_source == "fmp"
+    assert decision.is_authoritative is True
+    assert decision.status == "conflict"
+    assert decision.reason_code == "above_tolerance_published_flagged"
+    assert decision.disagreement_pct == pytest.approx(0.06, rel=1e-3)
+    independent = next(c for c in decision.candidates if c.source == "yfinance")
+    assert independent.non_independent is False
+    assert independent.eligible is True
+
+
+def test_decision_is_order_independent() -> None:
+    observations = [
+        _obs(source="fmp", value=100.0),
+        _obs(source="yfinance", value=100.5),
+        _obs(source="sec_edgar", value=140.0, period_end=date(2025, 6, 30)),
+    ]
+    forward = resolve_metric_observations("revenue", observations, clock=_clock())
+    backward = resolve_metric_observations("revenue", list(reversed(observations)), clock=_clock())
+    assert forward == backward
+    assert [c.source for c in forward.candidates] == ["fmp", "sec_edgar", "yfinance"]
+
+
+def test_owner_absent_is_distinct_from_owner_invalid() -> None:
+    """The chain head rate-limiting out is NOT the same as it answering garbage."""
+    clock = _clock()
+    absent = resolve_metric_observations(
+        "revenue", [_obs(source="yfinance", value=100.0)], clock=clock
+    )
+    assert absent.status == "accepted"
+    assert absent.reason_code == "owner_absent_alternative_selected"
+    assert absent.is_authoritative is False
+
+    invalid = resolve_metric_observations(
+        "revenue",
+        [_obs(source="fmp", value=float("nan")), _obs(source="yfinance", value=100.0)],
+        clock=clock,
+    )
+    assert invalid.status == "fallback"
+    assert invalid.reason_code == "canonical_value_invalid_fallback_selected"
+    assert invalid.is_authoritative is False
+
+
+def test_owner_absent_with_an_over_tolerance_candidate_becomes_conflict() -> None:
+    decision = resolve_metric_observations(
+        "revenue",
+        [_obs(source="yfinance", value=100.0), _obs(source="sec_edgar", value=140.0)],
+        clock=_clock(),
+    )
+    assert decision.selected_source == "sec_edgar"  # lexicographically smallest
+    assert decision.status == "conflict"
+    assert decision.reason_code == "above_tolerance_published_flagged"
+    assert decision.is_authoritative is False
+
+
+def test_absent_owner_defers_to_the_lexicographically_smallest_source() -> None:
+    decision = resolve_metric_observations(
+        "revenue",
+        [_obs(source="zprovider", value=100.0), _obs(source="aprovider", value=110.0)],
+        clock=_clock(),
+    )
+    assert decision.status == "accepted"
+    assert decision.reason_code == "owner_absent_alternative_selected"
+    assert decision.selected_source == "aprovider"
+    assert decision.value == 110.0
+    assert decision.is_authoritative is False
+
+
+def test_every_decision_status_and_reason_is_from_the_closed_vocabulary() -> None:
+    decision = resolve_metric_observations(
+        "revenue", [_obs(source="fmp", value=float("inf"))], clock=_clock()
+    )
+    assert decision.status in DECISION_STATUSES
+    assert decision.reason_code in DECISION_REASON_CODES
+    assert decision.value is None
+
+
+def test_reconciliation_report_indexes_decisions_by_metric() -> None:
+    decision = resolve_metric_observations("revenue", [_obs()], clock=_clock())
+    report = ReconciliationReport(
+        policy_version=POLICY_VERSION,
+        run_as_of=None,
+        clock=_clock(),
+        decisions=(decision,),
+    )
+    assert report.decision("revenue") is decision
+    assert report.decision("net_income") is None
+
+
+def test_metric_observation_and_decision_are_immutable() -> None:
+    observation = _obs()
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        observation.source = "other"  # type: ignore[misc]
+    decision = resolve_metric_observations("revenue", [observation], clock=_clock())
+    assert isinstance(decision, MetricDecision)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        decision.status = "accepted"  # type: ignore[misc]

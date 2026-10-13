@@ -187,6 +187,24 @@ Only steps 2, 7, 8 (plus LLM peer *selection*) involve the LLM; steps 4/5/6 igno
 - **One producer per metric:** `engine/models/metric_authority.py` declares the producer of
   record for each published number. `resolve_metric` never promotes a fallback to canonical,
   never returns `0` for an absent value, and publishes conflicts instead of averaging them.
+- **A vendor disagreement is a DECISION, not a warning:** the same leaf module's
+  `resolve_metric_observations` turns the observations a fetch collected into one
+  `MetricDecision` per metric — semantic comparability first (a period/currency/unit/caliber
+  mismatch is `definition_mismatch_*`, never a numeric conflict), then hard validity
+  (non-finite / non-positive / stale beyond the row's `freshness_max_age_s` / **published**
+  after the run's as-of are all ineligible — never our own `retrieved_at`, which is after the
+  run started by construction and once blanked every live decision), then selection by
+  producer identity. A fallback is
+  only selected when the owner is ineligible and it is disclosed as one
+  (`is_authoritative=False`), a conflict is published WITH its deviation and never withholds a
+  valid number, and no eligible observation yields `unavailable` — never `0`, never an
+  average, never a majority vote. Rows whose sources measure different things by construction
+  (operating-vs-reported EBITDA, lease conventions, vendor margins) declare
+  `comparability="caliber_divergent"`, which is where the old "we deliberately do not compare
+  this field" prose used to live. Tolerances live on the ROW only — `validator` reads them
+  through `compared_fields()`/`key_fields()` and may not carry a second table. Decisions ride
+  `FinancialData.data_authority` into the artifact and surface as
+  `numeric_audit` findings (severity `review`).
 - **Truncation marker:** `engine/compute/operators/narrative_integrity.py` marks a section the
   model cut at `max_tokens` in the stored text and warns on the run; a cut *structured* field
   is named in a warning but never rewritten (the model's output is evidence).
