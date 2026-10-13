@@ -511,6 +511,12 @@ def extract_financial_data(
         ),
         warnings=warnings,
         field_warnings=field_warnings,
+        # Carry the reconciliation record the data layer attached to whichever
+        # canonical it ran on — the financials' report wins, the price's is the
+        # fallback. Never invented: ``None`` when neither canonical reconciled.
+        data_authority=(
+            fin.reconciliation if fin.reconciliation is not None else price.reconciliation
+        ),
     )
 
 

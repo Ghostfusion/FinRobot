@@ -38,6 +38,7 @@ from finrobot.artifact.models import (
     ArtifactOutputs,
 )
 from finrobot.engine.compute.operators.audit import (
+    attach_metric_authority_findings,
     attach_target_multiple_band_findings,
     publish_band_cross_check,
 )
@@ -1304,6 +1305,12 @@ def build_equity_research_artifact(
     # back empty (it is the same run's data — see publish_band_cross_check).
     publish_band_cross_check(structured_out, raw_data)
     audit_warnings += attach_target_multiple_band_findings(structured_out, raw_data)
+
+    # Surface the data layer's reconciliation record: one finding per metric whose
+    # canonical selection conflicted, failed closed, or mismatched on definition,
+    # at ``review``. The canonical value is still published (that is what the
+    # conflict is measured against), so this annotates and never withholds.
+    audit_warnings += attach_metric_authority_findings(structured_out, raw_data)
 
     # Top-level ``valuation_withheld`` is the single "point target withheld" signal,
     # and it must be cause-INDEPENDENT. _attach_numeric_audit sets it for the

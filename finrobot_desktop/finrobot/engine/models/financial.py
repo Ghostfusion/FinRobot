@@ -3,6 +3,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from datetime import date, datetime
 
+from finrobot.engine.models.metric_authority import ReconciliationReport
+
 
 # ---------------------------------------------------------------------------
 # FinancialData sub-models (S1 refactor)
@@ -263,6 +265,12 @@ class FinancialData(BaseModel):
     maps to a localized caveat next to that specific number. The free-text
     :attr:`warnings` stays the row-level catch-all; this is what lets a caveat
     sit on the exact cell it concerns instead of a generic row marker."""
+
+    data_authority: ReconciliationReport | None = None
+    """The per-metric selection record (status, selected source, alternatives,
+    disagreement) behind this snapshot's numbers. ``None`` on snapshots built
+    before reconciliation ran — optional, so this stays read-compatible with
+    stored artifacts (BUG-038 precedent) and needs no schema-version bump."""
 
     @model_validator(mode="after")
     def _withhold_cross_currency_ratios(self) -> "FinancialData":
