@@ -11,7 +11,7 @@ import statistics
 from dataclasses import dataclass
 from typing import Final, Literal
 
-from finrobot.engine.models.financial import ValuationMethod, ValuationSynthesis
+from finrobot.engine.models.financial import CrossCheck, ValuationMethod, ValuationSynthesis
 from finrobot.engine.models.valuation_thresholds import (
     MARKET_DIVERGENCE_RATIO_K,
     METHOD_CORROBORATION_SPAN_K,
@@ -468,6 +468,7 @@ def synthesize_valuations(
     cyclical: bool = False,
     financial_sector: bool = False,
     mna_transition: bool = False,
+    cross_checks: list[CrossCheck] | None = None,
 ) -> ValuationSynthesis:
     """Synthesize multiple valuation methods into a single confidence-weighted estimate.
 
@@ -515,6 +516,7 @@ def synthesize_valuations(
         withheld, note = _apply_mna_transition(withheld, note, mna_transition)
         return ValuationSynthesis(
             methods=methods,
+            cross_checks=list(cross_checks or []),
             weighted_price=None,
             current_price=current_price,
             upside_downside=None,
@@ -609,6 +611,7 @@ def synthesize_valuations(
         upside_downside = (verdict_point - current_price) / current_price
     return ValuationSynthesis(
         methods=methods,
+        cross_checks=list(cross_checks or []),
         weighted_price=weighted_price,
         current_price=current_price,
         upside_downside=upside_downside,
@@ -806,6 +809,41 @@ def _range_spans_market(vs: ValuationSynthesis) -> bool:
     return low <= vs.current_price <= high
 
 
+def _prints_as_a_range(method: ValuationMethod) -> bool:
+    """True when the method's own band survives 2dp rounding as a real range.
+
+    The basis prints each method's band to 2 decimals, so a band narrower than a
+    cent renders as "$X–$X" — the "low and high are both the target" wording the
+    owner review flagged. Comparing the RENDERED strings (not the raw floats) is
+    the only test that matches what the reader sees: a hairline band around the
+    mid passes any float comparison and still prints as a degenerate pair.
+    """
+    low, mid, high = f"{method.low:.2f}", f"{method.mid:.2f}", f"{method.high:.2f}"
+    return low != mid and mid != high
+
+
+def _published_band_clause(vs: ValuationSynthesis) -> str:
+    """Label the PUBLISHED target band and its provenance.
+
+    Distinguishes the published range from the methods' own bands (owner review
+    2026-10-13: the narrative printed the single method's mid twice as both the
+    "method value" and the target, while the quoted range was the confidence-dial
+    band and the method's own ±band never appeared, so the reader saw a "low" and
+    "high" that were both the target).
+
+    Provenance: a lone method's band is the dial's ±``_DIAL_SINGLE_BAND_FRAC``
+    width; with ≥2 methods the band is the span of the surviving method mids.
+    """
+    if vs.target_low is None or vs.target_high is None:
+        return ""
+    provenance = (
+        f"±{_DIAL_SINGLE_BAND_FRAC:.0%} single-method confidence dial"
+        if len(vs.methods) == 1
+        else "span of the surviving method mids"
+    )
+    return f" Published target band ${vs.target_low:.2f}–${vs.target_high:.2f} ({provenance})."
+
+
 def resolve_canonical_thesis(vs: object, ticker: str) -> CanonicalThesis:
     """Resolve the deterministic headline verdict (+ maybe target) from a synthesis.
 
@@ -952,14 +990,31 @@ def resolve_canonical_thesis(vs: object, ticker: str) -> CanonicalThesis:
     target = None if vs.valuation_withheld else round(point, 2)
 
     # Build the basis from the method breakdown + the dial's anchor/range/note.
+    # Each method prints ITS OWN low/mid/high band, and the published band is
+    # labelled separately with its provenance — the two must never be conflated
+    # (owner review 2026-10-13: a lone method's mid printed as both the method
+    # value and the target, while the quoted range was the confidence-dial band).
+    # A method whose low/high collapsed onto its mid carries NO range to print:
+    # emitting "own range $X–$X" is exactly the "low and high are both the
+    # target" wording the review flagged, so the clause is only added when the
+    # band is a real one.
+    # The guard compares the values AS PRINTED (2dp): a band narrower than a cent
+    # renders as "$X–$X" — the very "low and high are both the target" wording
+    # the review flagged — so a band only ships when the printed pair differs.
+    logger.info(
+        "canonical thesis: methods fed to the basis = %s",
+        [(m.name, round(m.low, 2), round(m.mid, 2), round(m.high, 2)) for m in vs.methods],
+    )
     method_breakdown = ", ".join(
-        f"{_method_label(m.name)} ${m.mid:.2f} (wt {m.confidence:.2f})" for m in vs.methods
+        f"{_method_label(m.name)} ${m.mid:.2f} "
+        + (
+            f"(own range ${m.low:.2f}–${m.high:.2f}, wt {m.confidence:.2f})"
+            if _prints_as_a_range(m)
+            else f"(wt {m.confidence:.2f})"
+        )
+        for m in vs.methods
     )
-    range_txt = (
-        f" Range [${vs.target_low:.2f}, ${vs.target_high:.2f}]."
-        if vs.target_low is not None and vs.target_high is not None
-        else ""
-    )
+    range_txt = _published_band_clause(vs)
     if vs.valuation_withheld and range_spans_market:
         # Fairly valued: the published range brackets the market on BOTH sides, so the
         # methods give no one-sided call → HOLD. Lead with the conclusion (fairly valued),

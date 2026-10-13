@@ -357,6 +357,67 @@ def test_sniper_moderate_upside_safety_margin():
     )
     assert result.safety_margin == 0.10
     assert result.ideal_buy == pytest.approx(108.0, abs=0.01)
+    # current=100 and the dial entry is 108, so this is also an entry zone the
+    # market already sits inside — see the paired test below.
+    assert result.ideal_buy_at_market is True
+    assert result.safety_margin_achieved == pytest.approx(1 - 100 / 120, abs=1e-4)
+
+
+# ---------------------------------------------------------------------------
+# Entry-zone framing (audit 2026-10-13). "Ideal buy" is the fair-value-anchored
+# level with the dial's margin of safety applied; when the market already trades
+# below it, the level is an at-or-below entry zone rather than a price to wait
+# for. The level itself is unchanged — only the framing is disclosed — because
+# the actionable conclusion for a deep-value LONG is "buy at/under this", not
+# "wait for a 54% rally" (EHC: entry $192.03 vs a $124.42 price).
+# ---------------------------------------------------------------------------
+
+
+def test_sniper_flags_the_entry_zone_when_the_market_is_already_inside_it():
+    """_req(): current=150, target=200 → upside 33.3% (>30%) → dial 0.15 →
+    entry 200*0.85 = 170.00 > 150, and the market already discounts fair value
+    by 1 - 150/200 = 25%."""
+    result = calculate_sniper_points(_req())
+    assert result.ideal_buy == pytest.approx(170.0, abs=0.01)  # level NOT rewritten
+    assert result.ideal_buy_at_market is True
+    assert result.safety_margin == 0.15
+    assert result.safety_margin_achieved == pytest.approx(0.25, abs=1e-4)
+    assert any("entry zone" in w for w in result.invariant_warnings)
+
+
+def test_sniper_plain_entry_when_the_market_sits_above_the_dial_level():
+    """current=100, target=105 → upside 5% (<=15%) → dial 0.05 → entry
+    105*0.95 = 99.75 < 100: NOT already inside the zone, so no framing note."""
+    prices = [95.0, 97.0, 100.0, 98.0, 99.0] * 4  # 20 prices
+    result = calculate_sniper_points(
+        SniperRequest(
+            ticker="SHALLOW",
+            current_price=100.0,
+            dcf_target=105.0,
+            historical_prices=prices,
+        )
+    )
+    assert result.ideal_buy == pytest.approx(99.75, abs=0.01)
+    assert result.ideal_buy_at_market is False
+    assert result.safety_margin_achieved == pytest.approx(1 - 100 / 105, abs=1e-4)
+    assert not any("entry zone" in w for w in result.invariant_warnings)
+
+
+def test_sniper_short_mode_has_no_entry_zone_framing():
+    """A SHORT's entry is the market by construction, so the LONG-only framing
+    fields stay at their not-applicable values."""
+    prices = [210.0, 205.0, 200.0, 195.0, 190.0] * 4
+    result = calculate_sniper_points(
+        SniperRequest(
+            ticker="SHRT",
+            current_price=200.0,
+            dcf_target=150.0,
+            historical_prices=prices,
+        )
+    )
+    assert result.sell_mode is True
+    assert result.ideal_buy_at_market is False
+    assert result.safety_margin_achieved is None
 
 
 # ---------------------------------------------------------------------------

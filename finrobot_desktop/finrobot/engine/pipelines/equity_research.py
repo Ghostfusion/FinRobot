@@ -69,7 +69,10 @@ from finrobot.engine.compute.coordinators.credit_payload import (
     CreditRisk,
     build_credit_risk,
 )
-from finrobot.engine.compute.coordinators.extractor import normalize_financials_to_usd
+from finrobot.engine.compute.coordinators.extractor import (
+    net_income_divergence_warning,
+    normalize_financials_to_usd,
+)
 from finrobot.engine.compute.coordinators.historical_extractor import fetch_historical_metrics
 from finrobot.engine.data.historical_loaders import (
     REPORT_BAND_WINDOW_YEARS,
@@ -98,7 +101,10 @@ from finrobot.engine.pipelines._helpers import (
     execute_financial_data_step,
     execute_peer_analysis,
 )
-from finrobot.engine.pipelines._thesis_prompt import build_thesis_prompt
+from finrobot.engine.pipelines._thesis_prompt import (
+    build_thesis_prompt,
+    ensure_payor_reimbursement_risk,
+)
 from finrobot.engine.pipelines.ddm import _execute_ddm_calc, _execute_ddm_seed
 from finrobot.engine.primitives.industry import (
     is_balance_sheet_financial,
@@ -220,6 +226,22 @@ async def _execute_data_collection_with_sec(
         for warning in sec_warnings:
             if warning not in financial_output.structured.warnings:
                 financial_output.structured.warnings.append(warning)
+
+        # ONE net-income authority, two sources: disclose a >5% gap between the
+        # printed TTM net income and the SEC XBRL TTM filing fact the narrative
+        # may also cite (owner review 2026-10-13: EHC's table said $603.7M while
+        # the narrative said $621M — a caliber gap, not a typo).
+        _ttm_ni = xbrl.get("ttm_net_income") if isinstance(xbrl, dict) else None
+        _divergence = net_income_divergence_warning(
+            financial_output.structured.income.net_income,
+            financial_output.structured.provenance.provider
+            if financial_output.structured.provenance is not None
+            else None,
+            _ttm_ni.get("value") if isinstance(_ttm_ni, dict) else None,
+            "SEC XBRL us-gaap:NetIncomeLoss:ttm",
+        )
+        if _divergence and _divergence not in financial_output.structured.warnings:
+            financial_output.structured.warnings.append(_divergence)
 
     return financial_output
 
@@ -449,12 +471,21 @@ async def _execute_ownership_governance_analysis(
         insider_task, holdings_task, proxy_task, schedule13_task, cert_task
     )
 
+    # Shares outstanding give the holder table a real denominator: without it
+    # the UI's "top 5 = 97%" was measured against only the rows a partial 13F
+    # index happened to return (owner review 2026-10-13).
+    _fd_for_ownership = structured_context.get("data_collection")
     analysis = compute_ownership_governance(
         insider_data=insider,
         institutional_data=holdings,
         proxy_data=proxy,
         schedule13_data=schedule13,
         cert_data=cert,
+        shares_outstanding=(
+            _fd_for_ownership.market.shares_outstanding
+            if isinstance(_fd_for_ownership, FinancialData)
+            else None
+        ),
     )
 
     # Populate degraded_reasons based on what _fetch_optional_sec returned.
@@ -792,6 +823,13 @@ async def _execute_financial_modeling(
                 ticker=ticker,
                 historical_ev_ebitda_band=(ev_band.p25, ev_band.p75) if ev_band else None,
                 historical_ev_ebitda_sample_n=ev_band.sample_count if ev_band else None,
+                # Own-history band detail for the target cross-check, plus the
+                # enterprise claims the band-implied EV must clear before it
+                # becomes common equity (owner review 2026-10-13).
+                historical_ev_ebitda_median=ev_band.median if ev_band else None,
+                historical_ev_ebitda_window_years=REPORT_BAND_WINDOW_YEARS,
+                preferred_stock=financial_data.balance.preferred_stock,
+                noncontrolling_interest=financial_data.balance.noncontrolling_interest,
             )
             if vs is not None:
                 structured_context["valuation_synthesis"] = vs
@@ -959,12 +997,34 @@ async def _execute_financial_modeling(
         # synthesis ran on fewer corroborating methods (lower confidence). Every
         # input is a reported figure; net debt stays None≠0-gated downstream.
         ev_band = await fetch_reverse_multiple_band(ticker, "ev_ebitda", deps.data_layer)
+        # Record what the synthesis actually received. A None band silently
+        # removes BOTH the EV/EBITDA method row and the own-history cross-check
+        # (and with them the only check on the target's implied multiple), so the
+        # resolution is logged rather than inferred from an absent row.
+        logger.info(
+            "valuation synthesis: own-history EV/EBITDA band %s",
+            "unavailable (no EV/EBITDA method row, no cross-check)"
+            if ev_band is None
+            else (
+                f"p25 {ev_band.p25:.2f} · median "
+                f"{'n/a' if ev_band.median is None else f'{ev_band.median:.2f}'} · "
+                f"p75 {ev_band.p75:.2f} ({ev_band.sample_count} samples)"
+            ),
+        )
         vs = build_valuation_synthesis(
             structured_context,
             current_price,
             ticker=ticker,
             historical_ev_ebitda_band=(ev_band.p25, ev_band.p75) if ev_band else None,
             historical_ev_ebitda_sample_n=ev_band.sample_count if ev_band else None,
+            # Own-history band detail for the target cross-check, plus the
+            # enterprise claims the band-implied EV must clear before it becomes
+            # common equity (owner review 2026-10-13: the target sat above the
+            # issuer's own 5-year p90 multiple and nothing said so).
+            historical_ev_ebitda_median=ev_band.median if ev_band else None,
+            historical_ev_ebitda_window_years=REPORT_BAND_WINDOW_YEARS,
+            preferred_stock=financial_data.balance.preferred_stock,
+            noncontrolling_interest=financial_data.balance.noncontrolling_interest,
         )
         if vs is not None:
             structured_context["valuation_synthesis"] = vs
@@ -1094,10 +1154,15 @@ async def _execute_technical_analysis(
     summary_parts: list[str] = []
     if payload.monte_carlo is not None:
         mc = payload.monte_carlo
+        # Frame the percentile as SENSITIVITY to the model's own assumptions, not
+        # corroboration: the distribution is the base-case DCF perturbed, so a
+        # "4th percentile" restates the same assumptions (review 2026-10).
         summary_parts.append(
-            f"Monte Carlo ({mc.n_valid:,} sims): mean ${mc.mean:.2f}, "
-            f"P5–P95 ${mc.percentiles['5']:.2f}–${mc.percentiles['95']:.2f}, "
-            f"current at {mc.current_price_percentile:.0f}th pct."
+            f"Monte Carlo sensitivity (assumptions centred on the base case): "
+            f"current price sits at the {mc.current_price_percentile:.0f}th percentile of the "
+            f"perturbed distribution — mean ${mc.mean:.2f}, P5–P95 "
+            f"${mc.percentiles['5']:.2f}–${mc.percentiles['95']:.2f} across "
+            f"{mc.n_valid:,} simulations."
         )
     if payload.sniper is not None:
         sn = payload.sniper
@@ -1441,7 +1506,17 @@ def apply_canonical_override(
     # POINT target may be honestly withheld (valuation_withheld) while the verdict
     # still ships. Hard-enforce both — same inputs always produce the same numbers;
     # if the LLM drifted, log it for prompt-fidelity evals.
-    allowed_mids = [m.mid for m in vs.methods] if isinstance(vs, ValuationSynthesis) else []
+    # Every published method number is citable prose, not drift: a method's own
+    # low/high band is exactly what the canonical basis prints beside its mid, and
+    # leaving them out of the whitelist had the scrubber REWRITE them to the
+    # canonical target — the basis then read "own range $151.38–$151.38" and the
+    # owner saw a "low" and a "high" that were both the target (review
+    # 2026-10-13), while the same scrubber logged "prose $121.10 vs canon…".
+    allowed_mids = (
+        [value for m in vs.methods for value in (m.low, m.mid, m.high)]
+        if isinstance(vs, ValuationSynthesis)
+        else []
+    )
     # The published value-band bounds (target_low/high — e.g. a bank's residual-income
     # band [RI@trailing, RI@forward]) are legitimate published numbers the deterministic
     # canonical basis prints, but they are NOT per-method mids. Without whitelisting them
@@ -1652,6 +1727,12 @@ async def _execute_thesis(
     # logs any drift, neutralizes drifting $-amounts in the narrative). Same
     # inputs always produce the same numbers — see apply_canonical_override.
     thesis = apply_canonical_override(thesis, canonical, vs)
+
+    # Deterministic bear-case backstop: when the revenue base is government
+    # payors (Medicare/Medicaid/Medicare Advantage) the reimbursement exposure is
+    # a mandatory risk, and the LLM omits it even when its own overview names the
+    # payors (owner review 2026-10-13). Idempotent, no-op for non-payor issuers.
+    thesis = ensure_payor_reimbursement_risk(thesis, structured_context)
 
     # Momentum-vs-verdict narrative backstop (BACKLOG A2/P1-1): the prompt above
     # (build_thesis_prompt) MANDATES a momentum_divergence_note whenever the

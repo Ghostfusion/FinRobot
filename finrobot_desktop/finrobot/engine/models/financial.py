@@ -106,6 +106,27 @@ class MarketData(BaseModel):
     shares_outstanding: float = Field(gt=0)
     current_price: float = Field(gt=0)
     pe_ratio: float | None = None
+    # Provenance LABEL for the P/E's denominator. The provider's ``trailingPE``
+    # rides its own basis (Yahoo: diluted EPS) while the report prints TTM net
+    # income, so the two implied different earnings inside one report (owner
+    # review, EHC: 20.8× → ~$590M beside a printed $603.7M). ``extract_financial_data``
+    # now derives P/E as market_cap ÷ TTM net_income and stamps
+    # ``PE_BASIS_NET_INCOME`` here so the basis is explicit rather than assumed;
+    # None when the provider value was kept as the fallback. A LABEL, not a
+    # warning: it is a property of every P/E, so routing it through
+    # ``FinancialData.warnings`` would flip coverage's "partial" flag for every
+    # yfinance row (coverage.service: ``partial = any(row.warnings)``).
+    # Optional → read-compatible with cached payloads (BUG-038 precedent).
+    pe_basis: str | None = None
+    # Quote-basis provenance (owner review 2026-10-13: the report printed
+    # "Live $124.42" for a prior session's close, on an artifact whose own
+    # provenance recorded ``quote_ts_missing``). ``quote_is_live`` is True only
+    # when the serving provider stamped the quote with a timestamp; otherwise
+    # the price is a session close and the report must label it as one.
+    quote_is_live: bool = False
+    # The quote's own timestamp when the provider supplied one. None means the
+    # report falls back to the data-fetch date as the as-of.
+    quote_as_of: datetime | None = None
     price_52w_high: float | None = None
     price_52w_low: float | None = None
     # Trailing-52-week return in PERCENT units (e.g. -20.5 means -20.5%), computed
@@ -504,19 +525,6 @@ class DCFInputs(BaseModel):
     nwc_pct_revenue: float = Field(
         ge=-0.2, le=0.5, description="Net working capital change as % of revenue"
     )
-    terminal_nwc_pct_revenue: float | None = Field(
-        default=None,
-        ge=-0.10,
-        le=0.10,
-        description=(
-            "Steady-state ΔNWC as % of revenue for the Gordon perpetuity, seeded "
-            "as marginal NWC ratio median(ΔNWC/Δrevenue) × terminal growth. The "
-            "explicit-window nwc_pct_revenue embeds the historical growth rate, "
-            "so holding it into a low-growth perpetuity overstates the drag (or "
-            "the subsidy) several-fold. None = fall back to nwc_pct_revenue "
-            "(inputs built without multi-year history, e.g. direct REST payloads)."
-        ),
-    )
     da_pct_revenue: float = Field(
         default=0.0,
         ge=0,
@@ -538,9 +546,50 @@ class DCFInputs(BaseModel):
 
     # Terminal value
     terminal_growth_rate: float = Field(ge=0, le=0.05, description="Long-term growth rate")
+    terminal_roic: float = Field(
+        default=0.15,
+        gt=0,
+        le=1,
+        description=(
+            "Assumed return on new invested capital (ROIC) funding the perpetual "
+            "growth. Terminal reinvestment is sized by the textbook identity "
+            "g/ROIC (Damodaran), so terminal FCF = terminal NOPAT × (1 − g/ROIC): "
+            "a 3% perpetuity at a 15% ROIC reinvests 20% of NOPAT, the new "
+            "investment a growing firm must actually make. Default 0.15 is the "
+            "Damodaran mature-firm ROIC; direct callers may override."
+        ),
+    )
 
     shares_outstanding: float = Field(gt=0)
     net_debt: float = Field(description="Total debt - cash. Negative if net cash.")
+    # End of the TTM window the revenue_base was measured over. Provenance for
+    # the forecast-year LABELS: the projection starts AFTER this window, so a
+    # window ending mid-2026 makes projection year 1 the twelve months to
+    # mid-2027 — NOT "last annual fiscal year + 1" (owner review 2026-10-13:
+    # EHC's "2026E" revenue was really the twelve months ending mid-2027).
+    ttm_period_end: date | None = None
+    noncontrolling_interest: float = Field(
+        default=0.0,
+        ge=0,
+        description=(
+            "Noncontrolling (minority) interest, in the same currency as net_debt. "
+            "A claim on the enterprise senior to common equity, so it is deducted "
+            "alongside net debt and preferred stock in the EV → equity bridge. "
+            "Defaults to 0.0 for direct/legacy construction and issuers that carry "
+            "none; seed_dcf_inputs reads it from the balance sheet."
+        ),
+    )
+    preferred_stock: float = Field(
+        default=0.0,
+        ge=0,
+        description=(
+            "Preferred equity, in the same currency as net_debt. Deducted alongside "
+            "net debt and noncontrolling interest in the EV → equity bridge (same "
+            "claim-on-the-enterprise logic as calculate_ev). Defaults to 0.0 for "
+            "direct/legacy construction; seed_dcf_inputs reads it from the balance "
+            "sheet."
+        ),
+    )
 
     # Finiteness gate for the three fields without ge/le bounds (bounded
     # fields reject NaN for free — NaN fails every comparison). A NaN in
@@ -724,6 +773,26 @@ class DCFResult(BaseModel):
     # from the printed FCF path lands ~2x off and reads the gap as an error
     # (KO external audit 2026-07-07). Optional for legacy-artifact read-compat.
     terminal_fcf: float | None = None
+
+    # Terminal-value cross-check (reviewer-requested disclosure): the perpetuity
+    # base is terminal NOPAT scaled by (1 − g/ROIC), so the implied reinvestment
+    # rate and the terminal EV/EBITDA fall out of the SAME arithmetic. Disclosed
+    # so a reader can see WHY terminal FCF sits below the final explicit-year FCF
+    # (it funds the perpetuity's growth) instead of reading the gap as an error.
+    # Optional for legacy-artifact read-compat.
+    terminal_nopat: float | None = None
+    terminal_reinvestment_rate: float | None = None
+    terminal_ev_ebitda: float | None = None
+
+    # EV → equity bridge components, disclosed so the deduction of net debt,
+    # preferred stock and noncontrolling interest (the full Damodaran bridge) is
+    # visible rather than a single opaque net-debt subtraction. None on legacy
+    # artifacts predating the field.
+    equity_bridge: dict[str, float] | None = None
+    # Forecast-year provenance for the display layers: which window the
+    # projection grows from and which fiscal year its first year lands in. A
+    # chart must label "2027E" from THIS, never from "last annual year + 1".
+    forecast_basis: dict[str, Any] | None = None
 
     # Valuation
     pv_fcf_total: float
@@ -1123,10 +1192,50 @@ class ValuationMethod(BaseModel):
     )
 
 
+class CrossCheck(BaseModel):
+    """One triangulation cross-check displayed beside the football field.
+
+    NOT a valuation method: a cross-check never enters the confidence-weighted
+    published target (the blend keeps its existing method weighting). It exists so
+    the reader can see whether the published target is consistent with an
+    independent, non-blended read of the same business — the owner-review defect
+    where a target implying ~17x TTM EBITDA sat beside the issuer's own 5-year
+    EV/EBITDA band whose p90 was 12.2x, and nothing in the report said so.
+
+    ``low``/``mid``/``high`` are per-share values implied by one multiple band
+    applied to the run's TTM EBITDA:
+    ``equity = multiple × ttm_ebitda − net_debt − preferred_stock − NCI`` then
+    ``/ shares_outstanding``.
+    """
+
+    name: str = Field(description="Stable id, e.g. ``ev_ebitda_band``.")
+    label: str = Field(description="Human-readable label for the football field row.")
+    low: float
+    mid: float
+    high: float
+    basis: str = Field(
+        description="Names the metric, the look-back window and the TTM EBITDA basis "
+        "the band was applied to — so the multiple is never cited naked."
+    )
+    note: str = Field(
+        description="Says plainly that this is a mean-reversion cross-check excluded "
+        "from the published target blend."
+    )
+
+
 class ValuationSynthesis(BaseModel):
     """Multi-method valuation synthesis. Football field data derives from methods."""
 
     methods: list[ValuationMethod]
+    cross_checks: list[CrossCheck] = Field(
+        default_factory=list,
+        description=(
+            "Non-blended triangulation reads (e.g. the issuer's own 5-year EV/EBITDA "
+            "band applied to the run's TTM EBITDA). Disclosed ALONGSIDE the published "
+            "target, never folded into its weighting. Empty when no cross-check input "
+            "was available — never a fabricated 0 band."
+        ),
+    )
     weighted_price: float | None
     """None when fewer than 2 methods are available — single-method "averages"
     are meaningless cross-checks and MUST NOT be presented as weighted targets."""
@@ -1617,6 +1726,15 @@ class ValuationAggregate(BaseModel):
     current_price: float | None
     as_of: datetime
     methods: list[ValuationMethodRange]
+    cross_checks: list[CrossCheck] = Field(
+        default_factory=list,
+        description=(
+            "Non-blended triangulation reads displayed beside the football field rows "
+            "(e.g. the target's own 5-year EV/EBITDA band applied to its TTM EBITDA). "
+            "Never enters the confidence-weighted point synthesis; empty when a "
+            "cross-check input was unavailable."
+        ),
+    )
     warnings: list[str] = Field(default_factory=list)
     # Forward-estimates provenance — tells the analyst WHICH forecast fiscal year
     # drives comps_pe / ev_ebitda / p_fcf rows (e.g. "2026-09-30"), where the

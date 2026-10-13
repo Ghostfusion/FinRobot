@@ -209,6 +209,20 @@ class ScheduleThirteenAlert(BaseModel):
     transaction_summary: str = ""  # short prose pulled from the filing
 
 
+class InsiderSale(BaseModel):
+    """The largest single attributable insider sale in the window.
+
+    Persisted so the thesis narrative (and the claim checker) can cite WHO sold
+    and how much — the owner review found the report silent on a CEO's $21.5M
+    sale near the 52-week high, because the only insider figure that existed was
+    a client-side sum the backend never computed.
+    """
+
+    name: str
+    position: str | None = None  # self-declared Form-4 officer title
+    value: float  # USD, positive magnitude of the sale
+
+
 # ---------------------------------------------------------------------------
 # Top-level container for Chapter 12 "Ownership & Governance"
 # ---------------------------------------------------------------------------
@@ -222,6 +236,31 @@ class OwnershipGovernanceAnalysis(BaseModel):
     proxy_compensation: ProxyCompensation | None = None
     schedule13_alerts: list[ScheduleThirteenAlert] = Field(default_factory=list)
     generated_at: datetime
+
+    # --- Insider open-market flow over the fetched window -------------------
+    # Signed SUM of open-market Form-4 purchase/sale VALUES (purchases positive,
+    # sales negative). Before this existed the net 90-day flow was summed
+    # CLIENT-SIDE only, so it was not a numeric leaf: the thesis prompt never saw
+    # it, prose citing it was flagged unsupported by the claim checker, and the
+    # report could assert "steady accumulation" over a net SELL (owner review
+    # 2026-10-13). None when the window carried no open-market purchase/sale row
+    # at all — "nothing to net" is not the same claim as "net 0".
+    insider_net_flow: float | None = None
+    insider_buy_value: float | None = None  # gross purchase value, USD
+    insider_sell_value: float | None = None  # gross sale value, USD (positive)
+    insider_window_days: int | None = None  # the window the transactions cover
+    insider_largest_sale: InsiderSale | None = None  # None when no sale is attributable
+
+    # --- 13F coverage denominator ------------------------------------------
+    # The rows come from a PARTIAL local 13F index (sec_holdings_cache), so the
+    # share count they add up to is a floor, not the institutional total. Listed
+    # shares + coverage % are persisted so the UI can label the denominator
+    # instead of asserting a concentration over whatever rows happened to be
+    # ingested (owner review: "top 5 holders = 97%" was computed over 16 rows
+    # while Vanguard/BlackRock — ~10% each per their 13Gs — were absent).
+    institutional_shares_listed: int | None = None
+    institutional_coverage_pct: float | None = None  # percentage units (5.4 → 5.4%)
+
     # Marks degraded sub-sections so the UI can render a "data unavailable"
     # placeholder instead of a misleading empty table.
     degraded_sections: list[str] = Field(default_factory=list)

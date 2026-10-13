@@ -304,6 +304,93 @@ Only steps 2, 7, 8 (plus LLM peer *selection*) involve the LLM; steps 4/5/6 igno
   every deletion because nothing else records it (hard DELETE, and the audit chain only
   appends on save).
 
+- **The DCF equity bridge deducts every enterprise claim, not just net debt:**
+  `equity_bridge_value(ev, inputs) = EV − net_debt − preferred_stock −
+  noncontrolling_interest`, the ONE helper the base case, the sensitivity grid,
+  the reverse-WACC kernel and the Monte Carlo kernel all route through. EHC's
+  balance carried $863.4M of noncontrolling interest (assets 7.458B −
+  liabilities 3.996B − equity 2.598B), the market EV included it, and the DCF
+  silently did not (equity 22.29B → 21.42B, ~4% of the target) — while the only
+  caveat banner pointed at preferred stock, which this issuer does not have.
+  `DCFResult.equity_bridge` publishes the components so the report renders the
+  deductions instead of deriving net debt as EV − equity (which would swallow
+  the NCI into the net-debt bar).
+- **Perpetual growth is paid for out of NOPAT:** terminal FCF = `NOPAT × (1 −
+  g/ROIC)` with a disclosed `DCFInputs.terminal_roic` (default 15%), and
+  `DCFResult.{terminal_reinvestment_rate, terminal_nopat, terminal_ev_ebitda}`
+  publish the implied economics. The old anchor (perpetual capex ≈ D&A × (1+g))
+  made terminal capex equal terminal D&A, so terminal FCF landed on NOPAT and
+  the model grew 3% forever with ZERO net reinvestment — EHC's terminal FCF was
+  nearly double its final explicit-year FCF and 82% of EV. The reinvestment
+  identity subsumes the terminal NWC drag (`terminal_nwc_pct_revenue` is gone),
+  and `g ≥ ROIC` clips the rate at 1.0 rather than raising.
+- **A comparison grid's centre cell IS the base case — by construction, not by
+  rounding:** `build_sensitivity_ranges` returns `discount_rate` unrounded at
+  index 2. Rounding the axis to 4dp published $226.03 for a $225.91 headline
+  beside a cell labelled "7.0%" while the headline WACC was 6.9716%.
+  Display precision is the caller's job (the heatmap labels 2dp and marks the
+  base cell).
+- **A cross-check that does not move the target must be labelled as one:**
+  `valuation_synthesis.cross_checks` carries the issuer's own 5-year EV/EBITDA
+  band applied through the equity bridge (p25/median/p75 → low/mid/high),
+  rendered as visually distinct reference rows and EXCLUDED from the published
+  blend; a `numeric_audit` finding fires when the target's own implied multiple
+  leaves that band (EHC: 17.7x implied against the issuer's own p90 of 12.2x,
+  which the report had been showing as "fair" without triangulating). A missing
+  band median drops the row — never a fabricated `(p25+p75)/2`.
+- **One net-income authority per report:** the trailing P/E is `market_cap ÷
+  TTM net income` (the figure the income-statement table prints) and
+  `MarketData.pe_basis` names that basis; the provider's `trailingPE` rides a
+  different denominator (diluted EPS) and must not be mixed in. A >5% gap
+  between that net income and the SEC XBRL TTM fact raises a warning naming both
+  sources. **Basis strings belong in fields, never in `warnings`** —
+  `coverage.service` computes `partial = any(row.warnings)`, so a benign basis
+  note in `warnings` flips every yfinance coverage row to partial.
+- **A quote is labelled by its basis:** "Live" requires the backend to say so
+  (`raw_data.market.quote_is_live`); an artifact whose own provenance records
+  `quote_ts_missing` renders "Close $x · <as-of>". The report printed "Live
+  $124.42" for a prior session's close.
+- **Forecast years are anchored to the DCF's own base window:**
+  `financial_modeling.forecast_basis = {base, base_period_end,
+  first_forecast_year}` and the charts label from `first_forecast_year`, never
+  "last annual year + 1" — the DCF projects off a TTM base, so the next twelve
+  months are not the next fiscal year ("2026E" was really the twelve months to
+  mid-2027). This needs the provider to emit `fiscal_year`/`ttm_quarter_ends`,
+  or `raw_data.fiscal_period_end` is None and nothing can be labelled.
+- **A provider line item that contradicts its own neighbours is repaired and
+  disclosed, never charted:** the annual-series guard compares each year's gross
+  margin against the other years' median (≥3 peers) and the provider's own TTM
+  margin; a >30pp deviation is repaired from `cost_of_revenue` and warns.
+  (Yahoo's annual FY2025 frame crosses `Cost Of Revenue` with `Selling General
+  And Administration` — COGS carried the SG&A magnitude — and Yahoo's own
+  `Gross Profit` row follows, so trusting one row published a 95.7% gross
+  margin.) An annual series lagging the TTM window by >15 months warrants a
+  warning too: the newest year is absent, not flat.
+- **Every 10-K Item is accounted for:** an empty/absent Item warns and NAMES the
+  Item plus the attempts made, `extracted_via`/`sections_extraction_quality`
+  state the real source, and a None `TenK.document` must surface its
+  AttributeError instead of being swallowed by `getattr(tenk, attr, "")` — which
+  is how all four text Items shipped as 0 characters (edgartools < 5.62.0 cannot
+  populate them at all).
+
+- **Every number the report PUBLISHES is citable prose:** the post-run drift
+  scrubber (`apply_canonical_override`) rewrites a narrative $-amount to the
+  canonical target unless it matches a published value, and its whitelist must
+  therefore carry each method's own `low`/`high` — not just its `mid` — plus the
+  published `target_low`/`target_high`. Leaving the band bounds out turned the
+  basis's own "own range $121.10–$181.66" into "own range $151.38–$151.38", i.e. a
+  "low" and a "high" that were both the target (review 2026-10-13), while the
+  scrubber's own log said "prose $121.10 vs canon…". A band that would ROUND to a
+  single printed value is omitted from the basis rather than printed as a pair.
+- **A triangulation the reader is meant to see must be published, and a dropped
+  one must say why:** the synthesis builds the own-history EV/EBITDA cross-check
+  only when the band fetch yields quantiles, so (a) `historical_loaders` logs the
+  gate it failed, (b) `aggregate_valuation` appends a named "withheld — missing
+  …" warning instead of returning an empty list, and (c) `builders` publishes the
+  row from the technical chapter's frozen band (`publish_band_cross_check`) when
+  the synthesis has none — never overriding a row the synthesis did build, and
+  never fabricating one from a missing band.
+
 **Implicit (follow the pattern):**
 
 - One run per ticker; providers tried in chain order; first FINANCIALS success is "primary" (second

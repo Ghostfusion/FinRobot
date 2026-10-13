@@ -277,7 +277,6 @@ def _mk_inputs(
         ebitda_margin=ebitda_margin,
         capex_pct_revenue=max(0.005, min(0.45, capex_pct)),
         nwc_pct_revenue=0.01,
-        terminal_nwc_pct_revenue=0.005,
         da_pct_revenue=max(0.005, min(0.40, da_pct)),
         tax_rate=0.15,  # MU effective rate runs low; sensitivity-irrelevant to the margin point
         risk_free_rate=0.043,

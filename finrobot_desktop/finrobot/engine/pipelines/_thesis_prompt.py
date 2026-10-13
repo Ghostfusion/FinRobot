@@ -12,17 +12,21 @@ word; prompt-discipline audit tests pin them downstream.
 
 from __future__ import annotations
 
+import re
+
+from finrobot.engine.compute.coordinators.news import sanitize_untrusted_text
+from finrobot.engine.compute.operators.audit import compute_momentum_context, is_momentum_divergent
+from finrobot.engine.compute.operators.valuation_synthesis import CanonicalThesis
 from finrobot.engine.models.financial import (
     CatalystAnalysis,
     DCFResult,
     FinancialData,
     PeerComps,
     SegmentOverview,
+    ThesisResult,
     ValuationSynthesis,
 )
-from finrobot.engine.compute.operators.audit import compute_momentum_context, is_momentum_divergent
-from finrobot.engine.compute.operators.valuation_synthesis import CanonicalThesis
-from finrobot.engine.compute.coordinators.news import sanitize_untrusted_text
+from finrobot.engine.models.sec import OwnershipGovernanceAnalysis
 from finrobot.engine.pipelines._helpers import fmt_market_cap, fmt_multiple
 
 
@@ -141,12 +145,28 @@ def build_thesis_prompt(
                 f"is not meaningful here.{cyclical_clause}"
             )
         elif mi.implied_growth is not None:
+            # TWO SEPARATE one-variable reverse solves, each naming what it holds
+            # FIXED — never a joint condition (owner review 2026-10-13: the prompt
+            # appended "(implied WACC ~9.1%)" inside the same sentence as the implied
+            # growth, so the model narrated one simultaneous market forecast).
+            wacc_solve = (
+                f"Holding the model's growth fade fixed, the current price implies a "
+                f"~{mi.implied_wacc:.1%} discount rate (WACC). "
+                if mi.implied_wacc is not None
+                else ""
+            )
+            growth_solve = (
+                f"Holding the model's {dcf_ctx.wacc:.2%} WACC fixed, the current price "
+                f"implies ~{mi.implied_growth:.1%}/yr perpetual revenue growth over "
+                f"{mi.horizon_years}y."
+            )
             market_implied_line = (
-                f"\nAUTHORITATIVE MARKET-IMPLIED GROWTH (computed, cite verbatim, do "
-                f"not invent): the current price implies ~{mi.implied_growth:.1%}/yr "
-                f"revenue growth over {mi.horizon_years}y"
-                + (f" (implied WACC ~{mi.implied_wacc:.1%})" if mi.implied_wacc is not None else "")
-                + ". State whether that growth is plausible for this company as the "
+                "\nAUTHORITATIVE MARKET-IMPLIED REVERSE-DCF SOLVES (computed, cite "
+                "verbatim, do not invent) — these are SEPARATE single-variable solves, "
+                "NOT a joint market forecast: "
+                + wacc_solve
+                + growth_solve
+                + " State whether that growth is plausible for this company as the "
                 "reader's reality check on the gap between price and fair value." + cyclical_clause
             )
 
@@ -449,11 +469,13 @@ def build_thesis_prompt(
             if mi_for_prompt.implied_growth is not None:
                 _whitelist_parts.append(
                     f"  - financial_modeling.market_implied.implied_growth "
-                    f"(market-implied annual growth): {mi_for_prompt.implied_growth:.4f}"
+                    f"(implied annual growth, solved with the model's WACC held fixed): "
+                    f"{mi_for_prompt.implied_growth:.4f}"
                 )
             if mi_for_prompt.implied_wacc is not None:
                 _whitelist_parts.append(
-                    f"  - financial_modeling.market_implied.implied_wacc: "
+                    f"  - financial_modeling.market_implied.implied_wacc "
+                    f"(implied discount rate, solved with the model's growth fade held fixed): "
                     f"{mi_for_prompt.implied_wacc:.4f}"
                 )
             if mi_for_prompt.growth_ceiling is not None:
@@ -486,6 +508,50 @@ def build_thesis_prompt(
             _whitelist_parts.append(
                 f"      · {label}: revenue {rev_str}, {share_str} of segment total"
             )
+    # ── Insider & institutional flow (owner review 2026-10-13) ──────────────
+    # The 90-day insider net was summed CLIENT-SIDE only, so it was not a numeric
+    # leaf: the narrative never saw it, and prose quoting it was flagged
+    # unsupported while the report asserted "steady accumulation" over a net SALE.
+    # Whitelisting the computed leaf both grounds the prose and gives the claim
+    # checker something real to match; the rule below caps the claim itself.
+    ownership = structured_context.get("ownership_governance_analysis")
+    if isinstance(ownership, OwnershipGovernanceAnalysis):
+        window_txt = (
+            f"{ownership.insider_window_days}-day" if ownership.insider_window_days else "trailing"
+        )
+        if ownership.insider_net_flow is not None:
+            _whitelist_parts.append(
+                f"  - ownership_governance.insider_net_flow ({window_txt} net insider "
+                f"open-market flow; purchases positive, sales negative): "
+                f"${ownership.insider_net_flow:+,.0f}"
+            )
+            if ownership.insider_buy_value is not None and ownership.insider_sell_value is not None:
+                _whitelist_parts.append(
+                    f"      · same-window gross insider purchases "
+                    f"${ownership.insider_buy_value:,.0f} vs insider sales "
+                    f"${ownership.insider_sell_value:,.0f}"
+                )
+        if ownership.insider_largest_sale is not None:
+            sale = ownership.insider_largest_sale
+            position = f", {sale.position}" if sale.position else ""
+            _whitelist_parts.append(
+                f"      · largest single insider sale: {sale.name}{position}, ${sale.value:,.0f}"
+            )
+        if ownership.institutional_coverage_pct is not None:
+            _whitelist_parts.append(
+                f"  - ownership_governance.institutional_coverage_pct (share of shares "
+                f"outstanding covered by the 13F rows on file): "
+                f"{ownership.institutional_coverage_pct:.1f}%"
+            )
+        _whitelist_parts.append(
+            "  - OWNERSHIP FLOW RULE: any statement about insider or institutional "
+            "accumulation or distribution MUST be tied to the computed values above. "
+            "When the supplied net flow is a sale (negative), say the insiders were "
+            "net sellers — do NOT call the pattern accumulation, buying, or 'steady "
+            "accumulation'. When institutional coverage is below 20%, do NOT assert "
+            "holder concentration (the 13F index is incomplete for the period) — "
+            "describe the holders on file and their coverage instead."
+        )
     _whitelist_parts += [
         "FORBIDDEN: any P/E, PEG, PB, yield, market cap, or growth rate you 'remember' — "
         "these MUST come from the fields above.",
@@ -549,3 +615,122 @@ def build_thesis_prompt(
     thesis_prompt = thesis_prompt + _co_context
 
     return thesis_prompt
+
+
+# ── Deterministic bear-case completeness: payor / reimbursement risk ─────────
+# Owner review 2026-10-13: EHC's report says outright that revenue is billed to
+# "Medicare, Medicare Advantage and commercial/managed-care payors", yet none of
+# the five published risks mentioned reimbursement — the LLM was never made to
+# consider it. The fix is deterministic, not another prompt instruction: when the
+# artifact's own signals say the revenue base is payor-set, a reimbursement risk
+# MUST be among the published risks.
+
+# Healthcare-provider industry labels whose revenue is rate-set by government /
+# managed-care payors. This is the same industry-label signal dcf_seed already
+# reads off `market.industry` for its industry fallback — no new provider call.
+_PAYOR_INDUSTRY_TOKENS: tuple[str, ...] = (
+    "medical care facilities",
+    "healthcare facilities",
+    "health care facilities",
+    "healthcare providers",
+    "health care providers",
+    "managed care",
+    "hospital",
+    "nursing",
+    "home health",
+)
+
+# Text signals from the report's own narrative (company_overview) that the
+# revenue base runs through government / managed-care payors.
+_PAYOR_TEXT_RE = re.compile(r"\b(?:medicare|medicaid|reimburs\w*|payors?|payers?)\b", re.I)
+
+# Words that mean the risk is already covered — appending a second reimbursement
+# risk to a report that wrote one is noise, not completeness.
+_PAYOR_RISK_MENTIONS: tuple[str, ...] = (
+    "reimburs",
+    "payor",
+    "payer",
+    "medicare",
+    "medicaid",
+)
+
+
+def _payor_reimbursement_trigger(
+    thesis: ThesisResult, structured_context: dict[str, object]
+) -> bool:
+    """True when the artifact's own evidence says payors set the revenue base.
+
+    Two independent arms, both read from data the artifact already carries: the
+    healthcare-provider industry label (``market.industry``), or a healthcare
+    sector whose own company overview names Medicare/Medicaid/reimbursement/payors
+    as the revenue channel. A non-healthcare issuer with neither signal never
+    fires.
+    """
+    financial_data = structured_context.get("data_collection")
+    industry = ""
+    sector = ""
+    if isinstance(financial_data, FinancialData):
+        industry = (financial_data.market.industry or "").lower()
+        sector = (financial_data.market.sector or "").lower()
+    if any(token in industry for token in _PAYOR_INDUSTRY_TOKENS):
+        return True
+    if "health" in sector:
+        return bool(_PAYOR_TEXT_RE.search(thesis.company_overview or ""))
+    return False
+
+
+def _payor_reimbursement_risk_text(structured_context: dict[str, object]) -> str:
+    """The reimbursement risk, worded from the model's OWN assumptions.
+
+    Cites the DCF's own fade parameters when the model is present (so the entry
+    carries a real figure rather than rhetorical language) and falls back to the
+    reporting-currency revenue base otherwise — never a figure the artifact does
+    not contain.
+    """
+    financial_modeling = structured_context.get("financial_modeling")
+    if isinstance(financial_modeling, DCFResult):
+        assumption = (
+            "the DCF's growth fade assumes the current reimbursement environment "
+            f"persists (terminal growth {financial_modeling.inputs.terminal_growth_rate:.1%} "
+            f"at a {financial_modeling.wacc:.2%} WACC)"
+        )
+    else:
+        financial_data = structured_context.get("data_collection")
+        revenue: float | None = None
+        currency = ""
+        if isinstance(financial_data, FinancialData):
+            revenue = financial_data.income.revenue
+            currency = financial_data.reporting_currency
+        if revenue:
+            assumption = (
+                f"the valuation's cash flows are built on the current {currency} "
+                f"{revenue / 1e9:.2f}B revenue base"
+            )
+        else:
+            assumption = "the valuation assumes today's reimbursement environment persists"
+    return (
+        "Reimbursement / payor-mix risk: the revenue base is billed to government and "
+        "managed-care payors, which set rates administratively rather than at market — a "
+        "reimbursement cut or an adverse payor-mix shift hits revenue and margin directly, "
+        f"and {assumption}."
+    )
+
+
+def ensure_payor_reimbursement_risk(
+    thesis: ThesisResult, structured_context: dict[str, object]
+) -> ThesisResult:
+    """Append a reimbursement risk when the revenue base is payor-set.
+
+    Pure and idempotent: a thesis that already carries a reimbursement / payor /
+    Medicare risk is returned UNCHANGED, and so is one whose issuer shows none of
+    the payor-dependency signals. The verdict, target and confidence are untouched
+    — this only makes the published bear case complete.
+    """
+    haystack = " ".join(thesis.risks).lower()
+    if any(mention in haystack for mention in _PAYOR_RISK_MENTIONS):
+        return thesis
+    if not _payor_reimbursement_trigger(thesis, structured_context):
+        return thesis
+    return thesis.model_copy(
+        update={"risks": [*thesis.risks, _payor_reimbursement_risk_text(structured_context)]}
+    )

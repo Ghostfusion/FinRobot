@@ -154,8 +154,9 @@ def _format_monte_carlo_for_tool(
         f"  P5 {_money(p.get('5'))} · P25 {_money(p.get('25'))} · "
         f"Median {_money(p.get('50'))} · P75 {_money(p.get('75'))} · P95 {_money(p.get('95'))}",
         f"  Mean {_money(result.mean)} · Std {_money(result.std)}",
-        f"Current price {_money(current_price)} sits at the {pct:.0f}th percentile "
-        "of the simulated distribution.",
+        f"Current price {_money(current_price)} sits at the {pct:.0f}th percentile of the "
+        "perturbed distribution — an assumption-sensitivity band around the base-case DCF, "
+        "not an independent valuation (the draws are centred on that same base case).",
     ]
     # State the read factually; the band above is the evidence, this is the one-liner.
     if pct <= 25:

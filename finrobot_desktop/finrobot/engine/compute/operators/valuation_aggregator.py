@@ -33,7 +33,9 @@ from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
 from typing import Any, Final
 
+from finrobot.engine.compute.operators.multiples import ev_band_equity_per_share
 from finrobot.engine.models.financial import (
+    CrossCheck,
     DCFResult,
     DDMResult,
     LBOResult,
@@ -226,6 +228,82 @@ def _thin_sample_confidence(
     return confidence
 
 
+def ev_ebitda_band_cross_check(
+    *,
+    ttm_ebitda: float | None,
+    band_p25: float | None,
+    band_median: float | None,
+    band_p75: float | None,
+    shares: float | None,
+    current_net_debt: float | None,
+    preferred_stock: float | None,
+    noncontrolling_interest: float | None,
+    window_years: int | None,
+    sample_count: int | None,
+) -> CrossCheck | None:
+    """Own-history EV/EBITDA band × TTM EBITDA → a per-share CROSS-CHECK row.
+
+    NOT a valuation method: the result is disclosed beside the football field and
+    never folded into the confidence-weighted published target (owner review
+    2026-10-13 — a target implying ~17x TTM EBITDA sat beside the issuer's own
+    5-year EV/EBITDA p90 of 12.2x and nothing in the report triangulated against
+    it). ``p25 → low``, ``median → mid``, ``p75 → high``, each through the same
+    EV→equity bridge (net debt, preferred, NCI) over shares outstanding.
+
+    Returns None when any input is missing or non-positive — a cross-check is
+    dropped, never fabricated as a 0 band (a fabricated comparison is worse than
+    no comparison).
+    """
+    if ttm_ebitda is None or ttm_ebitda <= 0:
+        return None
+    if shares is None or shares <= 0 or current_net_debt is None:
+        return None
+    if band_p25 is None or band_median is None or band_p75 is None:
+        return None
+    if band_p25 <= 0 or band_median <= 0 or band_p75 <= 0:
+        return None
+
+    def _per_share(multiple: float) -> float | None:
+        return ev_band_equity_per_share(
+            multiple,
+            ttm_ebitda,
+            current_net_debt,
+            preferred_stock,
+            noncontrolling_interest,
+            shares,
+        )
+
+    low = _per_share(band_p25)
+    mid = _per_share(band_median)
+    high = _per_share(band_p75)
+    if low is None or mid is None or high is None:
+        return None
+    window_txt = f"{window_years}-year" if window_years else "multi-year"
+    sample_txt = f"{sample_count} samples" if sample_count else "sample count unavailable"
+    preferred = preferred_stock or 0.0
+    nci = noncontrolling_interest or 0.0
+    basis = (
+        f"Own {window_txt} EV/EBITDA band (p25 {band_p25:.2f}x · median "
+        f"{band_median:.2f}x · p75 {band_p75:.2f}x, {sample_txt}) applied to this run's "
+        f"TTM EBITDA (income.ebitda ${ttm_ebitda:,.0f}) through the EV→equity bridge "
+        f"(− net debt ${current_net_debt:,.0f} − preferred ${preferred:,.0f} − NCI "
+        f"${nci:,.0f}) ÷ {shares:,.0f} shares outstanding."
+    )
+    note = (
+        "Mean-reversion cross-check only — excluded from the published target blend, "
+        "which keeps its existing method weighting."
+    )
+    return CrossCheck(
+        name="ev_ebitda_band",
+        label=f"Own {window_txt} EV/EBITDA",
+        low=low,
+        mid=mid,
+        high=high,
+        basis=basis,
+        note=note,
+    )
+
+
 def aggregate_valuation(
     *,
     ticker: str,
@@ -245,9 +323,22 @@ def aggregate_valuation(
     forward_source: str | None = None,
     historical_ev_ebitda_band: tuple[float, float] | None = None,
     historical_ev_ebitda_sample_n: int | None = None,
+    # Own-history band DETAIL for the cross-check row. ``historical_ev_ebitda_band``
+    # carries only (p25, p75) — enough for the re-rating METHOD row, not for a
+    # cross-check that publishes a p25/median/p75 per-share band. When the median
+    # is absent the cross-check is dropped (never a fabricated mid).
+    historical_ev_ebitda_median: float | None = None,
+    historical_ev_ebitda_window_years: int | None = None,
     historical_p_fcf_band: tuple[float, float] | None = None,
     cyclical: bool = False,
     financial_sector: bool = False,
+    # EV→equity bridge components for the cross-check. Preferred stock and
+    # noncontrolling interest are claims on the enterprise, so the band-implied EV
+    # must clear them before it becomes common equity (mirrors calculate_ev). None
+    # = "not carried by this issuer" → contributes 0, the same convention
+    # current_ev_ebitda uses.
+    preferred_stock: float | None = None,
+    noncontrolling_interest: float | None = None,
     as_of: datetime | None = None,
 ) -> ValuationAggregate:
     """Build the Football Field payload for one ticker.
@@ -433,11 +524,62 @@ def aggregate_valuation(
             "p_fcf: historical valuation band (PR3 not wired) or forward FCF unavailable — multiple row degraded and hidden"
         )
 
+    # ── Own-history EV/EBITDA cross-check (non-blended triangulation) ─────────
+    # Disclosed BESIDE the method rows, never folded into the synthesis weighting.
+    # Suppressed for a balance-sheet financial alongside the EV/EBITDA METHOD row:
+    # enterprise value is the same category error there (owner review 2026-10-13).
+    cross_checks: list[CrossCheck] = []
+    if not financial_sector:
+        band_p25, band_p75 = (
+            historical_ev_ebitda_band if historical_ev_ebitda_band is not None else (None, None)
+        )
+        cross_check = ev_ebitda_band_cross_check(
+            ttm_ebitda=ttm_ebitda,
+            band_p25=band_p25,
+            band_median=historical_ev_ebitda_median,
+            band_p75=band_p75,
+            shares=shares_outstanding,
+            current_net_debt=current_net_debt,
+            preferred_stock=preferred_stock,
+            noncontrolling_interest=noncontrolling_interest,
+            window_years=historical_ev_ebitda_window_years,
+            sample_count=historical_ev_ebitda_sample_n,
+        )
+        if cross_check is not None:
+            cross_checks.append(cross_check)
+        elif historical_ev_ebitda_band is not None or historical_ev_ebitda_median is not None:
+            # Never drop the triangulation SILENTLY: the whole point of the row
+            # is that the reader sees the target beside the issuer's own band,
+            # so a missing input must be named (same convention as the p_fcf row
+            # above, which reports its degraded reason).
+            _missing = [
+                label
+                for label, value in (
+                    ("TTM EBITDA", ttm_ebitda),
+                    ("shares outstanding", shares_outstanding),
+                    ("net debt", current_net_debt),
+                    ("band p25", band_p25),
+                    ("band median", historical_ev_ebitda_median),
+                    ("band p75", band_p75),
+                )
+                if value is None
+            ]
+            warnings.append(
+                "ev_ebitda cross-check: withheld — "
+                + (
+                    f"missing {', '.join(_missing)}"
+                    if _missing
+                    else "band multiples or TTM EBITDA are non-positive"
+                )
+                + " (the published target therefore carries no own-history multiple check)"
+            )
+
     return ValuationAggregate(
         ticker=ticker.upper(),
         current_price=current_price,
         as_of=as_of if as_of is not None else datetime.now(tz=timezone.utc),
         methods=methods,
+        cross_checks=cross_checks,
         warnings=warnings,
         forward_fiscal_period=forward_fiscal_period,
         forward_confidence=forward_confidence,

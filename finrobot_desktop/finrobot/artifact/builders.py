@@ -37,6 +37,10 @@ from finrobot.artifact.models import (
     ArtifactMeta,
     ArtifactOutputs,
 )
+from finrobot.engine.compute.operators.audit import (
+    attach_target_multiple_band_findings,
+    publish_band_cross_check,
+)
 from finrobot.engine.compute.operators.audit.claim_anchor import (
     anchor_claim_status,
     claim_status_note,
@@ -44,6 +48,7 @@ from finrobot.engine.compute.operators.audit.claim_anchor import (
 from finrobot.engine.compute.operators.report_drift import (
     collect_numeric_leaves,
     detect_report_drift,
+    redaction_warning,
 )
 from finrobot.engine.models.claim_status import CLAIM_STATUS_DEFINITION_VERSION
 from finrobot.engine.models.reconcile_tolerances import (
@@ -414,12 +419,11 @@ def _report_drift_flag(
             for token in drift.orphan_tokens:
                 redacted = redacted.replace(token, "[unverified amount redacted]")
             result.steps[name] = redacted
-        examples = ", ".join(drift.orphan_tokens[:5])
-        warnings.append(
-            f"[REPORT-DRIFT/redacted] {drift.orphan_count}/{drift.total_dollar_amounts} "
-            f"narrative $-amounts matched nothing the artifact computed and were "
-            f"redacted ({examples}) — verify the narrative before publishing"
-        )
+        # The wording lives in one place so the tag, counts and the "these were
+        # REMOVED" cause cannot drift apart (see report_drift.redaction_warning).
+        redaction = redaction_warning(drift)
+        if redaction is not None:
+            warnings.append(redaction)
     structured_out["report_drift"]["redacted"] = sorted(drift.orphan_tokens)
     if drift.approximate_count:
         approx_examples = ", ".join(
@@ -1290,6 +1294,16 @@ def build_equity_research_artifact(
         snapshot=fin_snapshot,
         rich_withhold=_withhold_equity_research,
     )
+    # Cross-check the published target against the issuer's OWN historical
+    # multiple band (owner review 2026-10-13: EHC's $225.91 target implied 17.7x
+    # TTM EBITDA against its own 5-year p90 of 12.2x and nothing said so).
+    # Annotates ``numeric_audit`` (status → caveated) and never withholds — a
+    # target outside its own band is a judgment to review, not a corrupt number.
+    # The band the reader is asked to compare against is published first, from
+    # the technical chapter's frozen band, when the synthesis' own fetch came
+    # back empty (it is the same run's data — see publish_band_cross_check).
+    publish_band_cross_check(structured_out, raw_data)
+    audit_warnings += attach_target_multiple_band_findings(structured_out, raw_data)
 
     # Top-level ``valuation_withheld`` is the single "point target withheld" signal,
     # and it must be cause-INDEPENDENT. _attach_numeric_audit sets it for the

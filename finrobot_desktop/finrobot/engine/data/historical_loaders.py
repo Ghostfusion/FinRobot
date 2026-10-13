@@ -362,6 +362,11 @@ class HistoricalBandSpread:
     p25: float
     p75: float
     sample_count: int
+    # The band's own median. Optional because a caller that only needs the
+    # (p25, p75) spread should not be forced to carry it — but the EV/EBITDA
+    # cross-check in the valuation synthesis needs the mid, and it must be the
+    # band's measured median rather than a fabricated (p25+p75)/2.
+    median: float | None = None
 
 
 async def fetch_reverse_multiple_band(
@@ -399,6 +404,19 @@ async def fetch_reverse_multiple_band(
         return None
     p25, p75 = band.p25, band.p75
     if p25 is None or p75 is None or p25 <= 0 or p75 <= 0:
+        # Never silent: a missing (p25, p75) removes the reverse-multiple row AND
+        # the own-history cross-check downstream, and an absent row is
+        # indistinguishable from "this issuer has no history" without this line
+        # (owner review 2026-10-13 — the cross-check vanished with no reason).
+        logger.info(
+            "reverse-multiple band for %s/%s has no usable spread (p25=%s, p75=%s, %d samples) "
+            "— the EV/EBITDA method row and the own-history cross-check are withheld",
+            ticker,
+            metric,
+            p25,
+            p75,
+            band.sample_count,
+        )
         return None
     if band.sample_count < _MIN_BAND_SAMPLES:
         logger.info(
@@ -409,7 +427,9 @@ async def fetch_reverse_multiple_band(
             _MIN_BAND_SAMPLES,
         )
         return None
-    return HistoricalBandSpread(p25=p25, p75=p75, sample_count=band.sample_count)
+    return HistoricalBandSpread(
+        p25=p25, p75=p75, sample_count=band.sample_count, median=band.median
+    )
 
 
 def classify_band(band: HistoricalBand) -> BandClassification:

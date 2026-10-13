@@ -52,6 +52,14 @@ DEFAULT_EQUITY_RISK_PREMIUM: Final[float] = 0.0423
 # compounders (e.g. MSFT) uses 2.5–3.0%. The old 2.5% was labelled "nominal GDP"
 # but is closer to REAL GDP, biasing the Gordon terminal value low.
 DEFAULT_TERMINAL_GROWTH: Final[float] = 0.030
+# Assumed return on new invested capital funding the perpetual growth. Terminal
+# reinvestment is sized by the textbook identity g/ROIC, so a 3% perpetuity at a
+# 15% ROIC reinvests 20% of terminal NOPAT — the new investment a growing firm
+# must actually make (without it the perpetuity implicitly assumes the firm
+# grows 3%/yr forever on zero net reinvestment, the inflated terminal FCF the
+# reviewer flagged). 15% is the Damodaran mature-firm ROIC — a market-wide
+# anchor, not a per-company default — refreshed at each Damodaran update.
+DEFAULT_TERMINAL_ROIC: Final[float] = 0.15
 DEFAULT_TAX_RATE: Final[float] = 0.21  # US corporate statutory
 # Two-stage 10y explicit window — the sell-side standard for growth compounders.
 # A 5y window truncated the growth runway and jumped to the terminal rate too
@@ -610,37 +618,54 @@ def seed_dcf_inputs(
         prov["ebitda_margin"] = f"{ebitda_margin:.1%} ({ebitda_source})"
 
     # ----- capex_pct_revenue -----------------------------------------------
-    # Cyclical: explicit-window CapEx% over the FULL cycle (avoid anchoring on a
-    # single peak/trough year's capex/revenue). Non-cyclical: trailing-3y median.
-    _capex_suffix = (
-        "CapEx / revenue, through-cycle median" if cyclical else "CapEx / revenue median"
-    )
-    capex_ticker, capex_value, capex_label = _ticker_median_with_label(
-        _median_ratio(historical.capital_expenditure, historical.revenue, window=earnings_window),
-        _capex_suffix,
-    )
-    capex_pct, capex_source = _pick_with_provenance(
-        ticker_value=capex_value,
-        ticker_label=capex_label,
-        industry_value=industry.capex_pct_revenue,
-        industry_label=f"{industry.industry} industry median",
-    )
-    # Consistency guard (防地雷): when CapEx falls back to the industry aggregate
-    # but EBITDA margin is the company's own, the pair can be mutually
-    # inconsistent — e.g. Damodaran "Software (Internet)" CapEx 31.8% (an
-    # aggregate skewed by cash-burning small-caps) layered onto a 50%-EBITDA-
-    # margin mega-cap. CapEx can't sustainably exceed EBITDA (that is permanently
-    # negative FCF), so cap an industry-fallback CapEx at the EBITDA margin. Only
-    # fires on the fallback path (capex_ticker is None); a company's own
-    # historical CapEx ratio is never touched.
-    if capex_ticker is None and capex_pct > ebitda_margin:
-        prov["capex_pct_revenue"] = (
-            f"{ebitda_margin:.1%} ({capex_source} {capex_pct:.1%} converged to EBITDA margin "
-            f"{ebitda_margin:.1%} — industry-aggregate CapEx exceeds the company's own EBITDA, which is unsustainable)"
-        )
-        capex_pct = ebitda_margin
-    else:
+    # The model input anchors on the CURRENT-PERIOD actual (canonical TTM capex/
+    # revenue, else the latest fiscal year) before the historical median, so the
+    # DCF never projects off a ratio that disagrees with the run's own
+    # model-vs-current "Current" cell (EHC: model 12.1% = trailing-3y median vs
+    # TTM 15.8%). Same precedence ladder dcf_current_actuals uses, sanity-floored
+    # per basis (a non-positive / >100% ratio is a units/FX/zero-revenue artifact,
+    # not capital intensity, and falls through). Only when no usable current
+    # figure exists does the trailing-3y median apply — cyclical through-cycle
+    # median for cyclicals (avoid anchoring the explicit window on a single
+    # peak/trough year's capex/revenue), plain trailing-3y median otherwise.
+    capex_current = _current_capex_ratio(financials, historical)
+    if capex_current is not None:
+        capex_pct, capex_source = capex_current
+        company_capex = True
         prov["capex_pct_revenue"] = f"{capex_pct:.1%} ({capex_source})"
+    else:
+        _capex_suffix = (
+            "CapEx / revenue, through-cycle median" if cyclical else "CapEx / revenue median"
+        )
+        capex_ticker, capex_value, capex_label = _ticker_median_with_label(
+            _median_ratio(
+                historical.capital_expenditure, historical.revenue, window=earnings_window
+            ),
+            _capex_suffix,
+        )
+        capex_pct, capex_source = _pick_with_provenance(
+            ticker_value=capex_value,
+            ticker_label=capex_label,
+            industry_value=industry.capex_pct_revenue,
+            industry_label=f"{industry.industry} industry median",
+        )
+        company_capex = capex_ticker is not None
+        # Consistency guard (防地雷): when CapEx falls back to the industry
+        # aggregate but EBITDA margin is the company's own, the pair can be
+        # mutually inconsistent — e.g. Damodaran "Software (Internet)" CapEx
+        # 31.8% (an aggregate skewed by cash-burning small-caps) layered onto a
+        # 50%-EBITDA-margin mega-cap. CapEx can't sustainably exceed EBITDA (that
+        # is permanently negative FCF), so cap an industry-fallback CapEx at the
+        # EBITDA margin. Only fires on the fallback path (no company figure); a
+        # company's own CapEx ratio is never touched.
+        if not company_capex and capex_pct > ebitda_margin:
+            prov["capex_pct_revenue"] = (
+                f"{ebitda_margin:.1%} ({capex_source} {capex_pct:.1%} converged to EBITDA margin "
+                f"{ebitda_margin:.1%} — industry-aggregate CapEx exceeds the company's own EBITDA, which is unsustainable)"
+            )
+            capex_pct = ebitda_margin
+        else:
+            prov["capex_pct_revenue"] = f"{capex_pct:.1%} ({capex_source})"
 
     # ----- da_pct_revenue ---------------------------------------------------
     # Cyclical: revenue-WEIGHTED through-cycle D&A% (Σ D&A / Σ revenue). D&A is a
@@ -678,7 +703,7 @@ def seed_dcf_inputs(
     # WDC/STX, whose CapEx ≈ D&A already → no-op), and only for cyclicals — every
     # non-cyclical's trailing-3y capex is untouched. Skipped on the industry-fallback
     # path (the EBITDA-cap guard above already governs that).
-    if cyclical and capex_ticker is not None and da_pct > 0 and capex_pct > da_pct:
+    if cyclical and company_capex and da_pct > 0 and capex_pct > da_pct:
         _full_capex = capex_pct
         capex_pct = da_pct
         prov["capex_pct_revenue"] = (
@@ -693,9 +718,9 @@ def seed_dcf_inputs(
     # positive = cash drag" — the same convention as capex (stored absolute) — so
     # the FCF formula `- ΔNWC` reduces FCF when working capital grows.
     #
-    # The marginal NWC ratio (shared with the terminal value below) is derived
-    # first because it is the degradation target when the trailing median blows
-    # past the ±10% modelling band. A |median| > 10% is not real NWC economics —
+    # The marginal NWC ratio is derived first because it is the degradation
+    # target when the trailing median blows past the ±10% modelling band. A
+    # |median| > 10% is not real NWC economics —
     # a mature staple does not absorb a tenth of revenue into working capital
     # every year — but a trailing window polluted by non-core one-off swings
     # (KO's FY24/25 otherWorkingCapital, −6.2B/−7.2B, dragged the 3y median to
@@ -707,7 +732,7 @@ def seed_dcf_inputs(
     # ~1.4%, back near the ~1.9% TTM actual). A genuine high-NWC grower is
     # protected: its marginal ratio is stable and high, so marginal × its high
     # growth stays a correctly large drag rather than being reduced.
-    terminal_nwc = _terminal_nwc_pct(
+    marginal_nwc = _terminal_nwc_pct(
         historical.change_in_working_capital, historical.revenue, terminal_growth_rate
     )
     nwc_result = _median_ratio(historical.change_in_working_capital, historical.revenue)
@@ -715,7 +740,7 @@ def seed_dcf_inputs(
         nwc_median, nwc_n = nwc_result
         raw_nwc = -nwc_median
         clamped_median = max(-0.10, min(0.10, raw_nwc))
-        if clamped_median != raw_nwc and terminal_nwc is not None:
+        if clamped_median != raw_nwc and marginal_nwc is not None:
             # Clamp binds AND a marginal ratio is derivable → treat the clamp hit
             # as a pathology signal and degrade to the marginal-ratio route.
             # Explicit-window average growth (mean of the projected schedule)
@@ -723,7 +748,7 @@ def seed_dcf_inputs(
             # re-clamp to the ±10% band so a genuine high-NWC hyper-grower (high
             # marginal × high growth) is capped, not reduced. Scalar by design —
             # a per-year NWC sequence is deliberately out of scope here.
-            marginal_ratio, _terminal_pct, raw_marginal = terminal_nwc
+            marginal_ratio, _terminal_pct, raw_marginal = marginal_nwc
             avg_growth = statistics.mean(growth_schedule)
             degraded = marginal_ratio * avg_growth
             nwc_pct = max(-0.10, min(0.10, degraded))
@@ -778,44 +803,6 @@ def seed_dcf_inputs(
         prov["nwc_pct_revenue"] = (
             "1.0% of revenue (no working-capital history available; generic industry "
             "benchmark applied)"
-        )
-
-    # ----- terminal_nwc_pct_revenue ------------------------------------------
-    # The explicit-window ΔNWC/revenue median embeds the HISTORICAL growth rate
-    # (NWC build ≈ marginal NWC ratio × Δrevenue), so holding it into a 3%
-    # perpetuity overstates the drag ~7x for a 20% grower (AMD: 8.1% → 1.4%) —
-    # and, mirrored, props up cash burners on a perpetual NWC subsidy (RIVN:
-    # −10% forever printed a 1.57x-market fair value). Steady state re-derives
-    # it from the marginal ratio: median(ΔNWC_build / Δrevenue) over revenue-
-    # GROWTH years × terminal growth (terminal_nwc computed above). No usable
-    # growth years → None, and _terminal_fcf falls back to the explicit-window
-    # value (honest: don't pretend to have computed a scaling the data can't
-    # support).
-    if terminal_nwc is not None:
-        marginal_ratio, terminal_nwc_pct, raw_marginal = terminal_nwc
-        if marginal_ratio != raw_marginal:
-            # Marginal-ratio clamp bound: disclose the raw median so provenance
-            # never implies the ±60% band value IS the median (BUG-023 — same
-            # family as the explicit-window nwc clamp above). Wording is
-            # analyst-facing (BACKLOG A6⑤) — numbers unchanged.
-            prov["terminal_nwc_pct_revenue"] = (
-                f"{terminal_nwc_pct:.2%} of revenue at steady state (marginal NWC ratio of "
-                f"{marginal_ratio:.1%} of each new revenue dollar — capped down from a raw "
-                f"{raw_marginal:.1%}, most likely skewed by one-off items — applied to the "
-                f"{terminal_growth_rate:.1%} terminal growth rate)"
-            )
-        else:
-            prov["terminal_nwc_pct_revenue"] = (
-                f"{terminal_nwc_pct:.2%} of revenue at steady state (marginal NWC ratio of "
-                f"{marginal_ratio:.1%} of each new revenue dollar applied to the "
-                f"{terminal_growth_rate:.1%} terminal growth rate)"
-            )
-    else:
-        terminal_nwc_pct = None
-        prov["terminal_nwc_pct_revenue"] = (
-            f"reuses the explicit-window figure of {nwc_pct:.1%} of revenue (no year of "
-            f"revenue growth in the trailing history to derive a steady-state marginal NWC "
-            f"ratio)"
         )
 
     # ----- tax_rate ---------------------------------------------------------
@@ -971,6 +958,10 @@ def seed_dcf_inputs(
     prov["risk_free_rate"] = f"{risk_free_rate:.1%} (current 10Y US Treasury yield)"
     prov["equity_risk_premium"] = f"{equity_risk_premium:.1%} (Damodaran implied ERP)"
     prov["terminal_growth_rate"] = f"{terminal_growth_rate:.1%} (long-run US nominal GDP growth)"
+    prov["terminal_roic"] = (
+        f"{DEFAULT_TERMINAL_ROIC:.0%} (Damodaran mature-firm return on new invested "
+        "capital — sizes the terminal reinvestment g/ROIC)"
+    )
 
     # ----- Balance items ----------------------------------------------------
     shares_outstanding = financials.market.shares_outstanding
@@ -1002,6 +993,57 @@ def seed_dcf_inputs(
             f"(total debt − cash = {nd_debt / 1e9:.1f}B − {nd_cash / 1e9:.1f}B)"
         )
 
+    # Preferred equity and noncontrolling (minority) interest ride in the equity
+    # bridge alongside net debt — both are claims on the enterprise senior to
+    # common, exactly as in the multiples EV (calculate_ev). None = not reported
+    # by the provider; coerce to 0 at the point of use (the assumed-0 bridge the
+    # audit/ev_bridge verifier flags) and disclose so the substitution is never
+    # silent.
+    raw_preferred = financials.balance.preferred_stock
+    preferred_stock = raw_preferred if raw_preferred is not None else 0.0
+    if raw_preferred is not None:
+        prov["preferred_stock"] = (
+            f"${preferred_stock / 1e9:.2f}B preferred stock from the balance sheet "
+            "— deducted in the equity bridge"
+        )
+    else:
+        prov["preferred_stock"] = (
+            "no preferred stock reported by the provider — treated as $0 in the equity bridge"
+        )
+
+    raw_nci = financials.balance.noncontrolling_interest
+    noncontrolling_interest = raw_nci if raw_nci is not None else 0.0
+    if raw_nci is not None:
+        prov["noncontrolling_interest"] = (
+            f"${noncontrolling_interest / 1e9:.2f}B noncontrolling interest from the balance "
+            "sheet — deducted in the equity bridge"
+        )
+    else:
+        prov["noncontrolling_interest"] = (
+            "no noncontrolling interest reported by the provider — treated as $0 in the "
+            "equity bridge"
+        )
+
+    # TTM window end. The projection grows from a TTM revenue base, so the YEAR
+    # AXIS is a TTM-relative one — the display layer must label "FY2027E" from
+    # this window, not from the last annual fiscal year (owner review
+    # 2026-10-13: EHC's "2026E" revenue was the twelve months ending mid-2027).
+    # The newest reported quarter end is the fallback when the canonical
+    # snapshot carries no period end of its own.
+    ttm_period_end = financials.fiscal_period_end or (
+        max(financials.ttm_quarter_ends) if financials.ttm_quarter_ends else None
+    )
+    if ttm_period_end is not None:
+        prov["ttm_period_end"] = (
+            f"TTM window ends {ttm_period_end.isoformat()} — projection year 1 is the "
+            "twelve months that follow it"
+        )
+    else:
+        prov["ttm_period_end"] = (
+            "TTM window end not reported by the provider — the projection's year axis "
+            "cannot be mapped to a fiscal year"
+        )
+
     # Disclose any construction-time modelling clamp that binds, so provenance
     # never leads with a value the DCF did not use (BUG-023). These bands are
     # TIGHTER than the DCFInputs Field validators (e.g. capex 45% vs le=1), so a
@@ -1031,7 +1073,6 @@ def seed_dcf_inputs(
         ebitda_margin=max(0.01, min(0.95, ebitda_margin)),
         capex_pct_revenue=max(0.005, min(0.45, capex_pct)),
         nwc_pct_revenue=nwc_pct,
-        terminal_nwc_pct_revenue=terminal_nwc_pct,
         nwc_clamped=nwc_clamped,
         da_pct_revenue=max(0.005, min(0.40, da_pct)),
         # Already clamped to [DCF_TAX_RATE_FLOOR, DCF_TAX_RATE_CAP] above, where the
@@ -1052,8 +1093,12 @@ def seed_dcf_inputs(
         # undefined. 80% is the standard practitioner ceiling for a going concern.
         debt_ratio=max(0.0, min(0.80, debt_ratio)),
         terminal_growth_rate=terminal_growth_rate,
+        terminal_roic=DEFAULT_TERMINAL_ROIC,
         shares_outstanding=shares_outstanding,
         net_debt=net_debt,
+        noncontrolling_interest=noncontrolling_interest,
+        preferred_stock=preferred_stock,
+        ttm_period_end=ttm_period_end,
         # implied_price is a per-share market quote → quote_currency (TWD for
         # TSM, EUR for SAP), not reporting_currency. Carried so the artifact
         # tags its outputs and the diff formatter never assumes USD.
@@ -1088,10 +1133,12 @@ def dcf_current_actuals(
       Never fabricated either way. The second return value, ``capex_is_ttm``, is
       True exactly when the TTM figure was used; the report reads it so the
       "Current" cell's caliber tag never claims TTM for a fallback FY value
-      (BUG-023 displayed==actual family) — this is a *display*-caliber upgrade
-      only, it does NOT touch the DCF's own seeded explicit-period assumptions
-      (batch 4b, 2026-07-09: re-anchoring the model itself was explicitly rejected;
-      the reconciliation table's full disclosure is the sanctioned alternative).
+      (BUG-023 displayed==actual family). This SAME precedence now anchors the
+      DCF's own seeded explicit-period capex (``_current_capex_ratio``) — the
+      earlier display-only stance was reversed by the 2026-10 review: projecting
+      the model off a trailing-3y median that disagrees with the run's own
+      "Current" cell (EHC: 12.1% median vs 15.8% TTM) is the displayed≠used gap
+      this module must not ship.
     * ``revenue_growth`` / ``nwc_pct_revenue`` — the ticker's **latest fiscal
       year** from ``HistoricalMetrics`` (no TTM source for ΔNWC exists in the
       canonical snapshot, and we do not fabricate one). ``nwc`` negates ΔNWC/
@@ -1392,8 +1439,10 @@ def _bank_beta_proxy(industry: IndustryDefault, *, is_bank_issuer: bool) -> tupl
 # Marginal NWC ratio (ΔNWC/Δrevenue) clamp band. Real NWC-to-revenue LEVELS sit
 # well inside ±60%; a marginal-ratio median outside the band is data noise
 # (one-off settlements, derivative collateral swings), not working-capital
-# economics. The resulting terminal drag/subsidy is further clamped to the same
-# ±10% band as nwc_pct_revenue so the field validators never reject the seed.
+# economics. The terminal drag/subsidy this once scaled is GONE (the perpetuity's
+# growth reinvestment is now the g/ROIC identity, not a ΔNWC ratio) — the shared
+# helper is retained for its marginal-ratio computation, which the explicit-window
+# degradation path (and lbo_seed) still consume.
 _MARGINAL_NWC_RATIO_CLAMP = 0.60
 _TERMINAL_NWC_CLAMP = 0.10
 
@@ -1403,21 +1452,27 @@ def _terminal_nwc_pct(
     revenue: list[float],
     terminal_growth: float,
 ) -> tuple[float, float, float] | None:
-    """Steady-state ΔNWC as % of revenue: median(ΔNWC_build/Δrevenue) × tg.
+    """Marginal NWC ratio median(ΔNWC_build/Δrevenue) → terminal-scaled ΔNWC%.
 
-    The marginal ratio is taken over revenue-GROWTH years only — ΔNWC/Δrev is
-    meaningless when revenue shrank (negative denominator flips the sign of an
-    economically identical build). FMP changeInWorkingCapital carries the
-    cash-flow sign (negative = NWC grew = cash consumed), so build = −value,
-    matching the nwc_pct_revenue convention above.
+    The marginal ratio is the degradation target when the explicit-window
+    ΔNWC/revenue median blows past the ±10% modelling band: that trailing median
+    embeds the HISTORICAL growth rate (NWC build ≈ ratio × Δrevenue), so the seed
+    re-derives the drag as marginal ratio × growth — clean per-year NWC-build
+    economics (KO 13.2% → ~1.4%). The marginal ratio is taken over
+    revenue-GROWTH years only — ΔNWC/Δrev is meaningless when revenue shrank (a
+    negative denominator flips the sign of an economically identical build). FMP
+    changeInWorkingCapital carries the cash-flow sign (negative = NWC grew = cash
+    consumed), so build = −value, matching the nwc_pct_revenue convention above.
 
-    Returns ``(marginal_ratio, terminal_pct, raw_marginal_median)`` for
-    provenance — ``marginal_ratio`` is clamped to ±_MARGINAL_NWC_RATIO_CLAMP,
+    Returns ``(marginal_ratio, terminal_pct, raw_marginal_median)`` —
+    ``marginal_ratio`` is clamped to ±_MARGINAL_NWC_RATIO_CLAMP,
     ``raw_marginal_median`` is the un-clamped median so the caller can disclose
-    when the clamp bound (BUG-023) — or None when no usable growth year exists
-    (declining/flat revenue history, NaN-polluted rows), in which case the
-    caller leaves terminal_nwc_pct_revenue unset and the perpetuity falls back
-    to the explicit-window ΔNWC ratio.
+    when the clamp bound (BUG-023). The ``terminal_pct`` element (marginal ×
+    terminal growth, clamped to ±_TERMINAL_NWC_CLAMP) is retained for the shared
+    callers (lbo_seed imports this helper) but is no longer consumed by the DCF
+    perpetuity — its growth reinvestment is subsumed by the g/ROIC identity.
+    None when no usable growth year exists (declining/flat revenue history,
+    NaN-polluted rows); the callers then keep the clamped median.
     """
     ratios: list[float] = []
     for i in range(1, min(len(change_in_working_capital), len(revenue))):
@@ -1434,3 +1489,35 @@ def _terminal_nwc_pct(
     marginal = max(-_MARGINAL_NWC_RATIO_CLAMP, min(_MARGINAL_NWC_RATIO_CLAMP, raw_marginal))
     terminal = max(-_TERMINAL_NWC_CLAMP, min(_TERMINAL_NWC_CLAMP, marginal * terminal_growth))
     return marginal, terminal, raw_marginal
+
+
+def _current_capex_ratio(
+    financials: FinancialData, historical: HistoricalMetrics
+) -> tuple[float, str] | None:
+    """Current-period capex/revenue: canonical TTM, else latest fiscal year.
+
+    Same precedence as :func:`dcf_current_actuals` — the canonical TTM
+    ``income.capital_expenditure / revenue`` when the snapshot carries it, else
+    the latest fiscal year's ``historical.capital_expenditure / revenue`` — so
+    the DCF's seeded explicit-period capex agrees with the report's own
+    model-vs-current "Current" cell instead of projecting off the trailing-3y
+    median (EHC: 12.1% median vs 15.8% TTM). Each basis is sanity-floored: a
+    non-positive or >100% ratio is a units/FX/zero-revenue artifact, not capital
+    intensity, so it falls through to the weaker basis (and ultimately None →
+    the caller's trailing-3y median). Returns ``(ratio, basis_label)`` or None.
+    """
+    inc = financials.income
+    if (
+        inc.capital_expenditure is not None
+        and math.isfinite(inc.capital_expenditure)
+        and inc.revenue
+        and math.isfinite(inc.revenue)
+        and 0.0 < inc.capital_expenditure / inc.revenue <= 1.0
+    ):
+        return inc.capital_expenditure / inc.revenue, "trailing twelve months — current period"
+    latest = _median_ratio(
+        historical.capital_expenditure, historical.revenue, window=1, min_samples=1
+    )
+    if latest is not None and 0.0 < latest[0] <= 1.0:
+        return latest[0], "latest fiscal year — current period"
+    return None

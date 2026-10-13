@@ -24,11 +24,19 @@ from finrobot.engine.compute.operators.audit.narrative_numeric_grounding import 
 )
 from finrobot.engine.compute.operators.audit.sector_sign import audit_sector_sign
 from finrobot.engine.compute.operators.audit.ttm_period import audit_ttm_period
+from finrobot.engine.compute.operators.audit.valuation_band import (
+    attach_target_multiple_band_findings,
+    audit_target_multiple_band,
+    publish_band_cross_check,
+    target_multiple_band_findings_from_structured,
+)
 from finrobot.engine.models.financial import FinancialData
 from finrobot.engine.models.numeric_claim import ArtifactAudit, Finding
 
 __all__ = [
     "MomentumContext",
+    "attach_target_multiple_band_findings",
+    "publish_band_cross_check",
     "audit_artifact",
     "audit_company",
     "audit_currency_caliber",
@@ -37,9 +45,11 @@ __all__ = [
     "audit_momentum_narrative_hedge",
     "audit_narrative_numeric_grounding",
     "audit_sector_sign",
+    "audit_target_multiple_band",
     "audit_ttm_period",
     "compute_momentum_context",
     "is_momentum_divergent",
+    "target_multiple_band_findings_from_structured",
 ]
 
 

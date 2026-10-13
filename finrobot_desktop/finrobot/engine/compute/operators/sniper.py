@@ -54,7 +54,18 @@ class SniperPoints(BaseModel):
     stop_loss: float | None
     take_profit: float | None
     position_size_pct: float | None  # suggested position as % of portfolio (1-5%)
-    safety_margin: float | None  # the discount applied to DCF target
+    safety_margin: float | None  # the discount the entry dial ASKS for
+    # True when the dial-derived entry sat above the market price, i.e. the
+    # market already discounts fair value by MORE than the dial requires — so
+    # ``ideal_buy`` is the market price itself (LONG mode; always False on a
+    # SHORT, whose entry is the market by construction).
+    ideal_buy_at_market: bool = False
+    # The fair-value-anchored entry above is then an at-or-below zone; the level
+    # itself is unchanged, so the display must state which case it shows.
+    # The discount the market already offers (``1 - current / target``), positive
+    # in LONG mode. Paired with ``safety_margin`` it lets the UI distinguish "the
+    # dial is met at today's price" from "wait for the modelled entry".
+    safety_margin_achieved: float | None = None
     support_level: float  # detected support (20-day rolling min)
     resistance_level: float  # detected resistance (20-day rolling max)
     risk_reward_ratio: float | None  # |take_profit - current| / |stop_loss - current|
@@ -75,6 +86,11 @@ def calculate_sniper_points(req: SniperRequest) -> SniperPoints:
     LONG mode (target >= current):
     1. ideal_buy = dcf_target * (1 - safety_margin)
        safety_margin: 15% if upside > 30%, 10% if upside > 15%, 5% otherwise
+       — an AT-OR-BELOW entry zone, not a price to wait for. When the level sits
+       above the current price the market already discounts fair value by more
+       than the dial asks; ``ideal_buy_at_market`` records that and
+       ``safety_margin_achieved`` carries the discount the market offers, so the
+       display never reads as "wait for a rally to $X" beside a BUY at market.
     2. secondary_buy = support_level (min of trailing 20-day window), or None
        when support sits at/below stop_loss (drop the incoherent second entry)
     3. stop_loss = max(support - 10-day-expected-move, current * 0.85)
@@ -129,6 +145,10 @@ def calculate_sniper_points(req: SniperRequest) -> SniperPoints:
 
     invariant_warnings: list[str] = []
     sell_mode = target < current
+    # Entry framing, LONG-only (see the LONG branch): a SHORT's entry is the
+    # market by construction, so both keep their not-applicable values there.
+    ideal_buy_at_market = False
+    safety_margin_achieved: float | None = None
 
     if sell_mode:
         # ------------------------------------------------------------------ #
@@ -209,6 +229,27 @@ def calculate_sniper_points(req: SniperRequest) -> SniperPoints:
             safety_margin = 0.05
 
         ideal_buy = target * (1 - safety_margin)
+        # The market can already sit INSIDE the required margin of safety: a
+        # deep-value name trading 35% below the DCF target while the dial only
+        # asks for 15%. Displayed bare, the dial-derived level then reads as
+        # "wait for a 54% rally before buying" — incoherent next to a BUY at
+        # market (audit 2026-10-13: EHC ideal_buy $192.03 vs a $124.42 price).
+        # The LEVEL is still the right one to publish (it is the fair-value-
+        # anchored entry zone), so it is not rewritten; what was missing is that
+        # the price already sits inside it. ``ideal_buy_at_market`` records that
+        # and ``safety_margin_achieved`` carries the discount the market offers,
+        # so the display can say "at or below $192.03 — the stock is already
+        # there" instead of implying a rally is needed.
+        safety_margin_achieved = 1 - current / target
+        ideal_buy_at_market = ideal_buy > current
+        if ideal_buy_at_market:
+            invariant_warnings.append(
+                f"required {safety_margin:.0%} margin-of-safety entry "
+                f"${ideal_buy:.2f} sits above the market ${current:.2f}: the market "
+                f"already discounts fair value by {safety_margin_achieved:.0%}, so the "
+                f"level is an entry zone the price already sits inside — an at-or-below "
+                f"entry, not a price to wait for."
+            )
 
         # 10-day expected downside move: daily_vol * sqrt(10) * current_price
         vol_buffer = daily_vol * (10**0.5) * current
@@ -302,6 +343,10 @@ def calculate_sniper_points(req: SniperRequest) -> SniperPoints:
         take_profit=r_take_profit,
         position_size_pct=round(position_size, 1),
         safety_margin=round(safety_margin, 2),
+        ideal_buy_at_market=ideal_buy_at_market,
+        safety_margin_achieved=(
+            round(safety_margin_achieved, 4) if safety_margin_achieved is not None else None
+        ),
         support_level=round(support, 2),
         resistance_level=round(resistance, 2),
         risk_reward_ratio=round(risk_reward, 2),

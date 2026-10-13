@@ -9,6 +9,14 @@ multiple (EV/EBITDA, EV/Revenue) — is understated, and the omission stays INVI
 to the ``market_cap + debt + preferred + NCI − cash`` identity, which still closes
 to the dollar.
 
+The DCF consumes the SAME preferred / NCI balance-sheet components: they ride in
+``DCFInputs`` and are deducted in the equity bridge alongside net debt
+(``dcf.equity_bridge_value``), so an unreported component is assumed 0 there too —
+overstating the DCF equity value by the same amount the EV multiples understate.
+This finding therefore covers BOTH bridges: a reported-zero supplier silences it,
+an unreported one leaves the assumed-0 on the multiples EV *and* the DCF equity
+bridge.
+
 Flagged at ``review`` (not ``blocked_field``): the assumed-0 is usually correct, so
 surface the unverifiable bridge so the analyst can confirm rather than auto-withhold
 the whole valuation.
@@ -94,10 +102,11 @@ def audit_ev_bridge(fin: FinancialData) -> list[Finding]:
                     check="ev_bridge_unverified",
                     severity="review",
                     evidence=(
-                        f"{fin.ticker}: {label} not reported by the provider — EV "
-                        f"assumes 0 for it. If the issuer carries {label}, this EV "
-                        f"(and EV/EBITDA, EV/Revenue) is understated by that amount."
-                        + _authority_note(metric)
+                        f"{fin.ticker}: {label} not reported by the provider — when the "
+                        f"provider reports no {label}, BOTH the multiples EV and the DCF "
+                        f"equity bridge assume 0 for it. If the issuer carries {label}, this "
+                        f"EV (and EV/EBITDA, EV/Revenue) is understated, and the DCF equity "
+                        f"value is overstated, by that amount." + _authority_note(metric)
                     ),
                 )
             )

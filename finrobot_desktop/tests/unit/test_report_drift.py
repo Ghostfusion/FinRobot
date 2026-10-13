@@ -13,6 +13,7 @@ from __future__ import annotations
 from finrobot.engine.compute.operators.report_drift import (
     collect_numeric_leaves,
     detect_report_drift,
+    redaction_warning,
 )
 from finrobot.engine.models.reconcile_tolerances import NARRATIVE_DRIFT_TOLERANCE
 
@@ -248,3 +249,23 @@ class TestApproximationBand:
         assert len(drift.unmatched) == 5
         assert drift.orphan_count == 30
         assert len(drift.orphan_tokens) == 30
+
+
+class TestRedactionWarning:
+    """The redaction warning must say the amounts were REDACTED, not merely
+    unmatched — a reader otherwise hunts the text for a figure the pipeline
+    already replaced (owner review 2026-10-13)."""
+
+    def test_names_the_redaction_and_keeps_tag_and_counts(self):
+        drift = detect_report_drift("insider selling of $17M and $26.2M", {276.43})
+        warning = redaction_warning(drift)
+        assert warning is not None
+        assert warning.startswith("[REPORT-DRIFT/redacted]")
+        assert "2/2" in warning  # orphan_count / total_dollar_amounts
+        assert "were redacted because no computed value matched" in warning
+        assert "$17M" in warning and "$26.2M" in warning
+
+    def test_none_when_nothing_was_orphaned(self):
+        drift = detect_report_drift("price $276.43", {276.43})
+        assert drift.orphan_tokens == []
+        assert redaction_warning(drift) is None

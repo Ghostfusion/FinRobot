@@ -33,8 +33,8 @@ from finrobot.engine.compute.operators.dcf_seed import (
     _decay_growth_schedule,
     _effective_tax_rate,
     _median_ratio,
-    _pick_with_provenance,
     _terminal_nwc_pct,
+    _pick_with_provenance,
     _median_recent,
     _weighted_ratio,
     seed_dcf_inputs,
@@ -42,6 +42,7 @@ from finrobot.engine.compute.operators.dcf_seed import (
 from finrobot.engine.compute.operators.monte_carlo import run_monte_carlo
 from finrobot.engine.models.financial import (
     BalanceSheet,
+    DCFInputs,
     FinancialData,
     HistoricalMetrics,
     IncomeStatement,
@@ -615,11 +616,15 @@ class TestCapexConsistencyCap:
         assert inputs.capex_pct_revenue <= inputs.ebitda_margin + 1e-9
 
     def test_company_capex_never_capped(self):
-        # When the company's own CapEx history is present it is used verbatim —
-        # the consistency guard must not touch it even if low.
+        # When the company's own CapEx figure is present it is used verbatim —
+        # the consistency guard must not touch it even if low. AAPL reports no
+        # TTM capex in the fixture, so the anchor is the latest fiscal year.
         inputs = seed_dcf_inputs(_aapl_financials(), _aapl_historical())
         assert 0.02 <= inputs.capex_pct_revenue <= 0.04
-        assert "trailing 3yr CapEx" in inputs.assumption_provenance["capex_pct_revenue"]
+        assert (
+            "latest fiscal year — current period"
+            in (inputs.assumption_provenance["capex_pct_revenue"])
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -706,15 +711,17 @@ class TestMedianWindowBug026:
 
     def test_five_year_history_uses_newest_three(self):
         inputs = seed_dcf_inputs(_aapl_financials(), _five_year_historical())
-        # capex/rev over newest 3 years (3%,4%,5%) → median 4%, NOT the 2y 4.5%.
-        assert inputs.capex_pct_revenue == pytest.approx(0.04)
+        # D&A / EBITDA medians still window the newest 3 years; capex now anchors
+        # on the CURRENT period (latest FY 5%), per defect-5 — its 3y median is
+        # the fallback basis only (see TestCapexBasisPrecedence).
+        assert inputs.capex_pct_revenue == pytest.approx(0.05)
         # ebitda margin over newest 3 (32%,33%,34%) → median 33%, not 2y 33.5%.
         assert inputs.ebitda_margin == pytest.approx(0.33)
 
     def test_five_year_provenance_says_three_years(self):
         inputs = seed_dcf_inputs(_aapl_financials(), _five_year_historical())
         prov = inputs.assumption_provenance
-        assert "trailing 3yr CapEx" in prov["capex_pct_revenue"]
+        assert "latest fiscal year — current period" in prov["capex_pct_revenue"]
         assert "trailing 3yr D&A" in prov["da_pct_revenue"]
         assert "trailing 3yr EBITDA" in prov["ebitda_margin"]
         # nwc_pct_revenue reads analyst prose (BACKLOG A6⑤), not "Nyr" shorthand
@@ -722,20 +729,78 @@ class TestMedianWindowBug026:
         assert "trailing 3-year" in prov["nwc_pct_revenue"]
 
     def test_two_year_history_works_and_provenance_says_two_years(self):
-        """Only 2 years of data: median still computed (count 2) and the label
-        reports the real "trailing 2yr", never a hardcoded 3 (would re-lie)."""
+        """Only 2 years of data: the D&A / EBITDA medians still compute (count 2)
+        and their labels report the real "trailing 2yr", never a hardcoded 3."""
         inputs = seed_dcf_inputs(_aapl_financials(), _two_year_historical())
-        assert inputs.capex_pct_revenue == pytest.approx(0.04)  # median(3%,5%)
+        assert inputs.capex_pct_revenue == pytest.approx(0.05)  # latest FY (3%,5% → 5%)
         assert inputs.ebitda_margin == pytest.approx(0.32)  # median(30%,34%)
         prov = inputs.assumption_provenance
-        assert "trailing 2yr CapEx" in prov["capex_pct_revenue"]
         assert "trailing 2yr D&A" in prov["da_pct_revenue"]
         assert "trailing 2yr EBITDA" in prov["ebitda_margin"]
         assert "trailing 2-year" in prov["nwc_pct_revenue"]
         # Must NOT claim 3 years of history it doesn't have.
-        assert "trailing 3yr" not in prov["capex_pct_revenue"]
         assert "trailing 3yr" not in prov["ebitda_margin"]
         assert "trailing 3-year" not in prov["nwc_pct_revenue"]
+
+
+class TestCapexBasisPrecedence:
+    """Defect-5 (review 2026-10): the seeded capex ratio anchors on the CURRENT
+    period — canonical TTM capex/revenue, else the latest fiscal year — before
+    the trailing-3y median, so the DCF no longer projects off a ratio that
+    disagrees with the run's own model-vs-current "Current" cell (EHC: model
+    12.1% median vs TTM 15.8%). Each basis is sanity-floored; an unusable
+    current figure falls through to the next."""
+
+    def test_ttm_capex_ratio_wins(self):
+        """EHC-like inputs: TTM capex 982,574,976 / revenue 6,206,099,968."""
+        fin = _aapl_financials()
+        fin.income.revenue = 6_206_099_968
+        fin.income.capital_expenditure = 982_574_976
+        inputs = seed_dcf_inputs(fin, _aapl_historical())
+        assert inputs.capex_pct_revenue == pytest.approx(982_574_976 / 6_206_099_968)
+        assert inputs.assumption_provenance["capex_pct_revenue"] == (
+            "15.8% (trailing twelve months — current period)"
+        )
+
+    def test_latest_fiscal_year_wins_when_ttm_missing(self):
+        # AAPL fixture has no TTM capex in income → latest FY (9,447 / 391,035).
+        inputs = seed_dcf_inputs(_aapl_financials(), _aapl_historical())
+        assert inputs.capex_pct_revenue == pytest.approx(9_447_000_000 / 391_035_000_000)
+        assert inputs.assumption_provenance["capex_pct_revenue"] == (
+            "2.4% (latest fiscal year — current period)"
+        )
+
+    def test_falls_back_to_trailing_median_when_current_unusable(self):
+        """A zero latest-FY capex (row missing at the newest year) is not capital
+        intensity → the trailing-3y median is the last resort."""
+        hist = _five_year_historical()
+        hist.capital_expenditure = [1e9, 2e9, 3e9, 4e9, 0.0]
+        inputs = seed_dcf_inputs(_aapl_financials(), hist)
+        # Newest-3 ratios {3%,4%,0-skipped} → median 3.5%, count 2.
+        assert inputs.capex_pct_revenue == pytest.approx(0.035)
+        assert "median" in inputs.assumption_provenance["capex_pct_revenue"]
+
+    def test_absurd_ttm_ratio_falls_through(self):
+        """>100% capex/revenue is a units/zero-revenue artifact — reject the TTM
+        basis and use the latest fiscal year instead of seeding nonsense."""
+        fin = _aapl_financials()
+        fin.income.capital_expenditure = 2 * fin.income.revenue  # 200% — absurd
+        inputs = seed_dcf_inputs(fin, _aapl_historical())
+        assert inputs.capex_pct_revenue == pytest.approx(9_447_000_000 / 391_035_000_000)
+        assert (
+            "latest fiscal year — current period"
+            in (inputs.assumption_provenance["capex_pct_revenue"])
+        )
+
+    def test_nonpositive_ttm_ratio_falls_through(self):
+        fin = _aapl_financials()
+        fin.income.capital_expenditure = 0.0  # no capex reported → not usable
+        inputs = seed_dcf_inputs(fin, _aapl_historical())
+        assert inputs.capex_pct_revenue == pytest.approx(9_447_000_000 / 391_035_000_000)
+        assert (
+            "latest fiscal year — current period"
+            in (inputs.assumption_provenance["capex_pct_revenue"])
+        )
 
 
 class TestForwardGrowthSeed:
@@ -957,8 +1022,11 @@ class TestInputsFetchedAtProvenance:
 
 class TestTerminalNwcPct:
     """Marginal NWC ratio median(ΔNWC_build/Δrevenue) × terminal growth — the
-    steady-state ΔNWC drag. FMP changeInWorkingCapital carries the cash-flow
-    sign (negative = NWC grew = cash consumed), so build = −value."""
+    helper shared by the explicit-window degradation path (and lbo_seed). FMP
+    changeInWorkingCapital carries the cash-flow sign (negative = NWC grew =
+    cash consumed), so build = −value. (The DCF perpetuity no longer consumes the
+    ΔNWC term — its growth reinvestment is subsumed by g/ROIC — but the helper's
+    marginal-ratio output still drives the explicit-window degradation.)"""
 
     def test_growth_years_marginal_ratio_scaled_by_tg(self):
         # i=1: build=1, Δrev=10 → 0.10; i=2: build=2, Δrev=11 → 0.1818
@@ -988,7 +1056,7 @@ class TestTerminalNwcPct:
 
     def test_noise_clamped_to_marginal_band(self):
         # One-off settlement: build 50 on Δrev 10 → ratio 5.0, clamped to 0.6
-        # → terminal = 0.6 × 3% = 1.8%
+        # → terminal = 0.6 × 3% = 1.8%.
         result = _terminal_nwc_pct([0.0, -50.0], [100.0, 110.0], 0.03)
         assert result is not None
         marginal, terminal, raw_marginal = result
@@ -999,7 +1067,7 @@ class TestTerminalNwcPct:
 
     def test_cash_source_negative_ratio_clamped_symmetrically(self):
         # Positive cwc = NWC released cash (payables float). Extreme release
-        # clamps at −0.6 → terminal −1.8%: the RIVN perpetual-subsidy ceiling.
+        # clamps at −0.6 → terminal −1.8%.
         result = _terminal_nwc_pct([0.0, 50.0], [100.0, 110.0], 0.03)
         assert result is not None
         marginal, terminal, raw_marginal = result
@@ -1008,24 +1076,38 @@ class TestTerminalNwcPct:
         assert raw_marginal == pytest.approx(-5.0)
 
 
-class TestSeedTerminalNwc:
-    def test_seed_populates_terminal_nwc_with_provenance(self):
-        """AAPL fixture: growth years are FY22 (Δrev 28.5B, build −1.2B) and
-        FY24 (Δrev 7.75B, build −1.9B) — FY23 revenue declined and is skipped.
-        median(−0.0421, −0.2452) = −0.1436 → × tg 3% ≈ −0.43%."""
-        inputs = seed_dcf_inputs(_aapl_financials(), _aapl_historical())
-        assert inputs.terminal_nwc_pct_revenue is not None
-        assert abs(inputs.terminal_nwc_pct_revenue - (-0.0043097)) < 1e-4
-        prov = inputs.assumption_provenance["terminal_nwc_pct_revenue"]
-        assert "marginal NWC ratio" in prov
+class TestSeedBridgeAndRoic:
+    """The equity-bridge components and the terminal ROIC are seeded from the
+    canonical balance sheet / a market-wide default (review 2026-10)."""
 
-    def test_seed_falls_back_to_none_without_growth_years(self):
-        hist = _aapl_historical()
-        hist.revenue = [391e9, 383e9, 380e9, 370e9]  # monotonically declining
-        inputs = seed_dcf_inputs(_aapl_financials(), hist)
-        assert inputs.terminal_nwc_pct_revenue is None
-        prov = inputs.assumption_provenance["terminal_nwc_pct_revenue"]
-        assert "reuses" in prov
+    def test_seed_populates_roic_and_bridge_components(self):
+        inputs = seed_dcf_inputs(_aapl_financials(), _aapl_historical())
+        assert inputs.terminal_roic == pytest.approx(0.15)
+        assert (
+            "Damodaran mature-firm return on new invested capital"
+            in (inputs.assumption_provenance["terminal_roic"])
+        )
+        # AAPL fixture reports neither preferred nor NCI → seeded 0 with disclosure.
+        assert inputs.preferred_stock == 0.0
+        assert inputs.noncontrolling_interest == 0.0
+        assert "treated as $0" in inputs.assumption_provenance["preferred_stock"]
+        assert "treated as $0" in inputs.assumption_provenance["noncontrolling_interest"]
+
+    def test_seed_reads_reported_preferred_and_nci(self):
+        fin = _aapl_financials()
+        fin.balance.preferred_stock = 2_000_000_000
+        fin.balance.noncontrolling_interest = 863_400_000
+        inputs = seed_dcf_inputs(fin, _aapl_historical())
+        assert inputs.preferred_stock == 2_000_000_000
+        assert inputs.noncontrolling_interest == 863_400_000
+        assert (
+            "$0.86B noncontrolling interest from the balance sheet"
+            in (inputs.assumption_provenance["noncontrolling_interest"])
+        )
+        assert "deducted in the equity bridge" in inputs.assumption_provenance["preferred_stock"]
+
+    def test_terminal_nwc_field_is_gone(self):
+        assert "terminal_nwc_pct_revenue" not in DCFInputs.model_fields
 
 
 class TestClampProvenanceDisclosure:
@@ -1068,16 +1150,16 @@ class TestClampProvenanceDisclosure:
             "working capital is absorbing cash)"
         )
 
-    def test_terminal_marginal_ratio_clamp_disclosed(self):
+    def test_no_terminal_nwc_provenance_key(self):
+        """The terminal ΔNWC drag was removed from the perpetuity (the growth
+        reinvestment identity g/ROIC subsumes it, review 2026-10), so the seed
+        must not emit a terminal_nwc_pct_revenue provenance key at all. The
+        marginal-ratio clamp itself is covered by TestMarginalNwcRatio."""
         hist = _aapl_historical()
-        # Growing revenue (+10B/yr) with an 8B NWC build each year → marginal
-        # ratio 80%, above the ±60% band → clamped, raw median disclosed.
         hist.revenue = [100e9, 110e9, 120e9, 130e9]
         hist.change_in_working_capital = [0.0, -8e9, -8e9, -8e9]
         inputs = seed_dcf_inputs(_aapl_financials(), hist)
-        prov = inputs.assumption_provenance["terminal_nwc_pct_revenue"]
-        assert "capped down from a raw 80.0%" in prov
-        assert "marginal NWC ratio of 60.0% of each new revenue dollar" in prov
+        assert "terminal_nwc_pct_revenue" not in inputs.assumption_provenance
 
 
 def _nwc_history(revenue: list[float], cwc: list[float], cagr: float | None) -> HistoricalMetrics:

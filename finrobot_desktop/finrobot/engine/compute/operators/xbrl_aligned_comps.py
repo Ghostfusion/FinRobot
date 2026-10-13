@@ -6,6 +6,7 @@ override yfinance/FMP fields when the standardized fact is available.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from finrobot.engine.compute.coordinators.extractor import normalize_peer_to_usd
@@ -110,6 +111,59 @@ def _latest_fact_entry(field: Any) -> dict[str, Any] | None:
     return entry
 
 
+# A fact whose period_end is more than this far behind the newest fact period in
+# the snapshot is not "the latest reported" anything — it is an abandoned tag the
+# provider's selection latched onto, and it must not ship with the same face as a
+# current quarter.
+_STALE_FACT_DAYS = 365
+
+
+def _fact_period_end(entry: dict[str, Any]) -> date | None:
+    """Parse an entry's ``period_end``; None when absent or malformed."""
+    raw = entry.get("period_end")
+    if not isinstance(raw, str) or not raw:
+        return None
+    try:
+        return date.fromisoformat(raw[:10])
+    except ValueError:
+        return None
+
+
+def _flag_stale_facts(snapshot: dict[str, list[dict[str, Any]]]) -> None:
+    """Annotate every fact more than one year older than the newest one, in place.
+
+    The XBRL selector can pin a concept to an abandoned tag whose period is years
+    old (EHC's ``us-gaap:OperatingIncomeLoss`` was frozen at period_end
+    2022-12-31 while every other fact ran to 2026-06-30). Fixing the SELECTION is
+    a sibling's job; this is the presentation guard, so a stale fact can never
+    ship silently looking current. An existing ``warning`` (e.g. the derived-Q4
+    caveat) is preserved and the staleness note appended to it.
+    """
+    newest: date | None = None
+    for entries in snapshot.values():
+        for entry in entries:
+            period_end = _fact_period_end(entry)
+            if period_end is not None and (newest is None or period_end > newest):
+                newest = period_end
+    if newest is None:
+        return
+    for entries in snapshot.values():
+        for entry in entries:
+            period_end = _fact_period_end(entry)
+            if period_end is None or (newest - period_end).days <= _STALE_FACT_DAYS:
+                continue
+            note = (
+                f"stale: latest reported period is {newest.isoformat()}, "
+                f"this fact is {period_end.isoformat()}"
+            )
+            existing = entry.get("warning")
+            if isinstance(existing, str) and existing:
+                if note not in existing:
+                    entry["warning"] = f"{existing} | {note}"
+            else:
+                entry["warning"] = note
+
+
 def xbrl_concept_snapshot(raw_xbrl: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     """Return artifact-ready fact lists keyed by us-gaap concept.
 
@@ -160,6 +214,10 @@ def xbrl_concept_snapshot(raw_xbrl: dict[str, Any]) -> dict[str, list[dict[str, 
         annual_ni["matched_concept"] = annual_ni["concept"]
         annual_ni["concept"] = "us-gaap:NetIncomeLoss:annual"
         snapshot.setdefault("us-gaap:NetIncomeLoss:annual", []).append(annual_ni)
+
+    # Never present a stale fact as current — annotate any fact whose period is
+    # more than a year behind the snapshot's newest (see _flag_stale_facts).
+    _flag_stale_facts(snapshot)
 
     return snapshot
 

@@ -238,6 +238,34 @@ def test_assumptions_used_records_seed_for_provenance() -> None:
     assert unseeded.assumptions_used["seed"] is None
 
 
+def test_assumptions_used_declares_the_distribution_basis() -> None:
+    """The MC is NOT independent evidence: its paths perturb the base-case DCF's
+    OWN assumptions, so the payload must say so (review 2026-10 — 'the P50 sits
+    on the DCF value, so the percentile restates the same assumptions')."""
+    result = run_monte_carlo(_inputs(), current_price=160.0, n_simulations=200, seed=1)
+    assert result.assumptions_used["centered_on"] == "base-case DCF assumptions"
+    assert result.assumptions_used["independent"] is False
+
+
+def test_mc_terminal_uses_the_same_reinvestment_identity() -> None:
+    """A g >= ROIC draw must floor the terminal FCF at 0 (never negative), exactly
+    as the scalar kernel — otherwise the vectorized MC could disagree with
+    calculate_dcf on the terminal economics it claims to perturb."""
+    # terminal_roic set below the perturbed terminal growth so every path clamps.
+    inputs = _inputs().model_copy(update={"terminal_roic": 0.01})
+    with pytest.raises(ValueError, match="positive simulations"):
+        run_monte_carlo(
+            inputs,
+            current_price=160.0,
+            n_simulations=200,
+            revenue_growth_std=0.0,
+            ebitda_margin_std=0.0,
+            wacc_std=0.0,
+            terminal_growth_std=0.0,
+            seed=3,
+        )
+
+
 def test_deterministic_seed_is_stable_per_ticker_and_day() -> None:
     assert deterministic_seed("AAPL", as_of="2026-06-10") == deterministic_seed(
         "AAPL", as_of="2026-06-10"

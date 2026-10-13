@@ -101,5 +101,7 @@ def test_evidence_names_the_declared_producer_of_record():
     assert owner is not None
     assert owner in f[0].evidence
     assert f[0].severity == "review"
-    # The original claim must survive the append — the caveat still says what it means.
-    assert "assumes 0" in f[0].evidence
+    # The original claim must survive the append — the caveat still says what it
+    # means, now covering BOTH the multiples EV and the DCF equity bridge.
+    assert "assume 0" in f[0].evidence
+    assert "DCF equity bridge" in f[0].evidence

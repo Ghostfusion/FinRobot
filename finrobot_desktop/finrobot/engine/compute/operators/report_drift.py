@@ -139,6 +139,26 @@ class ReportDrift(BaseModel):
     )
 
 
+def redaction_warning(drift: ReportDrift) -> str | None:
+    """The warning line for orphaned amounts that the builder REDACTED.
+
+    The builder replaces every orphan token with "[unverified amount redacted]",
+    so the warning must say the amounts are GONE — without that, a reader hunts
+    the text for a number the pipeline removed (owner review 2026-10-13: "$26.2M
+    … may be a misquote worth tracing" when it had already been redacted). Same
+    tag and counts as the previous wording; only the cause is now stated.
+    None when there is nothing redacted.
+    """
+    if not drift.orphan_tokens:
+        return None
+    examples = ", ".join(drift.orphan_tokens[:5])
+    return (
+        f"[REPORT-DRIFT/redacted] {drift.orphan_count}/{drift.total_dollar_amounts} "
+        f"narrative amounts were redacted because no computed value matched "
+        f"({examples}) — verify the narrative before publishing"
+    )
+
+
 def collect_numeric_leaves(payload: Any) -> set[float]:
     """Recursively collect every finite numeric leaf of a JSON-shaped payload.
 

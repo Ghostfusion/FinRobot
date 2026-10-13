@@ -806,17 +806,19 @@ def build_sensitivity_ranges(
     candidates filtered to stay strictly below min(discount_rate_range), so
     every cell in the resulting grid is a valid Gordon-growth denominator.
 
-    The lower cells are floored at ``terminal_growth + 0.005`` (not a hardcoded
-    3%) to keep every rate a valid Gordon denominator. Because that floor is
-    below ``discount_rate`` for any sound DCF (WACC > terminal growth), the
-    center cell (index 2) always equals ``discount_rate`` — so the sensitivity
-    table's center matches the narrative's base-case implied price (BUG-013).
-    The old absolute 3% floor clobbered the center whenever WACC < 3%, shifting
-    it off the base case by a large margin. (For very low WACC the bottom cells
-    may clamp to the floor and repeat; they stay valid, the center stays exact.)
+    The center cell (index 2) is EXACTLY ``discount_rate`` by construction — the
+    discount axis is never rounded, so the grid center reproduces the narrative's
+    base-case implied price to full float precision (BUG-013). Rounding the axis
+    to 4dp (0.0697158… → 0.0697) silently moved the center off the base case, so
+    the 7.0% cell printed a higher price than the base at 6.97% — display
+    rounding is the caller's job, never the grid's. The lower cells are floored at
+    ``terminal_growth + 0.005`` (not a hardcoded 3%) to keep every rate a valid
+    Gordon denominator; because that floor is below ``discount_rate`` for any sound
+    DCF (WACC > terminal growth), the center stays exact even when the floor clamps
+    the bottom cells (they then repeat the floor value, still valid).
     """
     rate_floor = terminal_growth + 0.005
-    rate_range = [round(max(rate_floor, discount_rate - 0.02 + i * 0.01), 4) for i in range(5)]
+    rate_range = [max(rate_floor, discount_rate - 0.02 + i * 0.01) for i in range(5)]
     tg_candidates = [round(max(0.0, terminal_growth - 0.01 + i * 0.005), 4) for i in range(5)]
 
     min_rate = min(rate_range)
@@ -835,6 +837,14 @@ def build_valuation_synthesis(
     *,
     historical_ev_ebitda_band: tuple[float, float] | None = None,
     historical_ev_ebitda_sample_n: int | None = None,
+    # Own-history band DETAIL (measured median + window) for the cross-check row,
+    # and the two enterprise-claim components the EV→equity bridge must clear
+    # before the band-implied value becomes common equity. All optional: an
+    # absent median drops the cross-check rather than inventing a mid.
+    historical_ev_ebitda_median: float | None = None,
+    historical_ev_ebitda_window_years: int | None = None,
+    preferred_stock: float | None = None,
+    noncontrolling_interest: float | None = None,
 ) -> ValuationSynthesis | None:
     """Build ValuationSynthesis from pipeline structured_context via aggregate_valuation.
 
@@ -967,6 +977,10 @@ def build_valuation_synthesis(
         ttm_ebitda=ttm_ebitda,
         historical_ev_ebitda_band=historical_ev_ebitda_band,
         historical_ev_ebitda_sample_n=historical_ev_ebitda_sample_n,
+        historical_ev_ebitda_median=historical_ev_ebitda_median,
+        historical_ev_ebitda_window_years=historical_ev_ebitda_window_years,
+        preferred_stock=preferred_stock,
+        noncontrolling_interest=noncontrolling_interest,
         cyclical=cyclical,
         financial_sector=financial_sector,
     )
@@ -1001,6 +1015,7 @@ def build_valuation_synthesis(
             cyclical=cyclical,
             financial_sector=financial_sector,
             mna_transition=bool(mna_transition),
+            cross_checks=agg.cross_checks,
         )
     except ValueError as e:
         logger.warning("Failed to build ValuationSynthesis: %s", e)

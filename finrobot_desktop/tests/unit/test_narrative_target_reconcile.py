@@ -157,6 +157,51 @@ def test_per_method_mid_is_whitelisted_not_drift() -> None:
     assert out.valuation_overview == overview
 
 
+def test_per_method_band_bounds_are_whitelisted_not_drift() -> None:
+    """A method's OWN low/high band is published prose, not drift.
+
+    Owner review 2026-10-13: the canonical basis prints "DCF $151.38 (own range
+    $121.10–$181.66)"; leaving the bounds out of the whitelist had the scrubber
+    rewrite them to the target, so the published basis read "own range
+    $151.38–$151.38" — a "low" and a "high" that were both the target.
+    """
+    basis = "Blend of 1 method: DCF $151.38 (own range $121.10–$181.66, wt 0.85) → $151.38."
+    thesis = _thesis(price_target_basis=basis)
+
+    vs = ValuationSynthesis(
+        methods=[
+            ValuationMethod(
+                name="dcf",
+                low=121.10,
+                mid=151.38,
+                high=181.66,
+                confidence=0.85,
+                source="implied_price ± 20%",
+            )
+        ],
+        current_price=124.42,
+        confidence="medium",
+        weighted_price=None,
+        upside_downside=0.216,
+        target_low=113.54,
+        target_high=189.23,
+    )
+    canonical = CanonicalThesis(
+        verdict="HOLD",
+        target=151.38,
+        basis=basis,
+        upside=0.216,
+        valuation_withheld=False,
+        confidence="medium",
+    )
+
+    out = apply_canonical_override(thesis, canonical, vs)
+
+    assert out.price_target_basis == basis
+    assert "$121.10" in out.price_target_basis
+    assert "$181.66" in out.price_target_basis
+
+
 def test_drift_scanned_across_tagline_and_takeaways() -> None:
     thesis = _thesis(
         tagline="AAPL · fair value ~$280, room to run",

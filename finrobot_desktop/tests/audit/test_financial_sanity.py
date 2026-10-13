@@ -107,17 +107,18 @@ class TestDCFSanity:
             shares_outstanding=15_120_000_000,
             net_debt=66_900_000_000,
             # Pin to 0: D&A=0 means no tax shield, the standard formula collapses
-            # to EBITDA(1-T) - CapEx - ΔNWC in the explicit years. With the
-            # terminal-capex→D&A normalization, terminal capex = 0 here, lifting
-            # the perpetuity FCF — the hand-calc reference is now $90.48.
+            # to EBITDA(1-T) - CapEx - ΔNWC in the explicit years. The perpetuity
+            # is terminal NOPAT × (1 − g/ROIC), and with the anchor (and thus
+            # terminal D&A) at 0 the hand-calc reference is $82.32 (the legacy
+            # $90.48 assumed zero net reinvestment in the perpetuity).
             da_pct_revenue=0.0,
         )
 
     def test_apple_implied_price(self, apple_inputs: DCFInputs) -> None:
-        """WACC override 10%, tg 2.5% → implied price ~$90.48 (hand-calculated;
-        terminal capex→D&A normalization, up from the legacy $82.68)."""
+        """WACC override 10%, tg 2.5% → implied price ~$82.32 (hand-calculated;
+        terminal reinvestment identity g/ROIC sizes the perpetuity's growth)."""
         result = calculate_dcf(apple_inputs, wacc_override=0.10)
-        assert abs(result.implied_price - 90.48) < 1.0, f"Got {result.implied_price:.2f}"
+        assert abs(result.implied_price - 82.32) < 1.0, f"Got {result.implied_price:.2f}"
 
     def test_da_zero_collapses_to_simplified_arithmetic(self, apple_inputs: DCFInputs) -> None:
         """When D&A=0 the standard formula collapses to EBITDA(1-T) - CapEx - ΔNWC.

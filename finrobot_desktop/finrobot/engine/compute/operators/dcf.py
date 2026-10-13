@@ -45,6 +45,25 @@ class ReverseSolveReason(StrEnum):
     GORDON_UNDEFINED = "gordon_undefined"
 
 
+def equity_bridge_value(enterprise_value: float, inputs: DCFInputs) -> float:
+    """EV → equity: deduct net debt, preferred stock and noncontrolling interest.
+
+    The full Damodaran / CFA equity bridge. Preferred equity and noncontrolling
+    (minority) interest are claims on the enterprise senior to common, exactly as
+    in the multiples EV (``multiple.calculate_ev``), so the DCF must deduct them
+    too — a net-debt-only subtraction overstates equity value for any issuer
+    carrying them (EHC carries $0.86B NCI, ~4% of per-share value). Single
+    authority so the base case, the sensitivity grid, the reverse kernels and the
+    vectorized Monte Carlo can never drift apart on the bridge.
+
+    Accepts and returns scalars; also applied to a NumPy array of enterprise
+    values by the vectorized Monte Carlo kernel (elementwise arithmetic).
+    """
+    return (
+        enterprise_value - inputs.net_debt - inputs.preferred_stock - inputs.noncontrolling_interest
+    )
+
+
 def calculate_dcf(
     inputs: DCFInputs,
     wacc_override: float | None = None,
@@ -123,7 +142,9 @@ def calculate_dcf(
     # report narrative or the LLM thesis prompt. Degrade the same way the tg >= wacc
     # case does: raise ValueError so the equity_research pipeline skips the DCF
     # chapter and falls back to relative valuation (see BUG-074).
-    terminal_fcf = _terminal_fcf(inputs, projected_revenue[-1], tg)
+    terminal_nopat, terminal_reinvestment_rate, terminal_fcf = _terminal_economics(
+        inputs, projected_revenue[-1], tg
+    )
     if terminal_fcf <= 0:
         raise ValueError(
             f"Steady-state terminal FCF is non-positive ({terminal_fcf:.3g}); the Gordon "
@@ -134,10 +155,17 @@ def calculate_dcf(
 
     terminal_value = terminal_fcf * (1 + tg) / (wacc - tg)
     pv_terminal = terminal_value / (1 + wacc) ** (n - offset)
+    # Terminal EV/EBITDA back-out: the terminal enterprise value over the terminal
+    # EBITDA the same margin capitalized, so a reader can see whether the
+    # perpetuity implies a sensible exit multiple. Guarded — terminal EBITDA is 0
+    # only when the margin the perpetuity capitalized is 0 (never with a positive
+    # terminal FCF).
+    terminal_ebitda = projected_revenue[-1] * inputs.ebitda_margin
+    terminal_ev_ebitda = terminal_value / terminal_ebitda if terminal_ebitda > 0 else None
 
-    # 8-10. Valuation bridge: EV → Equity → Price
+    # 8-10. Valuation bridge: EV → Equity → Price (net debt, preferred, NCI)
     enterprise_value = pv_fcf_total + pv_terminal
-    equity_value = enterprise_value - inputs.net_debt
+    equity_value = equity_bridge_value(enterprise_value, inputs)
     if equity_value <= 0:
         # BUG-074's sibling on the other side of the bridge: positive FCFs
         # passed the negative-terminal gate, but net debt exceeding the
@@ -147,15 +175,17 @@ def calculate_dcf(
         # negative. Same degrade path: raise so the pipeline skips the DCF
         # chapter and falls back to relative valuation / distressed analysis.
         raise ValueError(
-            f"Equity value is non-positive ({equity_value:.3g}): net debt "
-            f"({inputs.net_debt:.3g}) exceeds the enterprise value "
-            f"({enterprise_value:.3g}). A negative per-share fair value is not "
-            "meaningful — DCF is not applicable; use relative valuation or "
+            f"Equity value is non-positive ({equity_value:.3g}): net debt, preferred "
+            f"stock and noncontrolling interest ({inputs.net_debt:.3g} + "
+            f"{inputs.preferred_stock:.3g} + {inputs.noncontrolling_interest:.3g}) exceed "
+            f"the enterprise value ({enterprise_value:.3g}). A negative per-share fair "
+            "value is not meaningful — DCF is not applicable; use relative valuation or "
             "distressed/credit analysis instead."
         )
     implied_price = equity_value / inputs.shares_outstanding
 
     return DCFResult(
+        forecast_basis=forecast_basis(inputs),
         cost_of_equity=cost_of_equity,
         wacc=wacc,
         projection_years=n,
@@ -165,6 +195,16 @@ def calculate_dcf(
         terminal_value=terminal_value,
         pv_terminal=pv_terminal,
         terminal_fcf=terminal_fcf,
+        terminal_nopat=terminal_nopat,
+        terminal_reinvestment_rate=terminal_reinvestment_rate,
+        terminal_ev_ebitda=terminal_ev_ebitda,
+        equity_bridge={
+            "enterprise_value": enterprise_value,
+            "net_debt": inputs.net_debt,
+            "preferred_stock": inputs.preferred_stock,
+            "noncontrolling_interest": inputs.noncontrolling_interest,
+            "equity_value": equity_value,
+        },
         pv_fcf_total=pv_fcf_total,
         enterprise_value=enterprise_value,
         equity_value=equity_value,
@@ -196,9 +236,9 @@ def calculate_sensitivity(
     for w in wacc_range:
         row: list[float | None] = []
         for g in tg_range:
-            # Terminal FCF normalizes capex→D&A at the cell's own g (see
-            # _terminal_fcf), so the grid centre matches calculate_dcf's base case.
-            # Cells the base case would REFUSE (tg >= wacc, sub-floor Gordon
+            # Terminal FCF is the steady-state NOPAT × (1 − g/ROIC) at the cell's own
+            # g (see _terminal_fcf), so the grid centre matches calculate_dcf's base
+            # case. Cells the base case would REFUSE (tg >= wacc, sub-floor Gordon
             # spread, non-positive terminal FCF or equity) render as None —
             # the near-diagonal blowup values must not ship just because they
             # live in a grid instead of the headline.
@@ -212,7 +252,7 @@ def calculate_sensitivity(
                 tv = terminal_fcf * (1 + g) / (w - g)
                 pv_tv = tv / (1 + w) ** (n - offset)
                 ev = pv_fcf + pv_tv
-                equity = ev - inputs.net_debt
+                equity = equity_bridge_value(ev, inputs)
                 row.append(equity / inputs.shares_outstanding if equity > 0 else None)
         implied_prices.append(row)
     return {
@@ -262,6 +302,30 @@ def margin_swing(inputs: DCFInputs) -> tuple[float | None, float | None] | None:
     return (low, high)
 
 
+def forecast_basis(inputs: DCFInputs) -> dict[str, Any]:
+    """Provenance for the projection's YEAR AXIS — what the labels mean.
+
+    The projection grows off ``revenue_base``, which the seed measures over the
+    latest TTM window, so projection year 1 is the twelve months AFTER that
+    window. Labelling it from the last annual fiscal year (base FY2025 →
+    "2026E") therefore asserted a period the numbers do not describe: for EHC
+    the first projection year covered Jul 2026 – Jun 2027 (owner review
+    2026-10-13). ``first_forecast_year`` is the fiscal year that contains the
+    window's END, i.e. ``ttm_period_end.year + 1``, which is the closest honest
+    calendar label for a mid-year TTM window; it is None when the seed could
+    not resolve a window end, and the display layer must then fall back to a
+    relative label rather than invent one.
+    """
+    end = inputs.ttm_period_end
+    if end is None:
+        return {"base": "ttm", "base_period_end": None, "first_forecast_year": None}
+    return {
+        "base": "ttm",
+        "base_period_end": end.isoformat(),
+        "first_forecast_year": end.year + 1,
+    }
+
+
 def _project_full(
     inputs: DCFInputs,
     growth_rates_override: list[float] | None = None,
@@ -303,60 +367,69 @@ def _project_full(
     return revenue, ebitda_list, fcfs
 
 
-def _terminal_fcf(inputs: DCFInputs, terminal_revenue: float, terminal_growth: float) -> float:
-    """Steady-state free cash flow that feeds the Gordon perpetuity.
+def _terminal_economics(
+    inputs: DCFInputs, terminal_revenue: float, terminal_growth: float
+) -> tuple[float, float, float]:
+    """Steady-state terminal ``(NOPAT, reinvestment_rate, free_cash_flow)``.
 
-    In stable growth, reinvestment normalizes: capex converges to maintenance
-    plus the small net investment that funds perpetual growth, so
-    ``capex = anchor × (1 + g)``. Capitalizing the LAST EXPLICIT-YEAR FCF
-    instead — which still carries the full growth-phase capex — capitalizes a
-    perpetually-suppressed cash flow: a company growing at GDP (3%) cannot
-    out-invest its depreciation by 67% forever. For a capex-heavy grower
-    (TSLA: capex 9.2% vs D&A 5.5% of revenue, held into the perpetuity) that
-    pinned the Gordon terminal value ~40% too low — implied $28 vs the
-    steady-state-normalized ~$38. Only the perpetuity BASE normalizes; the
-    explicit-forecast FCFs keep their growth-phase capex unchanged.
+    The perpetuity base is the textbook reinvestment identity, not a bare
+    capital-intensity normalization: terminal FCF = terminal NOPAT ×
+    (1 − g/ROIC), with the reinvestment rate g/ROIC (Damodaran, "Investment
+    Valuation" 3rd Ed., Ch. 12). Capitalizing a growth-phase FCF — the LAST
+    EXPLICIT-YEAR FCF, which still carries full growth capex — understates value
+    (a company growing at GDP cannot out-invest its depreciation forever); but
+    the previous maintenance-anchor-only formula went the other way and OVER-
+    stated it: terminal capex ≈ terminal D&A left terminal FCF ≈ terminal NOPAT,
+    implying ZERO net reinvestment while growing 3% forever (EHC: terminal FCF
+    $1.56B, ~2× the final explicit-year FCF of ~$0.8B — the reviewer's flag).
+    Sizing reinvestment by g/ROIC restores the cash the perpetuity's growth
+    actually requires: a 3% perpetuity at a 15% ROIC reinvests 20% of NOPAT.
 
-    The maintenance anchor is ``min(da_pct, capex_pct)``, NOT bare D&A:
-    GAAP D&A includes acquisition-intangible amortization, which amortizes a
-    sunk purchase price and requires no cash replacement — anchoring perpetual
-    capex on it injects phantom reinvestment. AMD post-Xilinx: GAAP D&A 12.3%
-    of revenue vs real capex 2.5% (SEC FY2025: capex $0.97B / revenue $34.6B
-    = 2.8%, FCF +$6.7B) — the bare-D&A anchor burned ~10% of revenue forever,
-    flipped terminal FCF to −$4.3B and killed the DCF chapter of a company
-    with strongly positive real FCF. ``min`` keeps the capex-heavy side
-    (TSLA: anchor stays D&A 5.5%) and floors the amortization-heavy side at
-    the company's own maintenance spend. Terminal EBIT deducts (and the FCF
-    adds back) the SAME anchor so the perpetuity stays internally consistent —
-    acquisition amortization runs off in finite time, so it belongs in neither
-    perpetual EBIT nor perpetual reinvestment.
+    Terminal NOPAT still uses the maintenance capex anchor
+    ``da = revenue × min(da_pct, capex_pct)`` — GAAP D&A includes acquisition-
+    intangible amortization, which amortizes a sunk purchase price and requires
+    no cash replacement, so anchoring perpetual capex on bare D&A injects
+    phantom reinvestment (AMD post-Xilinx: GAAP D&A 12.3% of revenue vs real
+    capex 2.8%, which flipped terminal FCF to −$4.3B for a company with +$6.7B
+    real FCF). ``min`` keeps the capex-heavy side (TSLA: anchor stays D&A 5.5%)
+    and floors the amortization-heavy side at the company's own maintenance
+    spend. ``ebit = revenue × ebitda_margin − da`` deducts that SAME anchor, so
+    the steady-state operating margin is internally consistent — acquisition
+    amortization runs off in finite time, so it belongs in neither perpetual
+    EBIT nor perpetual reinvestment.
 
-    Terminal ΔNWC uses ``terminal_nwc_pct_revenue`` (seeded as the marginal
-    NWC ratio × terminal growth) when available: the historical ΔNWC/revenue
-    median embeds the historical GROWTH rate (NWC build ≈ NWC ratio × Δrev),
-    so holding it into a 3% perpetuity overstates the drag ~7x for a 20%
-    grower (AMD: 8.1% → 1.4%) — and the mirror image propped up cash burners
-    on a perpetual NWC *subsidy* (RIVN: −10% forever printed a 1.57x-market
-    fair value). ``None`` falls back to ``nwc_pct_revenue`` (inputs built
-    without historical context, e.g. direct REST payloads).
+    The ΔNWC drag of the previous formula is SUBSUMED by the reinvestment
+    identity: g/ROIC is the total new investment (working capital AND fixed)
+    required per unit of NOPAT growth, so it is neither double-counted nor
+    dropped.
 
-    The same normalization runs in calculate_dcf, calculate_sensitivity, the
-    reverse-DCF kernel (_price_for), and run_monte_carlo (vectorized) so the
-    base case, the sensitivity grid centre, the market-implied solver, and the
-    MC distribution all speak the same terminal economics. The MC side is
-    pinned by a perturbation→0 equivalence test against calculate_dcf.
+    ``g/ROIC`` is clamped to [0, 1]: a growth rate at or above the assumed ROIC
+    would require more than 100% of NOPAT as reinvestment (a value-destroying
+    perpetuity), so it floors the terminal FCF at 0 rather than going negative.
+
+    The same terminal economics run in calculate_dcf, calculate_sensitivity, the
+    reverse-DCF kernel (_price_for) and run_monte_carlo (vectorized) so the base
+    case, the sensitivity grid centre, the market-implied solver and the MC
+    distribution all speak the same terminal economics. The MC side is pinned by
+    a perturbation→0 equivalence test against calculate_dcf.
     """
     rev = terminal_revenue
     anchor = min(inputs.da_pct_revenue, inputs.capex_pct_revenue)
     da = rev * anchor
     ebit = rev * inputs.ebitda_margin - da
-    capex = da * (1 + terminal_growth)
-    nwc_pct = (
-        inputs.terminal_nwc_pct_revenue
-        if inputs.terminal_nwc_pct_revenue is not None
-        else inputs.nwc_pct_revenue
-    )
-    return ebit * (1 - inputs.tax_rate) + da - capex - rev * nwc_pct
+    nopat = ebit * (1 - inputs.tax_rate)
+    reinvestment_rate = min(max(terminal_growth / inputs.terminal_roic, 0.0), 1.0)
+    return nopat, reinvestment_rate, nopat * (1 - reinvestment_rate)
+
+
+def _terminal_fcf(inputs: DCFInputs, terminal_revenue: float, terminal_growth: float) -> float:
+    """Steady-state free cash flow that feeds the Gordon perpetuity.
+
+    Thin wrapper over :func:`_terminal_economics` returning just the FCF — see
+    there for the reinvestment identity (terminal FCF = terminal NOPAT ×
+    (1 − g/ROIC)) and the maintenance-anchor rationale.
+    """
+    return _terminal_economics(inputs, terminal_revenue, terminal_growth)[2]
 
 
 def _price_for(
@@ -398,7 +471,7 @@ def _price_for(
     tv = terminal_fcf * (1 + terminal_growth) / (wacc - terminal_growth)
     pv_tv = tv / (1 + wacc) ** (n - offset)
     enterprise_value = pv_fcf + pv_tv
-    equity_value = enterprise_value - inputs.net_debt
+    equity_value = equity_bridge_value(enterprise_value, inputs)
     return float(equity_value / inputs.shares_outstanding)
 
 
@@ -711,7 +784,7 @@ def solve_for_implied_wacc(
         pv_fcf: float = sum(f / (1 + wacc) ** (i + 1 - offset) for i, f in enumerate(fcfs))
         tv = terminal_fcf * (1 + tg) / (wacc - tg)
         pv_tv = tv / (1 + wacc) ** (n - offset)
-        return float(((pv_fcf + pv_tv) - inputs.net_debt) / inputs.shares_outstanding)
+        return float(equity_bridge_value(pv_fcf + pv_tv, inputs) / inputs.shares_outstanding)
 
     p_lo = _price_at(lo)
     p_hi = _price_at(hi)

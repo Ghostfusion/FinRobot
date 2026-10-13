@@ -31,20 +31,23 @@ def _make_inputs(**overrides):
 
 
 def test_dcf_correctness_hand_calculated():
-    """Hand-calculated expected value: ~$357.80 per share.
+    """Hand-calculated expected value: ~$329.55 per share.
 
     revenue_base=100B, 5×5% growth, EBITDA=35%, capex=5%, nwc=2%, da=0%, tax=21%
-    wacc_override=10%, tg=2.5%, shares=1B, net_debt=10B.
+    wacc_override=10%, tg=2.5%, shares=1B, net_debt=10B, roic=15% (default).
 
-    Explicit FCF margin = 0.35×0.79 − 0.05 capex − 0.02 nwc = 0.2065 of revenue.
-    Terminal FCF normalizes capex→D&A×(1+g): here D&A=0 so terminal capex=0, giving
-    terminal margin = 0.35×0.79 − 0 − 0.02 = 0.2565 of rev₅. rev₅=127.628B →
-    terminal FCF=32.736B, TV=32.736×1.025/0.075=447.40B, PV(TV)=277.79B;
-    PV(explicit FCFs)=89.996B → EV=367.79B − 10B debt = 357.79B / 1B sh = $357.80.
+    Explicit FCF margin = 0.35×0.79 − 0.05 capex − 0.02 nwc = 0.2065 of revenue,
+    PV(explicit FCFs)=89.996B.
+    Terminal FCF is the reinvestment identity: anchor=min(0, 0.05)=0 so D&A=0,
+    terminal NOPAT = 0.35×0.79 = 0.2765 of rev₅, reinvestment = tg/roic
+    = 0.025/0.15 = 1/6 → terminal FCF = 0.2765 × 5/6 = 0.230417 of rev₅.
+    rev₅=127.628B → terminal FCF=29.408B, TV=29.408×1.025/0.075=401.90B,
+    PV(TV)=249.55B; EV=89.996+249.55=339.55B − 10B debt = 329.55B / 1B sh =
+    $329.55. (The prior $357.80 assumed zero net reinvestment in the perpetuity.)
     Assert within $0.10."""
     inputs = _make_inputs()
     result = calculate_dcf(inputs, wacc_override=0.10)
-    assert abs(result.implied_price - 357.80) < 0.10, f"Got {result.implied_price}"
+    assert abs(result.implied_price - 329.55) < 0.10, f"Got {result.implied_price}"
 
 
 def test_dcf_deterministic():
@@ -357,30 +360,31 @@ class TestGordonSpreadFloor:
 
 
 class TestTerminalReinvestmentAnchor:
-    """Terminal capex anchors on min(da_pct, capex_pct) — GAAP D&A polluted by
+    """Terminal NOPAT anchors on min(da_pct, capex_pct) — GAAP D&A polluted by
     acquisition-intangible amortization must not masquerade as perpetual
     reinvestment. Ratio fixtures come from external benchmarks: AMD FY2025 SEC
     XBRL (revenue $34.64B, capex $0.97B = 2.8%, OCF $7.71B → real FCF +$6.7B)
     against our seeded GAAP D&A 12.3%; TSLA ratios from the 2026-06-10 artifact
-    seed (D&A 5.5% < capex 9.2%)."""
+    seed (D&A 5.5% < capex 9.2%). These pin the ANCHOR only — the perpetuity
+    itself is now terminal NOPAT × (1 − g/ROIC), so the numbers moved vs the
+    pre-reinvestment-identity arithmetic."""
 
     def test_amortization_heavy_terminal_anchors_on_real_capex(self):
-        """AMD-ratio fixture, hand-calculated: $191.09 per share.
+        """AMD-ratio fixture, hand-calculated: $170.43 per share.
 
         rev=100B, 1×0% growth, EBITDA=20.4%, D&A=12.3%, capex=2.5%, nwc=8.1%,
-        terminal_nwc=1.42%, tax=15.1%, wacc_override=10%, tg=3%, shares=1B,
-        net_debt=0.
+        tax=15.1%, wacc_override=10%, tg=3%, shares=1B, net_debt=0, roic=15%.
 
         Explicit FCF₁ = (20.4−12.3)×0.849 + 12.3 − 2.5 − 8.1 = 8.5769B,
-        PV = 7.7972B. Terminal anchor = min(12.3%, 2.5%) = 2.5%:
-        FCF_T = (20.4−2.5)×0.849 + 2.5 − 2.5×1.03 − 1.42 = 13.7021B,
-        TV = 13.7021×1.03/0.07 = 201.617B, PV(TV) = 183.288B.
-        EV = 191.085B → $191.09/share.
+        PV = 7.7972B. Terminal anchor = min(12.3%, 2.5%) = 2.5%: NOPAT_T =
+        (20.4−2.5)×0.849 = 15.1971B, reinvestment g/ROIC = 0.03/0.15 = 0.20 →
+        FCF_T = 15.1971×0.8 = 12.1577B, TV = 12.1577×1.03/0.07 = 178.892B,
+        PV(TV) = 162.629B. EV = 170.426B → $170.43/share.
 
-        Under the old bare-D&A anchor the terminal margin was
-        (20.4−12.3)×0.849 − 12.3×0.03 − 8.1 = −1.59% of revenue → the DCF
+        Under the bare-D&A anchor the terminal margin was negative → the DCF
         chapter died (live run_7fa34496cb3a: terminal FCF −4.34e9) for a
-        company whose real FCF is +$6.7B (SEC FY2025)."""
+        company whose real FCF is +$6.7B (SEC FY2025). min() floors the anchor
+        at the company's own maintenance spend so that cannot recur."""
         inputs = _make_inputs(
             revenue_base=100_000_000_000,
             revenue_growth_rates=[0.0],
@@ -388,24 +392,23 @@ class TestTerminalReinvestmentAnchor:
             da_pct_revenue=0.123,
             capex_pct_revenue=0.025,
             nwc_pct_revenue=0.081,
-            terminal_nwc_pct_revenue=0.0142,
             tax_rate=0.151,
             terminal_growth_rate=0.03,
             net_debt=0,
         )
         result = calculate_dcf(inputs, wacc_override=0.10)
-        assert abs(result.implied_price - 191.09) < 0.5, f"Got {result.implied_price}"
+        assert abs(result.implied_price - 170.43) < 0.5, f"Got {result.implied_price}"
 
     def test_capex_heavy_terminal_keeps_da_anchor(self):
-        """TSLA-ratio fixture, hand-calculated: $94.60 per share — identical to
-        the pre-fix arithmetic, because min(5.5%, 9.2%) = 5.5% = the old D&A
-        anchor. Pins that the AMD fix does NOT walk back the capex-heavy
-        normalization (commit 1a677d4c, implied $28 → $38 class).
+        """TSLA-ratio fixture, hand-calculated: $76.98 per share — the anchor
+        stays the D&A side because min(5.5%, 9.2%) = 5.5%, so the AMD fix does
+        NOT walk back the capex-heavy normalization (perpetual capex is not
+        forced up to the 9.2% growth capex).
 
         rev=100B, 1×0% growth, EBITDA=15.1%, D&A=5.5%, capex=9.2%, nwc=−0.1%,
-        tax=28%, wacc_override=10%, tg=3%: FCF₁ = 9.6×0.72+5.5−9.2+0.1
-        = 3.312B, PV = 3.0109B; FCF_T = 9.6×0.72+5.5−5.665+0.1 = 6.847B,
-        TV = 100.748B, PV = 91.589B → EV 94.600B → $94.60."""
+        tax=28%, wacc_override=10%, tg=3%, roic=15%: FCF₁ = 9.6×0.72+5.5−9.2+0.1
+        = 3.312B, PV = 3.0109B; NOPAT_T = 9.6×0.72 = 6.912B, reinvest 0.20 →
+        FCF_T = 5.5296B, TV = 81.364B, PV = 73.967B → EV 76.978B → $76.98."""
         inputs = _make_inputs(
             revenue_base=100_000_000_000,
             revenue_growth_rates=[0.0],
@@ -418,55 +421,127 @@ class TestTerminalReinvestmentAnchor:
             net_debt=0,
         )
         result = calculate_dcf(inputs, wacc_override=0.10)
-        assert abs(result.implied_price - 94.60) < 0.5, f"Got {result.implied_price}"
+        assert abs(result.implied_price - 76.98) < 0.5, f"Got {result.implied_price}"
 
 
-class TestTerminalNwc:
-    def test_none_falls_back_to_explicit_window_nwc(self):
-        """terminal_nwc_pct_revenue=None (direct REST payloads, hand-built
-        inputs) must reproduce the explicit-window ΔNWC ratio in the
-        perpetuity — byte-identical to passing it explicitly."""
-        implicit = calculate_dcf(_make_inputs(), wacc_override=0.10)
-        explicit = calculate_dcf(_make_inputs(terminal_nwc_pct_revenue=0.02), wacc_override=0.10)
-        assert implicit.implied_price == explicit.implied_price
-        assert implicit.terminal_value == explicit.terminal_value
+class TestTerminalReinvestmentIdentity:
+    """Terminal FCF = terminal NOPAT × (1 − g/ROIC) — the growth the perpetuity
+    assumes must be funded from NOPAT (review 2026-10: the old maintenance-only
+    formula printed terminal FCF ≈ terminal NOPAT, i.e. zero net reinvestment
+    while growing forever)."""
 
-    def test_scales_only_the_perpetuity_not_explicit_fcfs(self):
-        """The terminal override must not leak into the explicit window: the
-        projected FCF path is byte-identical, only the terminal value moves —
-        and a lower steady-state drag means a HIGHER terminal value."""
-        base = calculate_dcf(_make_inputs(), wacc_override=0.10)
-        scaled = calculate_dcf(_make_inputs(terminal_nwc_pct_revenue=0.005), wacc_override=0.10)
-        assert scaled.projected_fcf == base.projected_fcf
-        assert scaled.terminal_value > base.terminal_value
-        assert scaled.implied_price > base.implied_price
+    def test_terminal_fcf_is_nopat_times_one_minus_g_over_roic(self):
+        from finrobot.engine.compute.operators.dcf import _terminal_economics
 
-    def test_perpetual_nwc_subsidy_no_longer_props_up_cash_burner(self):
-        """RIVN-ratio fixture: EBITDA 16.6% sits BELOW the 20.7% maintenance
-        anchor — a perpetually terminal-unprofitable profile. The legacy
-        fallback (ΔNWC −10% of revenue as a cash source, forever) papered over
-        it and published a fair value 1.57x the market price for a cash
-        burner; the growth-scaled steady-state subsidy (−1.8%) no longer
-        covers the gap, so the Gordon perpetuity honestly refuses."""
-        rivn_ratios = dict(
-            revenue_base=100_000_000_000,
-            revenue_growth_rates=[0.0],
-            ebitda_margin=0.166,
-            da_pct_revenue=0.207,
-            capex_pct_revenue=0.231,
-            nwc_pct_revenue=-0.10,
-            tax_rate=0.20,
-            terminal_growth_rate=0.03,
-            net_debt=0,
+        result = calculate_dcf(_make_inputs(), wacc_override=0.10)
+        inputs = result.inputs
+        nopat, reinvestment_rate, fcf = _terminal_economics(
+            inputs, result.projected_revenue[-1], inputs.terminal_growth_rate
         )
-        # Legacy fallback (None → −10% forever): the subsidy alone keeps the
-        # terminal FCF positive and a price prints.
-        legacy = calculate_dcf(_make_inputs(**rivn_ratios), wacc_override=0.10)
-        assert legacy.implied_price > 0
-        # Growth-scaled steady state: subsidy shrinks to −1.8% and the
-        # structurally negative perpetuity surfaces.
-        with pytest.raises(ValueError, match="non-positive"):
-            calculate_dcf(
-                _make_inputs(**rivn_ratios, terminal_nwc_pct_revenue=-0.018),
-                wacc_override=0.10,
-            )
+        assert reinvestment_rate == pytest.approx(
+            inputs.terminal_growth_rate / inputs.terminal_roic
+        )
+        assert fcf == pytest.approx(nopat * (1 - reinvestment_rate))
+        # The disclosed cross-check fields carry the same identity.
+        assert result.terminal_nopat == pytest.approx(nopat)
+        assert result.terminal_reinvestment_rate == pytest.approx(reinvestment_rate)
+        assert result.terminal_fcf == pytest.approx(fcf)
+        terminal_ebitda = result.projected_revenue[-1] * inputs.ebitda_margin
+        assert result.terminal_ev_ebitda == pytest.approx(result.terminal_value / terminal_ebitda)
+
+    def test_growth_at_or_above_roic_clamps_reinvestment_to_one(self):
+        """g >= ROIC needs >100% of NOPAT as reinvestment — the identity must
+        clamp to 1.0 (FCF floors at 0) rather than go negative. Tested on the
+        helper directly: calculate_dcf would refuse a zero terminal FCF (the
+        BUG-074 gate), so the clamp is exercised at the economics level."""
+        from finrobot.engine.compute.operators.dcf import _terminal_economics
+
+        inputs = _make_inputs(terminal_growth_rate=0.05, terminal_roic=0.04)
+        nopat, reinvestment_rate, fcf = _terminal_economics(
+            inputs, inputs.revenue_base, inputs.terminal_growth_rate
+        )
+        assert reinvestment_rate == 1.0
+        assert fcf == 0.0
+        assert nopat > 0  # positive NOPAT, zero FCF — not a negative-value destructor
+
+
+class TestEquityBridge:
+    """EV → equity deducts preferred stock and noncontrolling interest alongside
+    net debt (review 2026-10: EHC's $0.86B NCI was folded into the multiples EV
+    but silently dropped from the DCF bridge, overstating equity by ~4%)."""
+
+    def test_defaults_are_zero_and_result_unchanged(self):
+        assert _make_inputs().noncontrolling_interest == 0.0
+        assert _make_inputs().preferred_stock == 0.0
+        base = calculate_dcf(_make_inputs(), wacc_override=0.10)
+        # Explicit zeros reproduce the pre-bridge arithmetic byte-identically.
+        same = calculate_dcf(
+            _make_inputs(noncontrolling_interest=0.0, preferred_stock=0.0), wacc_override=0.10
+        )
+        assert base.equity_value == same.equity_value
+
+    def test_nci_and_preferred_reduce_equity_by_exactly_their_sum(self):
+        base = calculate_dcf(_make_inputs(), wacc_override=0.10)
+        with_claims = calculate_dcf(
+            _make_inputs(noncontrolling_interest=3e9, preferred_stock=2e9), wacc_override=0.10
+        )
+        # Enterprise value is unchanged (only the equity bridge moved); the two
+        # claims are deducted to the dollar.
+        assert with_claims.enterprise_value == pytest.approx(base.enterprise_value)
+        assert with_claims.equity_value == pytest.approx(base.equity_value - 5e9)
+        assert with_claims.implied_price < base.implied_price
+
+    def test_equity_bridge_payload_serializes_all_components(self):
+        result = calculate_dcf(
+            _make_inputs(noncontrolling_interest=3e9, preferred_stock=2e9), wacc_override=0.10
+        )
+        bridge = result.equity_bridge
+        assert bridge is not None
+        assert bridge["net_debt"] == 10_000_000_000
+        assert bridge["noncontrolling_interest"] == 3e9
+        assert bridge["preferred_stock"] == 2e9
+        assert bridge["enterprise_value"] == pytest.approx(result.enterprise_value)
+        assert bridge["equity_value"] == pytest.approx(result.enterprise_value - 10e9 - 3e9 - 2e9)
+        assert result.model_dump()["equity_bridge"]["noncontrolling_interest"] == 3e9
+
+    def test_sensitivity_grid_uses_the_same_bridge(self):
+        """Every grid cell deducts preferred/NCI too — the grid can never drift
+        from the base case on the bridge."""
+        inputs = _make_inputs(noncontrolling_interest=3e9, preferred_stock=2e9)
+        base = calculate_dcf(inputs, wacc_override=0.10)
+        grid = calculate_sensitivity(inputs, wacc_range=[0.10], tg_range=[0.025])
+        cell = grid["implied_prices"][0][0]
+        assert cell == pytest.approx(base.implied_price)
+
+    def test_negative_nci_rejected(self):
+        with pytest.raises(ValidationError):
+            _make_inputs(noncontrolling_interest=-1.0)
+
+
+class TestForecastBasis:
+    """The projection grows off a TTM revenue base, so its year axis is
+    TTM-relative — not "last annual fiscal year + 1" (owner review
+    2026-10-13: EHC's "2026E" revenue was the twelve months ending mid-2027)."""
+
+    def test_ttm_window_end_maps_to_the_fiscal_year_containing_its_end(self):
+        from datetime import date
+
+        result = calculate_dcf(_make_inputs(ttm_period_end=date(2026, 6, 30)))
+        assert result.forecast_basis == {
+            "base": "ttm",
+            "base_period_end": "2026-06-30",
+            "first_forecast_year": 2027,
+        }
+
+    def test_no_window_end_never_invents_a_year(self):
+        result = calculate_dcf(_make_inputs())
+        assert result.forecast_basis == {
+            "base": "ttm",
+            "base_period_end": None,
+            "first_forecast_year": None,
+        }
+
+    def test_helper_is_pure_and_reads_only_the_input(self):
+        from finrobot.engine.compute.operators.dcf import forecast_basis
+
+        assert forecast_basis(_make_inputs())["first_forecast_year"] is None

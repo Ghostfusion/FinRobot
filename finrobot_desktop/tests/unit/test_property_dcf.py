@@ -21,9 +21,12 @@ Properties pinned:
      cost) and equal-cost collapse.
 
 Strategy discipline: generators constrain to the legal domain up front (no
-assume() sieves). The "healthy" composite keeps the steady-state terminal FCF
-margin (ebitda−anchor)(1−tax) − anchor·g − nwc strictly positive by
-construction; the "cash-burner" composite forces it negative to hit the gate.
+assume() sieves). The "healthy" composite keeps the steady-state terminal NOPAT
+(ebitda−anchor)(1−tax) positive and the reinvestment rate g/ROIC below 1 by
+construction; the "cash-burner" composite forces the terminal NOPAT (hence FCF)
+negative to hit the gate. The ROIC>WACC domain (``wacc_below_roic``) is used for
+the growth-monotonicity relations: with the reinvestment identity, growth only
+adds value when ROIC > WACC.
 No point-value expectations are asserted anywhere here — relations only —
 so no external benchmark is required (测试纪律: point values would need one).
 """
@@ -65,8 +68,11 @@ def healthy_dcf_inputs(
 
     Domain guarantees (so calculate_dcf's terminal-FCF gate never trips):
       explicit FCF margin = e(1-t) + d·t − c − n  >= 0.15·0.65 − 0.06 − 0.03 > 0
-      terminal FCF margin = (e−a)(1−t) − a·g − nwc_t >= (0.15−0.06)·0.65
-                            − 0.06·0.05 − 0.03 > 0   (a = min(d, c))
+      terminal NOPAT > 0 because e >= 0.15 > a = min(d, c) <= 0.06, so
+      terminal FCF = NOPAT·(1 − g/ROIC) > 0 while g/ROIC < 1. For a high drawn
+      WACC the tg fraction can reach the 0.15 ROIC, where the reinvestment clamp
+      floors terminal FCF at 0 — calculate_dcf then refuses via its documented
+      "non-positive" degrade (finiteness treats that documented refusal as a pass).
     The CAPM WACC implied by the rate params is >= ~1.98%, and terminal growth
     is drawn at <= wacc − (MIN_GORDON_SPREAD + 0.001), so the no-override path
     through calculate_dcf clears the tg and spread gates by construction.
@@ -80,7 +86,6 @@ def healthy_dcf_inputs(
     capex_pct = draw(st.floats(0.01, 0.06))
     da_pct = draw(st.floats(0.01, 0.06))
     nwc_pct = draw(st.floats(0.0, 0.03))
-    terminal_nwc = draw(st.one_of(st.none(), st.floats(0.0, 0.02)))
     tax_rate = draw(st.floats(0.10, 0.35))
 
     risk_free = draw(st.floats(0.015, 0.05))
@@ -101,7 +106,6 @@ def healthy_dcf_inputs(
         ebitda_margin=ebitda_margin,
         capex_pct_revenue=capex_pct,
         nwc_pct_revenue=nwc_pct,
-        terminal_nwc_pct_revenue=terminal_nwc,
         da_pct_revenue=da_pct,
         tax_rate=tax_rate,
         risk_free_rate=risk_free,
@@ -119,9 +123,11 @@ def healthy_dcf_inputs(
 def cash_burner_inputs(draw: st.DrawFn) -> DCFInputs:
     """Inputs whose steady-state terminal FCF is negative BY CONSTRUCTION.
 
-    terminal margin <= (0.05 − a)(1−t) + 0 − 0.30 < 0 for every draw, so the
-    Gordon perpetuity is undefined and both the forward DCF and the reverse
-    kernel must refuse (BUG-074 gate).
+    terminal NOPAT = (e − a)(1−t) with e <= 0.005 and the maintenance anchor
+    a = min(da, capex) >= 0.01 > e, so NOPAT < 0 for every draw; with the
+    reinvestment rate g/ROIC < 1 the terminal FCF = NOPAT·(1 − g/ROIC) stays
+    negative. The Gordon perpetuity is therefore undefined and both the forward
+    DCF and the reverse kernel must refuse (BUG-074 gate).
     """
     revenue_base = draw(st.floats(1e8, 1e11))
     n_years = draw(st.integers(3, 6))
@@ -129,7 +135,7 @@ def cash_burner_inputs(draw: st.DrawFn) -> DCFInputs:
     return DCFInputs(
         revenue_base=revenue_base,
         revenue_growth_rates=growth,
-        ebitda_margin=draw(st.floats(0.0, 0.05)),
+        ebitda_margin=draw(st.floats(0.0, 0.005)),
         capex_pct_revenue=draw(st.floats(0.01, 0.04)),
         nwc_pct_revenue=draw(st.floats(0.30, 0.50)),
         da_pct_revenue=draw(st.floats(0.01, 0.04)),
@@ -147,6 +153,12 @@ def cash_burner_inputs(draw: st.DrawFn) -> DCFInputs:
 
 # Override-axis draws used where the test controls WACC directly.
 wacc_overrides = st.floats(0.06, 0.18)
+# WACC kept below the default 0.15 terminal ROIC, so a terminal-growth sweep that
+# stays under WACC also stays under ROIC. Needed for the "price rises with g"
+# property: growth only adds value when ROIC > WACC; at ROIC <= WACC the
+# reinvestment identity makes growth value-DESTROYING (terminal FCF falls as g
+# rises), so the monotone-in-g property is only economically true on this domain.
+wacc_below_roic = st.floats(0.06, 0.13)
 mid_year_flags = st.booleans()
 
 
@@ -186,7 +198,7 @@ def test_implied_price_nonincreasing_in_wacc(
 @COMMON
 @given(
     inputs=healthy_dcf_inputs(net_debt_lo=-0.3, net_debt_hi=0.0),
-    wacc=wacc_overrides,
+    wacc=wacc_below_roic,
     frac_lo=st.floats(0.0, 1.0),
     frac_hi=st.floats(0.0, 1.0),
     mid_year=mid_year_flags,
@@ -195,13 +207,15 @@ def test_implied_price_nondecreasing_in_terminal_growth(
     inputs: DCFInputs, wacc: float, frac_lo: float, frac_hi: float, mid_year: bool
 ) -> None:
     """Higher perpetual growth (still clearing the Gordon spread floor) must
-    never lower the implied price.
+    never lower the implied price — ON THE ROIC > WACC DOMAIN.
 
     Both tg draws live in [0, wacc − floor − margin] as fractions of that
     span, so both calls clear calculate_dcf's spread gate by construction.
-    The terminal FCF itself shrinks with g (capex = anchor·(1+g)), but within
-    the healthy domain the perpetuity numerator stays positive and the
-    (wacc − g) denominator effect dominates — price is still monotone.
+    WACC is drawn below the default 0.15 terminal ROIC, so tg stays under ROIC
+    too: the perpetuity numerator NOPAT·(1 − g/ROIC) shrinks with g but the
+    (wacc − g) denominator effect dominates and price is monotone. (When ROIC
+    ≤ WACC the reinvestment identity makes growth value-destroying — a real
+    economic result, deliberately outside this sweep's domain.)
     """
     span = wacc - MIN_GORDON_SPREAD - 0.001
     tg_a, tg_b = sorted((frac_lo * span, frac_hi * span))
@@ -224,7 +238,7 @@ def test_implied_price_nondecreasing_in_terminal_growth(
 @given(
     inputs=healthy_dcf_inputs(net_debt_lo=-0.3, net_debt_hi=0.1),
     growth=st.floats(-0.09, 0.49),
-    wacc=wacc_overrides,
+    wacc=wacc_below_roic,
     tg_frac=st.floats(0.0, 1.0),
     horizon=st.integers(3, 7),
     mid_year=mid_year_flags,
@@ -290,7 +304,7 @@ def test_terminal_growth_at_or_above_wacc_raises(
 @COMMON
 @given(
     inputs=healthy_dcf_inputs(),
-    wacc=st.floats(0.05, 0.18),
+    wacc=wacc_below_roic,
     spread=st.floats(1e-4, MIN_GORDON_SPREAD - 1e-4),
 )
 def test_sub_floor_gordon_spread_forward_raises_reverse_accepts(
@@ -299,7 +313,12 @@ def test_sub_floor_gordon_spread_forward_raises_reverse_accepts(
     """A spread under MIN_GORDON_SPREAD is a forward-DCF refusal (blowup
     multiplier, not a valuation) — but the reverse kernel must still price it:
     its documented job is reporting the absurd params a market price implies,
-    so its search domain deliberately reaches past the floor (协议 §2)."""
+    so its search domain deliberately reaches past the floor (协议 §2).
+
+    WACC is drawn below the default 0.15 ROIC so tg = wacc − spread stays under
+    ROIC; above it the reinvestment clamp floors the terminal FCF at 0 and the
+    reverse kernel's BUG-074 guard (correctly) refuses instead.
+    """
     tg = wacc - spread
     with pytest.raises(ValueError, match="below the"):
         calculate_dcf(inputs, wacc_override=wacc, tg_override=tg)

@@ -8,12 +8,14 @@ No LLM touches these numbers.
 from __future__ import annotations
 
 import logging
+import math
 import re
 from datetime import date, datetime, timezone
 from typing import Any
 
 from finrobot.engine.models.sec import (
     FilingProvenance,
+    InsiderSale,
     InsiderTransaction,
     InstitutionalHolding,
     OwnershipGovernanceAnalysis,
@@ -147,16 +149,62 @@ def _normalise_proxy_text(text: str) -> str:
     return " ".join(text.replace("\xa0", " ").split())
 
 
-def _summary_table_ceo_comp_from_text(text: str) -> tuple[str | None, float | None]:
+# The Summary Compensation Table lists the CEO's row FIRST and the prior fiscal
+# years after it — often with the name cell repeated only on the first row
+# ("...36,343,830 President and CEO 2025 1,497,627 ... 30,100,000"). This matches
+# the FOLLOWING year + its figure run + total so the YoY change is read from the
+# SAME table the current-year figure came from, never guessed.
+_SCT_PRIOR_ROW_RE = re.compile(
+    r"(?P<year>20\d{2})\s+"
+    r"(?:[0-9][0-9,]*(?:\s*\([^)]*\))*\s+){2,7}"
+    r"(?P<total>[0-9]{1,3}(?:,[0-9]{3})+)"
+)
+
+# How far past the CEO's own row the prior fiscal year can sit before we stop
+# looking. A second year row follows the role text ("President and CEO 2025
+# 1,497,627 ..."), so a few hundred chars is generous; beyond that the text has
+# moved on to another NEO and a number found there would not be the CEO's.
+_SCT_PRIOR_TAIL_CHARS = 500
+
+
+def _prior_year_sct_total(tail: str, current_year: int, current_total: float) -> float | None:
+    """Prior fiscal-year SCT total from the row following the CEO's own.
+
+    Returns None unless the tail carries a row labelled exactly ``current_year -
+    1`` whose trailing total passes the SAME plausibility gate as the current-year
+    figure (and is a genuinely different number) — a wrong YoY is worse than the
+    blank the UI explains, so every step abstains rather than guesses.
+    """
+    for match in _SCT_PRIOR_ROW_RE.finditer(tail):
+        if int(match.group("year")) != current_year - 1:
+            continue
+        total = float(match.group("total").replace(",", ""))
+        if not (_CEO_COMP_MIN <= total <= _CEO_COMP_MAX):
+            continue
+        if abs(total - current_total) < 1.0:
+            continue
+        return total
+    return None
+
+
+def _summary_table_ceo_comp_from_text(
+    text: str,
+) -> tuple[str | None, float | None, float | None]:
     """Extract actual CEO total compensation from the Summary Compensation Table.
 
     DEF 14A prose often contains "target CEO compensation" before the required
     SEC Summary Compensation Table. Target pay is an intended package, while
     the UI field is actual SCT total compensation, so this table is the first
     source to trust.
+
+    Returns ``(name, current_total, prior_fiscal_year_total)``. The prior-year
+    total is read from the row that FOLLOWS the CEO's own in the same table
+    (``None`` when the layout repeats the name in a separate row, or otherwise
+    doesn't show it) — it exists only to compute the YoY change, and a blank is
+    preferred to a wrong number.
     """
     if not text:
-        return None, None
+        return None, None, None
 
     compact = _normalise_proxy_text(text)
 
@@ -214,8 +262,13 @@ def _summary_table_ceo_comp_from_text(text: str) -> tuple[str | None, float | No
                 if len(name.split()) < 2 or _is_blacklisted_name(name):
                     continue
                 if _CEO_COMP_MIN <= total <= _CEO_COMP_MAX:
-                    return name, total
-    return None, None
+                    prior = _prior_year_sct_total(
+                        search_window[match.end() : match.end() + _SCT_PRIOR_TAIL_CHARS],
+                        int(match.group("year")),
+                        total,
+                    )
+                    return name, total, prior
+    return None, None, None
 
 
 def _ceo_comp_from_text(text: str) -> float | None:
@@ -901,7 +954,7 @@ def build_proxy_compensation(raw_proxy: dict[str, Any]) -> ProxyCompensation | N
 
     text = str(raw_proxy.get("text") or "")
 
-    summary_name, summary_comp = _summary_table_ceo_comp_from_text(text)
+    summary_name, summary_comp, summary_prior = _summary_table_ceo_comp_from_text(text)
     disclosure_comp, disclosure_ratio = _ceo_comp_and_ratio_from_disclosure(text)
     ceo_name = summary_name or _extract_ceo_name(text)
 
@@ -935,11 +988,27 @@ def build_proxy_compensation(raw_proxy: dict[str, Any]) -> ProxyCompensation | N
     else:
         ceo_pay_ratio = _extract_ceo_pay_ratio(text)
 
+    # YoY change vs the prior fiscal year shown in the SAME table. Only meaningful
+    # when the current figure came from that table row (the pay-ratio prose path
+    # carries no prior-year companion figure), and left None when no prior year is
+    # visible in the filing — the UI explains the blank rather than the pipeline
+    # guessing one from an unrelated row.
+    ceo_yoy_change_pct: float | None = None
+    if (
+        ceo_total_compensation is not None
+        and summary_comp is not None
+        and abs(ceo_total_compensation - summary_comp) < 1.0
+        and summary_prior is not None
+        and summary_prior > 0
+    ):
+        ceo_yoy_change_pct = (ceo_total_compensation - summary_prior) / summary_prior * 100.0
+
     return ProxyCompensation(
         filing_date=_parse_date(raw_proxy["filing_date"]),
         accession_no=str(raw_proxy["accession_no"]),
         ceo_name=ceo_name,
         ceo_total_compensation=ceo_total_compensation,
+        ceo_yoy_change_pct=ceo_yoy_change_pct,
         ceo_pay_ratio=ceo_pay_ratio,
         provenance=_provenance(
             form="DEF 14A",
@@ -1145,6 +1214,89 @@ def _latest_insider_provenance(
     return max(matches, key=lambda t: t.filing_date).provenance
 
 
+# Form 4 transaction codes for OPEN-MARKET activity (SEC Form 4 General
+# Instructions, Table I): P = open-market purchase, S = open-market sale. Awards
+# (A), option exercises (M), gifts/forfeits (G/D) and tax withholding (F) are NOT
+# open-market flow and must never be netted into it — a $21.5M open-market sale is
+# a signal, an equal grant is compensation machinery.
+_OPEN_MARKET_BUY_CODES: frozenset[str] = frozenset({"P"})
+_OPEN_MARKET_SELL_CODES: frozenset[str] = frozenset({"S"})
+
+# Fallback window when the provider payload omits it. Mirrors the 90-day window
+# ``_execute_ownership_governance_analysis`` requests (DataType.INSIDER_TRADES,
+# days=90) and the window the Form-4 table renders.
+_DEFAULT_INSIDER_WINDOW_DAYS = 90
+
+# Below this share-of-outstanding coverage the local 13F index is provably
+# missing filers — Vanguard and BlackRock each publish ~10% of a mid-cap's
+# shares in their 13Gs, so a handful of ingested filers covering a few percent is
+# an index gap, not a concentration fact.
+_INSTITUTIONAL_COVERAGE_MIN_PCT = 20.0
+
+
+def _insider_flow_summary(
+    insiders: list[InsiderTransaction],
+) -> tuple[float | None, float | None, float | None, InsiderSale | None]:
+    """Signed open-market insider flow over the fetched window.
+
+    Returns ``(net_flow, buy_value, sell_value, largest_sale)`` — net = purchases
+    positive − sales negative (a net-selling window is negative). All three flow
+    values are ``None`` when the window carried NO open-market row with a usable
+    value: "nothing to net" is a different statement from "net 0", and a
+    fabricated 0 would let prose claim balance the data never showed. A row whose
+    ``value`` is None (parse gap) is skipped rather than treated as $0.
+    """
+    buy_value = 0.0
+    sell_value = 0.0
+    buys = 0
+    sells = 0
+    largest: InsiderTransaction | None = None
+    for tx in insiders:
+        value = tx.value
+        if value is None or not math.isfinite(value):
+            continue
+        code = (tx.code or "").strip().upper()
+        if code in _OPEN_MARKET_BUY_CODES:
+            buy_value += abs(value)
+            buys += 1
+        elif code in _OPEN_MARKET_SELL_CODES:
+            magnitude = abs(value)
+            sell_value += magnitude
+            sells += 1
+            if largest is None or magnitude > abs(largest.value or 0.0):
+                largest = tx
+    if buys == 0 and sells == 0:
+        return None, None, None, None
+    largest_sale = (
+        InsiderSale(
+            name=(largest.insider_name or "").strip() or "Unreported insider",
+            position=largest.insider_position,
+            value=abs(float(largest.value or 0.0)),
+        )
+        if largest is not None
+        else None
+    )
+    return buy_value - sell_value, buy_value, sell_value, largest_sale
+
+
+def _institutional_coverage(
+    holdings: list[InstitutionalHolding], shares_outstanding: float | None
+) -> tuple[int | None, float | None]:
+    """Listed 13F shares + their share of outstanding (percent units).
+
+    ``holdings`` is whatever the PARTIAL local 13F index served, so the listed
+    total is a floor. Coverage stays None when shares outstanding is unknown — the
+    denominator is what makes the number readable, so without it we publish the
+    raw listed count and no percentage (never a percentage against a guess).
+    """
+    if not holdings:
+        return None, None
+    listed = sum(int(h.shares) for h in holdings)
+    if shares_outstanding is None or shares_outstanding <= 0:
+        return listed, None
+    return listed, listed / shares_outstanding * 100.0
+
+
 def compute_ownership_governance(
     *,
     insider_data: dict[str, Any] | None,
@@ -1152,6 +1304,7 @@ def compute_ownership_governance(
     proxy_data: dict[str, Any] | None,
     schedule13_data: dict[str, Any] | None = None,
     cert_data: dict[str, Any] | None = None,
+    shares_outstanding: float | None = None,
 ) -> OwnershipGovernanceAnalysis:
     degraded_sections: list[str] = []
 
@@ -1162,6 +1315,29 @@ def compute_ownership_governance(
     institutions = build_institutional_holdings(institutional_data or {})
     if not institutions:
         degraded_sections.append("institutional_holdings")
+
+    # Open-market flow over the SAME window the Form-4 table renders. Computed
+    # here (not client-side) so it is a real numeric leaf: the thesis prompt can
+    # cite it, the claim checker can verify prose that quotes it, and the
+    # narrative cannot assert "accumulation" over a net sale.
+    raw_window = (insider_data or {}).get("window_days")
+    insider_window_days = (
+        int(raw_window)
+        if isinstance(raw_window, (int, float)) and raw_window > 0
+        else (_DEFAULT_INSIDER_WINDOW_DAYS if insiders else None)
+    )
+    (
+        insider_net_flow,
+        insider_buy_value,
+        insider_sell_value,
+        insider_largest_sale,
+    ) = _insider_flow_summary(insiders)
+
+    # 13F rows come from a partial local index — persist the denominator so the
+    # UI can label the concentration instead of asserting it.
+    institutional_shares_listed, institutional_coverage_pct = _institutional_coverage(
+        institutions, shares_outstanding
+    )
 
     proxy = build_proxy_compensation(proxy_data or {})
     # CEO identity is a structured fact: the Form-4 officer title (self-declared
@@ -1235,12 +1411,36 @@ def compute_ownership_governance(
             if warning not in warnings:
                 warnings.append(warning)
 
+    # Implausibly low 13F coverage: the index is missing filers for this period,
+    # so the listed rows understate the institutional base and any concentration
+    # ratio computed from them is meaningless. Say so plainly rather than let the
+    # reader infer a 97% top-5 concentration from a partial table.
+    if (
+        institutional_coverage_pct is not None
+        and institutional_coverage_pct < _INSTITUTIONAL_COVERAGE_MIN_PCT
+    ):
+        period = institutions[0].period_end.isoformat() if institutions else "the period"
+        warnings.append(
+            f"13F index incomplete for period {period}: the {len(institutions)} holder "
+            f"row(s) on file account for only {institutional_coverage_pct:.1f}% of shares "
+            f"outstanding ({institutional_shares_listed:,} shares) — holder concentration "
+            "cannot be asserted from a partial index; refresh the 13F cache "
+            "(scripts/refresh_sec_holdings.py) for full coverage."
+        )
+
     return OwnershipGovernanceAnalysis(
         insider_transactions=insiders,
         institutional_holdings=institutions,
         proxy_compensation=proxy,
         schedule13_alerts=schedule13_alerts,
         generated_at=datetime.now(tz=timezone.utc),
+        insider_net_flow=insider_net_flow,
+        insider_buy_value=insider_buy_value,
+        insider_sell_value=insider_sell_value,
+        insider_window_days=insider_window_days,
+        insider_largest_sale=insider_largest_sale,
+        institutional_shares_listed=institutional_shares_listed,
+        institutional_coverage_pct=institutional_coverage_pct,
         degraded_sections=degraded_sections,
         warnings=warnings,
     )

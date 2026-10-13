@@ -21,6 +21,7 @@ from typing import Any
 import numpy as np
 from pydantic import BaseModel, Field, field_validator
 
+from finrobot.engine.compute.operators.dcf import equity_bridge_value
 from finrobot.engine.models.financial import DCFInputs
 from finrobot.engine.models.valuation_thresholds import MIN_GORDON_SPREAD
 
@@ -267,37 +268,37 @@ def run_monte_carlo(
     pv_fcf_total = np.sum(sim_fcf * discount_factors, axis=1)  # (n,)
 
     # Terminal value (Gordon Growth Model) on the STEADY-STATE FCF — the same
-    # normalization as dcf._terminal_fcf, vectorized per path: maintenance
-    # anchor = min(da_pct, capex_pct) so acquisition-intangible amortization
-    # (AMD/Xilinx: GAAP D&A 12.3% vs real capex 2.5%) can't masquerade as
-    # perpetual reinvestment, and terminal ΔNWC uses the growth-scaled seed
-    # when available. Capitalizing the last explicit-year FCF instead (which
-    # carries the full growth-phase capex) pinned the whole distribution ~26%
-    # low for capex-heavy growers and contradicted the deterministic DCF
-    # chapter of the same report. Guarded by the perturbation→0 equivalence
-    # test (MC percentiles == calculate_dcf.implied_price).
+    # economics as dcf._terminal_economics, vectorized per path: terminal NOPAT
+    # uses the maintenance anchor = min(da_pct, capex_pct) so acquisition-
+    # intangible amortization (AMD/Xilinx: GAAP D&A 12.3% vs real capex 2.5%)
+    # can't masquerade as perpetual reinvestment, and the perpetuity's growth is
+    # funded by the textbook reinvestment identity g/ROIC (terminal FCF =
+    # terminal NOPAT × (1 − g/ROIC)). Capitalizing the last explicit-year FCF
+    # instead (which carries the full growth-phase capex) pinned the whole
+    # distribution ~26% low for capex-heavy growers; ignoring the growth
+    # reinvestment inflated it. Guarded by the perturbation→0 equivalence test
+    # (MC percentiles == calculate_dcf.implied_price).
     terminal_anchor = min(inputs.da_pct_revenue, inputs.capex_pct_revenue)
-    terminal_nwc_pct = (
-        inputs.terminal_nwc_pct_revenue
-        if inputs.terminal_nwc_pct_revenue is not None
-        else inputs.nwc_pct_revenue
-    )
     terminal_rev = sim_revenue[:, -1]  # (n,)
     terminal_da = terminal_rev * terminal_anchor
     terminal_ebit = terminal_rev * sim_margin - terminal_da
-    terminal_capex = terminal_da * (1 + sim_tgr)
-    terminal_fcf = (
-        terminal_ebit * (1 - inputs.tax_rate)
-        + terminal_da
-        - terminal_capex
-        - terminal_rev * terminal_nwc_pct
-    )  # (n,)
+    terminal_nopat = terminal_ebit * (1 - inputs.tax_rate)
+    # Reinvestment sized by g/ROIC, clamped to [0, 1] — a perturbation tail with
+    # g >= ROIC would need >100% of NOPAT as reinvestment, so it floors the
+    # terminal FCF at 0 rather than going negative (same clamp as the scalar
+    # kernel; the two must move together).
+    reinvestment_rate = np.clip(sim_tgr / inputs.terminal_roic, 0.0, 1.0)
+    terminal_fcf = terminal_nopat * (1 - reinvestment_rate)  # (n,)
     terminal_value = terminal_fcf * (1 + sim_tgr) / (sim_wacc - sim_tgr)  # (n,)
     pv_terminal = terminal_value / (1 + sim_wacc) ** (n_years - offset)  # (n,)
 
-    # Enterprise value → equity value → implied price
+    # Enterprise value → equity value → implied price. The bridge (net debt,
+    # preferred, NCI) is the shared scalar authority applied elementwise so the
+    # MC distribution can never disagree with calculate_dcf on the deduction.
+    # np.asarray is a no-op view on the ndarray result; it restores the array
+    # type the scalar-typed helper signature hides.
     enterprise_value = pv_fcf_total + pv_terminal
-    equity_value = enterprise_value - inputs.net_debt
+    equity_value = np.asarray(equity_bridge_value(enterprise_value, inputs))
     implied_prices = equity_value / inputs.shares_outstanding  # (n,)
 
     # A non-positive steady-state terminal FCF capitalizes a trough into a
@@ -373,5 +374,11 @@ def run_monte_carlo(
             "variance_reduction": "antithetic_variates",
             "mid_year_convention": mid_year,
             "seed": seed,
+            # Explicit basis label: the distribution is the base-case DCF's OWN
+            # assumptions perturbed, so a percentile is a SENSITIVITY to those
+            # assumptions — not independent corroboration of the DCF point. The
+            # report must say what the distribution is (review 2026-10).
+            "centered_on": "base-case DCF assumptions",
+            "independent": False,
         },
     )

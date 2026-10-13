@@ -187,6 +187,68 @@ def current_ev_ebitda(financial_data: FinancialData, net_debt: float) -> float |
     )
 
 
+def ev_band_equity_per_share(
+    multiple: float | None,
+    ttm_ebitda: float | None,
+    net_debt: float | None,
+    preferred_stock: float | None,
+    noncontrolling_interest: float | None,
+    shares_outstanding: float | None,
+) -> float | None:
+    """Per-share equity implied by one EV/EBITDA multiple on TTM EBITDA.
+
+    The forward direction of the same bridge ``implied_ev_multiple`` inverts:
+    ``ev = multiple × ttm_ebitda``, then the EV→equity bridge
+    ``equity = ev − net_debt − preferred_stock − NCI``, then ``/ shares``.
+    Used by the football-field cross-check rows (own-history multiple band
+    applied to the run's TTM EBITDA) so the multiple is never applied without
+    the preferred/NCI claims the EV bridge must clear.
+
+    ``preferred_stock`` / ``noncontrolling_interest`` are ``None`` when the
+    provider did not report them, which the EV bridge treats as 0 (the
+    pref=NCI=0 issuer) — exactly as ``calculate_ev``/``current_ev_ebitda`` do.
+    None when a required input is missing, non-positive, or non-finite — the
+    caller then drops the cross-check rather than publishing a fabricated value.
+    """
+    if multiple is None or ttm_ebitda is None or net_debt is None:
+        return None
+    if shares_outstanding is None or ttm_ebitda <= 0 or shares_outstanding <= 0:
+        return None
+    ev = multiple * ttm_ebitda
+    equity = ev - net_debt - (preferred_stock or 0.0) - (noncontrolling_interest or 0.0)
+    per_share = equity / shares_outstanding
+    return per_share if math.isfinite(per_share) else None
+
+
+def implied_ev_multiple(
+    price: float | None,
+    shares_outstanding: float | None,
+    net_debt: float | None,
+    preferred_stock: float | None,
+    noncontrolling_interest: float | None,
+    ttm_ebitda: float | None,
+) -> float | None:
+    """EV/EBITDA implied by a price — the inverse of ``ev_band_equity_per_share``.
+
+    ``implied = (price × shares + net_debt + preferred_stock + NCI) / ttm_ebitda``,
+    i.e. the market cap at that price plus the full EV bridge over TTM EBITDA.
+    This is the number a published price target is checked against the issuer's
+    own historical multiple band with (a target implying a multiple above the
+    band's p90 sits above its own historical range).
+
+    None when a required input is missing or ``ttm_ebitda`` is not positive —
+    an implied multiple with no denominator is not a number.
+    """
+    if price is None or shares_outstanding is None or net_debt is None or ttm_ebitda is None:
+        return None
+    if ttm_ebitda <= 0 or shares_outstanding <= 0:
+        return None
+    market_cap = price * shares_outstanding
+    ev = market_cap + net_debt + (preferred_stock or 0.0) + (noncontrolling_interest or 0.0)
+    multiple = ev / ttm_ebitda
+    return multiple if math.isfinite(multiple) else None
+
+
 def compute_ttm_fcf(
     operating_cash_flow: float | None,
     capital_expenditure: float | None,

@@ -374,3 +374,67 @@ def test_xbrl_concept_snapshot_rejects_legacy_bare_float() -> None:
     with a guessed concept — no fabricated provenance."""
     snapshot = xbrl_concept_snapshot({"latest_revenue": 999.0, "latest_net_income": 50.0})
     assert snapshot == {}
+
+
+def test_xbrl_concept_snapshot_flags_fact_more_than_a_year_stale() -> None:
+    """EHC's ``us-gaap:OperatingIncomeLoss`` was frozen at period_end 2022-12-31
+    while every other fact ran to 2026-06-30. A stale fact must ship with an
+    explicit warning instead of looking current."""
+    snapshot = xbrl_concept_snapshot(
+        {
+            "latest_operating_income": {
+                "concept": "us-gaap:OperatingIncomeLoss",
+                "value": 539_500_000.0,
+                "period_end": "2022-12-31",
+                "units": "USD",
+            },
+            "latest_total_assets": {
+                "concept": "us-gaap:Assets",
+                "value": 7_457_500_000.0,
+                "period_end": "2026-06-30",
+                "units": "USD",
+            },
+        }
+    )
+    stale = snapshot["us-gaap:OperatingIncomeLoss"][0]
+    assert stale["warning"] == (
+        "stale: latest reported period is 2026-06-30, this fact is 2022-12-31"
+    )
+    # the current fact is untouched
+    assert "warning" not in snapshot["us-gaap:Assets"][0]
+
+
+def test_xbrl_concept_snapshot_keeps_facts_within_a_year_unflagged() -> None:
+    """One year (365 days) of lag is the tolerance — only genuinely abandoned
+    facts are flagged, and an existing warning is preserved, not overwritten."""
+    snapshot = xbrl_concept_snapshot(
+        {
+            "ttm_revenue": {
+                "concept": "us-gaap:Revenues",
+                "value": 100.0,
+                "period_end": "2026-06-30",
+                "warning": "Some quarters were derived from YTD or annual facts.",
+            },
+            "latest_total_liabilities": {
+                "concept": "us-gaap:Liabilities",
+                "value": 5.0,
+                "period_end": "2025-01-02",  # 544 days back from 2026-06-30
+                "units": "USD",
+            },
+        }
+    )
+    # The in-window fact keeps its own (derived-Q4) warning, unchanged.
+    assert snapshot["us-gaap:Revenues"][0]["warning"] == (
+        "Some quarters were derived from YTD or annual facts."
+    )
+    assert snapshot["us-gaap:Liabilities"][0]["warning"] == (
+        "stale: latest reported period is 2026-06-30, this fact is 2025-01-02"
+    )
+
+
+def test_xbrl_concept_snapshot_without_periods_is_never_flagged() -> None:
+    """No usable period_end anywhere → nothing to compare, nothing flagged."""
+    snapshot = xbrl_concept_snapshot(
+        {"latest_revenue": {"concept": "us-gaap:Revenues", "value": 10.0}}
+    )
+    assert "warning" not in snapshot["us-gaap:Revenues"][0]
