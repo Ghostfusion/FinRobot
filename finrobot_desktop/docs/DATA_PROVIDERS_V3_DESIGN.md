@@ -308,6 +308,14 @@ adapters *build requests from the catalog* rather than re-declaring URLs.
 - **Optional/degradable**: at chain build, a short reachability probe
   (`MOOMOO_HOST:PORT` TCP open) decides registration. Unreachable → the provider
   is skipped and every list falls through. Startup and CI never require OpenD.
+- **Concurrency**: OpenD serves a finite number of concurrent connections, declared as
+  `ProviderSpec.limit` (moomoo = 4, owner-declared; its adapter also serialises its own calls
+  behind one lock, so a single process never opens two at once). This is the only kind of limit
+  that caps a *run* fan-out, which is why it lives on the spec — see
+  `finrobot/run_concurrency.py` (`min(RUN_CEILING, declared caps)` — restricted to providers
+  owning the TOP slot of some `PRIORITY` category, so a fallback-tail declaration is reported
+  but never throttles a batch; the binding provider is named in the payload the Coverage
+  re-run-all panel shows its user).
 - We **never** read or store the moomoo password; only `MOOMOO_ACCOUNT` (login id)
   is used for auto-login.
 - The SDK import is lazy and guarded, so environments without `moomoo-api`
@@ -321,7 +329,10 @@ adapters *build requests from the catalog* rather than re-declaring URLs.
   vocabulary: `ok | auth | plan | rate_limited | not_found | connect | http`.
 - Output: a per-provider/per-endpoint matrix (human table + `--json`). Results are
   **logged, not persisted** — the catalog stays authoritative (owner decision).
-- Rate limits are respected per provider (`_MIN_INTERVAL` from the adapter).
+- Rate limits are respected per provider (`_MIN_INTERVAL` from the adapter) — that paces
+  *request starts* and is independent of how many runs are in flight. A provider with a finite
+  *concurrent-connection* capacity states it as `ProviderSpec.limit` (see §6), which is what
+  caps a Coverage re-run-all batch.
 - The same harness backs the existing `/test-data-provider` route, so the UI and
   the CLI share one implementation.
 

@@ -24,18 +24,40 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
+class ConcurrencyLimit:
+    """Concurrent-run ceiling one provider's terms tolerate, with its stated source.
+
+    The Coverage Desk's "re-run all reports" fans a pipeline across many tickers
+    at once; the real cap is whichever upstream provider throttles first, not the
+    desktop's own LLM budget. A provider declares one of these ONLY when it has a
+    genuine concurrent-connection / request-rate ceiling that a parallel fan-out
+    would blow through. A provider that paces itself in-adapter (``_MIN_INTERVAL``)
+    has no such ceiling — parallel runs just queue on its own pacing — so it
+    declares none. ``source`` records where the number comes from so it stays
+    auditable rather than folklore (the owner supplied ``moomoo = 4``).
+    """
+
+    max_concurrency: int
+    source: str
+
+
+@dataclass(frozen=True)
 class ProviderSpec:
     """How to build one provider.
 
     ``kind``: ``keyed`` (needs an API key), ``keyless`` (no credential),
     ``identity`` (SEC User-Agent identity, not a secret), ``gateway`` (local
     OpenD-style gateway reached by host/port).
+
+    ``limit`` is the provider's declared concurrent-run ceiling, or None when it
+    has none (self-paced in-adapter). See :class:`ConcurrencyLimit`.
     """
 
     id: str
     module: str
     class_name: str
     kind: str = "keyed"
+    limit: ConcurrencyLimit | None = None
 
     @property
     def env_var(self) -> str | None:
@@ -43,8 +65,15 @@ class ProviderSpec:
         return ENV_BY_PROVIDER.get(self.id)
 
 
-def _spec(provider_id: str, module: str, class_name: str, kind: str = "keyed") -> ProviderSpec:
-    return ProviderSpec(provider_id, module, class_name, kind)
+def _spec(
+    provider_id: str,
+    module: str,
+    class_name: str,
+    kind: str = "keyed",
+    *,
+    limit: ConcurrencyLimit | None = None,
+) -> ProviderSpec:
+    return ProviderSpec(provider_id, module, class_name, kind, limit)
 
 
 _P = "finrobot.engine.data.providers"
@@ -56,19 +85,55 @@ _P = "finrobot.engine.data.providers"
 REGISTRY: dict[str, ProviderSpec] = {
     # ── table providers ──────────────────────────────────────────────────
     "eodhd": _spec("eodhd", f"{_P}.eodhd_provider", "EODHDProvider"),
-    "moomoo": _spec("moomoo", f"{_P}.moomoo_provider", "MoomooProvider", "gateway"),
+    "moomoo": _spec(
+        "moomoo",
+        f"{_P}.moomoo_provider",
+        "MoomooProvider",
+        "gateway",
+        limit=ConcurrencyLimit(
+            max_concurrency=4,
+            source="moomoo OpenAPI gateway: 4 concurrent connections (owner-declared)",
+        ),
+    ),
     "yfinance": _spec("yfinance", f"{_P}.yfinance_provider", "YFinanceProvider", "keyless"),
     "tiingo": _spec("tiingo", f"{_P}.tiingo_provider", "TiingoProvider"),
     "twelvedata": _spec("twelvedata", f"{_P}.twelvedata_provider", "TwelveDataProvider"),
     "stockdata": _spec("stockdata", f"{_P}.stockdata_provider", "StockDataProvider"),
     "benzinga": _spec("benzinga", f"{_P}.benzinga_provider", "BenzingaProvider"),
     "finnhub": _spec("finnhub", f"{_P}.finnhub_provider", "FinnhubProvider"),
-    "alpha_vantage": _spec("alpha_vantage", f"{_P}.alpha_vantage_provider", "AlphaVantageProvider"),
-    "newsapi": _spec("newsapi", f"{_P}.newsapi_provider", "NewsApiProvider"),
+    "alpha_vantage": _spec(
+        "alpha_vantage",
+        f"{_P}.alpha_vantage_provider",
+        "AlphaVantageProvider",
+        limit=ConcurrencyLimit(
+            max_concurrency=1,
+            source="Alpha Vantage free tier: 5 requests/minute (25/day) — a parallel fan-out "
+            "cannot stay inside the budget",
+        ),
+    ),
+    "newsapi": _spec(
+        "newsapi",
+        f"{_P}.newsapi_provider",
+        "NewsApiProvider",
+        limit=ConcurrencyLimit(
+            max_concurrency=1,
+            source="NewsAPI free tier: 100 requests/day",
+        ),
+    ),
     "fred": _spec("fred", f"{_P}.fred_provider", "FredProvider"),
     "polymarket": _spec("polymarket", f"{_P}.polymarket_provider", "PolymarketProvider", "keyless"),
     "gdelt": _spec("gdelt", f"{_P}.gdelt_provider", "GdeltProvider", "keyless"),
-    "sec_edgar": _spec("sec_edgar", f"{_P}.edgar_provider", "EdgarToolsProvider", "identity"),
+    "sec_edgar": _spec(
+        "sec_edgar",
+        f"{_P}.edgar_provider",
+        "EdgarToolsProvider",
+        "identity",
+        limit=ConcurrencyLimit(
+            max_concurrency=10,
+            source="SEC EDGAR fair-access limit: 10 requests/second (the adapter paces no "
+            "requests, so concurrent runs multiply the rate)",
+        ),
+    ),
     "federal_reserve": _spec(
         "federal_reserve", f"{_P}.federal_reserve_provider", "FederalReserveProvider", "keyless"
     ),
@@ -101,6 +166,22 @@ PROVIDER_NAME_BY_ID: dict[str, str] = {"sec_edgar": "edgar_tools"}
 def provider_runtime_name(provider_id: str) -> str:
     """Runtime ``.name`` a provider id registers under (identity by default)."""
     return PROVIDER_NAME_BY_ID.get(provider_id, provider_id)
+
+
+#: Inverse of :data:`PROVIDER_NAME_BY_ID` — runtime ``name`` → registry id.
+#: Built from the one source of truth so the two directions can never drift.
+PROVIDER_ID_BY_NAME: dict[str, str] = {name: pid for pid, name in PROVIDER_NAME_BY_ID.items()}
+
+
+def provider_registry_id(runtime_name: str) -> str:
+    """Registry id a runtime provider ``name`` maps back to (identity by default).
+
+    The inverse of :func:`provider_runtime_name`. Callers that hold runtime names
+    (``DataLayer.provider_status()``, cache provenance) resolve them to the
+    registry ids that carry per-provider facts — e.g. the declared
+    ``ConcurrencyLimit`` on :class:`ProviderSpec` — through this.
+    """
+    return PROVIDER_ID_BY_NAME.get(runtime_name, runtime_name)
 
 
 def _global_order() -> list[str]:

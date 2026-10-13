@@ -142,6 +142,12 @@ class CoverageRow(BaseModel):
     ticker: str
     company: str | None = None
 
+    owned: bool = False
+    """Whether the analyst holds this name. A per-ticker, GLOBAL flag (not
+    per-group): the same name shows the same ownership in every Coverage Table.
+    Persisted in ``coverage_owned`` and merged onto the row at overview build
+    time; the "re-run all" filter and the card's checkbox both read it."""
+
     # Market — from canonical PRICE / FinancialData.market
     price: float | None = None
     change_pct_1d: float | None = None

@@ -56,6 +56,18 @@ CREATE TABLE IF NOT EXISTS coverage_members (
 )
 """
 
+# Ownership is per-ticker and GLOBAL (not per-group): the same name shows the
+# same owned flag on its card in every Coverage Table. A brand-new table (no
+# ALTER — this store has no migration ladder; it creates tables idempotently on
+# connect) so existing user DBs pick it up silently on the next open.
+_CREATE_OWNED = """
+CREATE TABLE IF NOT EXISTS coverage_owned (
+    ticker     TEXT PRIMARY KEY,
+    owned      INTEGER NOT NULL,
+    updated_at TEXT NOT NULL
+)
+"""
+
 _CREATE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_coverage_members_group ON coverage_members(group_id)",
     "CREATE INDEX IF NOT EXISTS idx_coverage_groups_created ON coverage_groups(created_at)",
@@ -127,6 +139,7 @@ class CoverageStore:
                     await _paths.configure_connection(conn)
                     await conn.execute(_CREATE_GROUPS)
                     await conn.execute(_CREATE_MEMBERS)
+                    await conn.execute(_CREATE_OWNED)
                     for stmt in _CREATE_INDEXES:
                         await conn.execute(stmt)
                     await conn.commit()
@@ -280,6 +293,39 @@ class CoverageStore:
             )
         await conn.commit()
         return await self.get_group(group_id)
+
+    # ── Ownership ────────────────────────────────────────────────────────────
+
+    async def set_owned(self, ticker: str, owned: bool) -> bool:
+        """Upsert one ticker's ownership flag; returns the value now stored.
+
+        Ownership is per-ticker and GLOBAL — not per-group — so the same flag
+        shows on the name's card in every Coverage Table. ``ticker`` is
+        upper-cased to match every other store entry point; the flag is stored as
+        0/1 and the returned bool is exactly what a later :meth:`owned_tickers`
+        read yields, so the caller never has to guess.
+        """
+        conn = await self._conn_ready()
+        norm = ticker.strip().upper()
+        await conn.execute(
+            """
+            INSERT INTO coverage_owned (ticker, owned, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(ticker) DO UPDATE SET
+                owned = excluded.owned,
+                updated_at = excluded.updated_at
+            """,
+            (norm, 1 if owned else 0, _iso(_now())),
+        )
+        await conn.commit()
+        return owned
+
+    async def owned_tickers(self) -> set[str]:
+        """Every ticker currently flagged owned — empty when none are."""
+        conn = await self._conn_ready()
+        async with conn.execute("SELECT ticker FROM coverage_owned WHERE owned = 1") as cur:
+            rows = await cur.fetchall()
+        return {row[0] for row in rows}
 
     async def close(self) -> None:
         if self._conn is not None:

@@ -265,6 +265,34 @@ Only steps 2, 7, 8 (plus LLM peer *selection*) involve the LLM; steps 4/5/6 igno
   N-CSR fee data is deliberately NOT wired: edgartools exposes it
   (`FundShareholderReport.expense_data()`) but it cannot be tied to the ticker's
   series, so publishing it would risk a sibling fund's ratio.
+- **Provider concurrency is declared, and the batch queue honours it:** a provider whose
+  *concurrent-connection* capacity is finite declares it on `ProviderSpec.limit`
+  (`engine/data/registry.py`) — moomoo 4 (OpenD connections), sec_edgar 10 (SEC's 10
+  requests/second fair-access limit, unpaced in-adapter so parallel runs multiply the rate),
+  alpha_vantage and newsapi 1 (their free request budgets cannot survive a fan-out). Every
+  other provider declares NONE deliberately: its in-adapter `_MIN_INTERVAL` paces *request
+  starts*, which is independent of how many runs are in flight.
+  `run_concurrency.resolve_run_concurrency` resolves the live chain to
+  `min(RUN_CEILING, the declared caps of PRIMARY-SLOT providers)` — the top entry of each
+  `PRIORITY` category list — and names the binding provider, so "why is the cap 4?" is
+  answerable from the API instead of guessed. Only a primary slot may bind: a fallback-tail
+  declaration (alpha_vantage/newsapi are first in NO category; their 1-request budgets would
+  otherwise throttle a desk that rarely calls them) is REPORTED but never applied, which is
+  why the live chain here resolves to moomoo's 4 rather than 1.
+  `server._MAX_CONCURRENT_RUNS` IS `run_concurrency.RUN_CEILING` — one constant.
+- **Coverage re-run-all queues, it does not flood:** `coverage/batch.py` keeps at most
+  `limit` runs in flight and leaves every other selected ticker `queued` until a slot frees.
+  A slot is held by POLLING the run store, never by awaiting the run's task: cancelling a
+  batch must stop the dispatch loop, not kill the runs it already started. The driving task
+  is retained on the batch object (`CoverageBatch.start()`), because an event loop keeps only
+  a WEAK reference to a task — a bare `asyncio.create_task(batch.run())` can be collected
+  mid-queue, leaving items stuck at `queued` with nothing in any log.
+- **`owned` is one global per-ticker fact, and its filter predicate is shared:** the
+  `coverage_owned` table in `~/.finrobot/coverage.db` is keyed by TICKER, not
+  (group, ticker) — you own NFLX on every list — and it renders as `CoverageRow.owned` on the
+  card. The re-run-all filter necessarily exists twice (`select_targets` server-side,
+  `matchesRerunFilters` client-side, where it drives the confirm count) and the two MUST agree:
+  otherwise the user confirms N and re-runs a different N.
 
 **Implicit (follow the pattern):**
 

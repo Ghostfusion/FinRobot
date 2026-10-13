@@ -109,6 +109,7 @@ async def build_overview(
     run_store: "RunStore | None" = None,
     now: datetime | None = None,
     cache_only: bool = False,
+    owned_tickers: set[str] | None = None,
 ) -> CoverageOverview:
     """Assemble the Coverage Table for one group.
 
@@ -121,6 +122,11 @@ async def build_overview(
     ``run_store`` is optional: when given, each row carries the latest run's
     status/error (an in-flight batch run, or a failed attempt) and a
     ``run_failed`` refresh reason.
+
+    ``owned_tickers`` is the global ownership set (from
+    ``CoverageStore.owned_tickers()``): each row's ``owned`` flag is set from it.
+    ``None`` means ownership was not loaded — every row is left ``owned=False``
+    rather than guessing.
 
     ``cache_only`` is the **instant first-paint**: market cells come from the
     canonical cache (allow-stale) with NO network — ~ms at any N (measured 5ms
@@ -165,6 +171,14 @@ async def build_overview(
             for t in tickers
         )
     )
+    # Merge the global ownership flag onto the rows. Done here (not per-ticker in
+    # _assemble_row) because ownership is a single set lookup over the whole group
+    # and carries no market/research fetch of its own. Row tickers are already
+    # upper-cased; upper-case the input too so a lowercase caller can't miss.
+    if owned_tickers is not None:
+        owned_upper = {t.upper() for t in owned_tickers}
+        for r in rows:
+            r.owned = r.ticker in owned_upper
     partial = any(r.warnings for r in rows)
     # A network refresh that touched no provider for ANY row's price — every row
     # was a closed-market calendar no-op. Drives the client's "已是最新收盘"

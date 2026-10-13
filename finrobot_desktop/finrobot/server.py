@@ -48,6 +48,7 @@ from finrobot.routes.valuation import router as valuation_router
 from finrobot.coverage.prompt import format_coverage_snapshot
 from finrobot.coverage.service import build_overview
 from finrobot.coverage.sqlite_store import CoverageStore
+from finrobot import run_concurrency
 from finrobot.ratelimit import RunRateLimiter
 from finrobot.run_store import RunStore
 from finrobot.secret_store import SecretStore, create_secret_store
@@ -55,8 +56,11 @@ from finrobot.secret_store import SecretStore, create_secret_store
 logger = logging.getLogger(__name__)
 
 # Max pipelines executing at once across the whole app (Coverage Phase 2/M4c).
-# 4 balances batch throughput against provider/LLM rate limits on a desktop box.
-_MAX_CONCURRENT_RUNS = 4
+# The single source of truth is ``run_concurrency.RUN_CEILING`` — the Coverage
+# re-run-all plan caps every provider limit against this same ceiling, so the
+# desktop budget lives in exactly one place. Re-exported under the historical
+# name so the existing server wiring keeps reading a local constant.
+_MAX_CONCURRENT_RUNS = run_concurrency.RUN_CEILING
 
 # Concrete failure modes the per-turn watchlist snapshot degrades on (it is a
 # pure prompt augmentation — never let it break a chat turn). Mirrors the
@@ -364,6 +368,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # CoverageStore() here would open a duplicate connection to coverage.db and
     # leave the chat tool reading a different handle than the REST routes.
     app.state.coverage_store = coverage_store
+    # Live "re-run all reports" batches, keyed by batch_id, for
+    # GET /api/coverage/batches/{id}. In-memory (progress is ephemeral — the runs
+    # themselves persist in the run store); the route prunes it to the newest 20.
+    app.state.coverage_batches = {}
     # Bounded LRU dict for transcript writers.  Using OrderedDict lets us
     # evict the least-recently-used entry in O(1) when the cap is reached.
     # TranscriptWriter is open-on-write (no persistent file handle), so

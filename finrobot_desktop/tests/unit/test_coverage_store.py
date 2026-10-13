@@ -100,3 +100,43 @@ async def test_get_or_create_system_group_idempotent(store: CoverageStore) -> No
     # Exactly one system group ever — the partial unique index guarantees it.
     systems = [g for g in await store.list_groups() if g.is_system]
     assert len(systems) == 1
+
+
+# ── Ownership ────────────────────────────────────────────────────────────────
+
+
+async def test_owned_tickers_empty_by_default(store: CoverageStore) -> None:
+    assert await store.owned_tickers() == set()
+
+
+async def test_set_owned_upper_cases_and_returns_stored(store: CoverageStore) -> None:
+    assert await store.set_owned("nflx", True) is True
+    assert await store.owned_tickers() == {"NFLX"}
+
+
+async def test_set_owned_upsert_toggles(store: CoverageStore) -> None:
+    assert await store.set_owned("NFLX", True) is True
+    # Re-setting the same ticker updates the flag rather than inserting a dup.
+    assert await store.set_owned("nflx", False) is False
+    assert await store.owned_tickers() == set()
+    # And back on again.
+    assert await store.set_owned("NFLX", True) is True
+    assert await store.owned_tickers() == {"NFLX"}
+
+
+async def test_owned_tickers_only_lists_owned(store: CoverageStore) -> None:
+    await store.set_owned("AAPL", True)
+    await store.set_owned("MSFT", True)
+    await store.set_owned("TSLA", False)
+    assert await store.owned_tickers() == {"AAPL", "MSFT"}
+
+
+async def test_owned_persists_across_reopen(tmp_path: Path) -> None:
+    first = CoverageStore(db_path=tmp_path / "coverage.db")
+    await first.set_owned("AAPL", True)
+    await first.close()
+    reopened = CoverageStore(db_path=tmp_path / "coverage.db")
+    try:
+        assert await reopened.owned_tickers() == {"AAPL"}
+    finally:
+        await reopened.close()
