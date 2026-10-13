@@ -7,7 +7,7 @@ forwarded to the route response (the frontend chart consumes it) — only the
 change/change_pct computation has moved to the canonical method.
 
 收口 to the DataLayer (门一): this no longer touches yfinance directly. It
-fetches ``DataType.PRICE`` through the provider chain (FMP → yfinance) via
+fetches ``DataType.PRICE`` through the provider chain (eodhd → moomoo → fmp → yfinance) via
 ``DataLayer.fetch_canonical`` and shapes the route payload. The error-classification
 keywords below stay here (locked by tests/audit/test_yfinance_error_mapping.py)
 because the route still maps an invalid ticker → 422 vs upstream-down → 502.

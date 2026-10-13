@@ -70,14 +70,35 @@ class Category(StrEnum):
 
 
 #: Category → ordered provider ids (highest priority first). Transcribed from the
-#: owner's reference table, with one owner-requested addition: ``fmp`` leads
-#: ``core_stock_apis`` and ``fundamental_data`` (the reference table omitted it,
-#: but the engine treats FMP as the primary financials/quote source).
+#: owner's reference table, with two owner-requested deviations, dated here because
+#: this table IS the failover chain:
+#:
+#: * 2026-10-12 (owner policy — EODHD first, moomoo second, wherever they can
+#:   serve): ``core_stock_apis`` now leads ``eodhd``, then ``moomoo``, with FMP
+#:   behind both. FMP's free quota is exhausted in practice — every quote/price
+#:   fetch 429s — while EODHD's plan serves prices and moomoo's gateway serves
+#:   quotes, so the previous FMP-first order burned a timeout per call before
+#:   falling through to the provider that could answer. FMP was also the
+#:   owner-requested lead of ``core_stock_apis``/``fundamental_data`` because the
+#:   reference table omitted it; this supersedes that for ``core_stock_apis``
+#:   only. ``fundamental_data`` keeps FMP first, because EODHD's Fundamentals feed
+#:   403s on this plan (probed 2026-10-12, AAPL included) and moomoo declares no
+#:   fundamentals capability — no earlier provider can serve it.
+#: * Same-day audit against each provider's own ``capabilities()``. Entries a
+#:   provider does NOT declare are no-ops the layer skips: ``moomoo`` under
+#:   ``fundamental_data`` and ``news_data``, ``benzinga`` under
+#:   ``core_stock_apis``, ``finnhub``/``yfinance`` under ``analyst_ratings`` and
+#:   ``earnings_calendar``, ``yfinance`` under the technicals/options/short/
+#:   institution rows, and ``equity_screener``/``market_movers`` — which name only
+#:   ``yfinance`` and therefore have NO capable provider at all. They stay as the
+#:   owner's rows (the runtime skips them, so the effect is drift in this
+#:   documentation, not a misroute), and the audit is recorded here so the next
+#:   reader does not have to re-derive it.
 PRIORITY: dict[Category, tuple[str, ...]] = {
     Category.CORE_STOCK_APIS: (
-        "fmp",
         "eodhd",
         "moomoo",
+        "fmp",
         "yfinance",
         "tiingo",
         "twelvedata",

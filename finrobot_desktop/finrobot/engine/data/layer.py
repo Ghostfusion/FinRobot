@@ -1008,7 +1008,7 @@ class DataLayer:
         cooldown window) from a delisted ticker (→ None tombstone) — a
         distinction the swallowing path destroys. Quotes are cached by
         ``QuoteCache`` (60s + cooldown), so this deliberately bypasses the
-        DataLayer cache and just walks the provider chain (FMP → yfinance).
+        DataLayer cache and just walks the provider chain (eodhd → moomoo → fmp → yfinance).
         """
         last_error: ProviderError | None = None
         gated_capable: list[str] = []
@@ -1048,7 +1048,7 @@ class DataLayer:
         """Fetch arbitrary-range split/dividend-adjusted daily OHLCV as typed bars.
 
         The one door for caller-chosen price windows (BUG-022): walks the provider
-        chain (FMP → yfinance) like :meth:`fetch`, but the cache slot is keyed by
+        chain (eodhd → moomoo → fmp → yfinance) like :meth:`fetch`, but the cache slot is keyed by
         ``(ticker, start, end, interval)`` so distinct windows never overwrite each
         other. Bars are ascending and on a single adjusted basis (FMP adjClose /
         yfinance ``auto_adjust``), so a multi-year backtest reads one consistent

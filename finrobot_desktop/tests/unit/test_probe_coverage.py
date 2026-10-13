@@ -3,7 +3,7 @@
 ``probe_all`` iterates ``endpoint_catalog()`` keys, which are built from each
 provider module's module-level ``ENDPOINTS``; a provider without one is
 invisible to the probe even when ``categories.PRIORITY`` routes to it. That was
-true of ``fmp`` (first choice for ``core_stock_apis``/``fundamental_data``),
+true of ``fmp`` (a listed choice for ``core_stock_apis`` / ``fundamental_data``),
 ``finnhub`` and ``sec_edgar`` (the only provider for ``sec_filings``).
 
 The credential never reaches a ``ProbeResult``: it is substituted into request

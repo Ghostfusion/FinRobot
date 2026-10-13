@@ -7,7 +7,7 @@ What this code does that raw LLM cannot:
   with CFA-standard derived ratios/CAGR. An LLM would produce plausible-but-
   varying numbers across invocations.
 - Owns no provider/yfinance knowledge: the DataLayer provider chain
-  (FMP → yfinance) selects the source and normalizes its shape. This module is
+  (eodhd → moomoo → fmp → yfinance) selects the source and normalizes its shape. This module is
   the single point where all yfinance access for DCF history was收口 into the
   DataLayer abstraction (门一), so the future circuit-breaker covers it.
 - Sorts data oldest-first so all parallel list fields are time-aligned. Absolute
@@ -62,7 +62,7 @@ async def fetch_historical_metrics(
     """Fetch multi-year financials via the DataLayer and build HistoricalMetrics.
 
     Args:
-        data_layer: The shared DataLayer (provider chain FMP → yfinance).
+        data_layer: The shared DataLayer (provider chain eodhd → moomoo → fmp → yfinance).
         ticker: Upper-case stock ticker symbol (e.g. "AAPL").
         years: Maximum number of annual periods to include. ``None`` (the default)
             means AUTO: 5 for a normal name, 10 for a commodity-cyclical so the

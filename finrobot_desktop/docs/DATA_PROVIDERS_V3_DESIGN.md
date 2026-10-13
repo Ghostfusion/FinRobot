@@ -140,14 +140,23 @@ flowchart LR
 
 ### 5.2 Priority table (authoritative)
 
-Fallback chains (left = highest priority). One owner-requested deviation from
-the original reference table: **`fmp` leads `core_stock_apis` and
-`fundamental_data`** (the table omitted FMP; the engine treats it as the primary
-financials/quote source, and the pre-existing chain-order tests encode that).
+Fallback chains (left = highest priority). Two owner-requested deviations from
+the original reference table, both dated because this table IS the failover chain:
+
+- **2026-10-12 — EODHD first, moomoo second, wherever they can serve.** The table
+  was transcribed with FMP omitted, and FMP was then put first for
+  `core_stock_apis` / `fundamental_data` because the engine treated it as the
+  primary source. Owner policy now prefers the two providers whose plans actually
+  serve the data: `core_stock_apis` leads `eodhd`, then `moomoo`, with FMP behind
+  both — FMP's free quota 429s every quote/price fetch, so leading with it spent a
+  timeout per call before falling through to a provider that could answer.
+  `fundamental_data` keeps FMP first: EODHD's Fundamentals feed 403s on this plan
+  (probed, AAPL included) and moomoo declares no fundamentals capability, so no
+  earlier provider can serve it.
 
 | Category | Order |
 |---|---|
-| `core_stock_apis` | fmp > eodhd > moomoo > yfinance > tiingo > twelvedata > stockdata > benzinga |
+| `core_stock_apis` | eodhd > moomoo > fmp > yfinance > tiingo > twelvedata > stockdata > benzinga |
 | `news_data` | eodhd > benzinga > moomoo > yfinance > alpha_vantage > stockdata > newsapi |
 | `fundamental_data` | fmp > moomoo > yfinance > tiingo > alpha_vantage |
 | `fund_data` | eodhd > moomoo > yfinance |
@@ -175,6 +184,18 @@ gateway and on to the free tail; moomoo declares no fund-profile capability (see
 its provider module for the tested verdict), so Yahoo serves in practice. The
 order is kept so EODHD takes over the moment the plan includes the feed, with no
 code change.
+
+**Capability audit (2026-10-12).** Comparing every row of this table against each
+provider's own `capabilities()` found entries that name a provider which does NOT
+declare the category — the layer skips those, so they are silent no-ops: `moomoo`
+under `fundamental_data` and `news_data`; `benzinga` under `core_stock_apis`;
+`finnhub` / `yfinance` under `analyst_ratings` and `earnings_calendar`; `yfinance`
+under `technical_indicators`, `options_data`, `short_interest` and
+`institution_data`. Two categories name only `yfinance`, which declares neither, so
+`equity_screener` and `market_movers` have **no capable provider at all**. The rows
+are kept as the owner's table (the runtime skips them, so the effect is drift in
+this documentation rather than a misroute), but nothing should treat those rows as a
+working fallback without first adding the capability to the provider.
 
 Single-vendor (no fallback):
 

@@ -6,7 +6,7 @@ Single entry point:
   warmup call it with the shared ``DataLayer``.
 
 The cold path fans out per missing ticker through ``DataLayer.fetch_quote``
-(provider chain FMP → yfinance) concurrently via ``asyncio.gather``. A
+(provider chain eodhd → moomoo → fmp → yfinance) concurrently via ``asyncio.gather``. A
 rate-limit ``ProviderError`` (Yahoo 429 — only reached when FMP is unavailable)
 maps to :class:`QuoteFetchRateLimited` so ``QuoteCache`` preserves the previous
 (stale) value and opens its cooldown window rather than tomb-stoning every

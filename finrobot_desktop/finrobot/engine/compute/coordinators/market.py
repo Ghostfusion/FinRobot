@@ -7,7 +7,7 @@ unrepeatable numbers.
 
 门一收口 (ADR-0006 / tests/audit/test_no_direct_yfinance_imports.py): the price
 series is pulled via ``DataLayer.fetch_canonical(PRICE)`` — the provider chain
-(FMP → yfinance) and the circuit-breaker cover it, and provenance stays honest.
+(eodhd → moomoo → fmp → yfinance) and the circuit-breaker cover it, and provenance stays honest.
 This module never touches yfinance directly.
 
 Leaf-layer rules: no imports from agents/pipelines/orchestrator/pydantic_ai/openai.
