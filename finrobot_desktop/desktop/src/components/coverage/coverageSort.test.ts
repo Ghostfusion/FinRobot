@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { sortCoverageRows } from './coverageSort'
+import { normaliseCoverageSort, sortCoverageRows } from './coverageSort'
 import type { CoverageRow } from '../../api/coverage'
 
 function row(over: Partial<CoverageRow>): CoverageRow {
   return {
     ticker: 'AAA',
+    owned: false,
     company: null,
     price: null,
     change_pct_1d: null,
@@ -135,5 +136,85 @@ describe('derived sort keys', () => {
     expect(
       sortCoverageRows(rows, { key: 'latest_report', dir: 'desc' }).map((r) => r.ticker),
     ).toEqual(['NEW', 'OLD', 'NONE'])
+  })
+})
+
+describe('rating sort key', () => {
+  it('ranks BUY (0) → HOLD (1) → SELL (2) ascending; descending flips it', () => {
+    const rows = [
+      row({ ticker: 'S', latest_verdict: 'SELL' }),
+      row({ ticker: 'B', latest_verdict: 'BUY' }),
+      row({ ticker: 'H', latest_verdict: 'HOLD' }),
+    ]
+    expect(sortCoverageRows(rows, { key: 'rating', dir: 'asc' }).map((r) => r.ticker)).toEqual([
+      'B',
+      'H',
+      'S',
+    ])
+    expect(sortCoverageRows(rows, { key: 'rating', dir: 'desc' }).map((r) => r.ticker)).toEqual([
+      'S',
+      'H',
+      'B',
+    ])
+  })
+
+  it('sinks unrated / legacy verdicts to the bottom in BOTH directions', () => {
+    const rows = [
+      row({ ticker: 'N', latest_verdict: null }),
+      row({ ticker: 'B', latest_verdict: 'BUY' }),
+      row({ ticker: 'W', latest_verdict: 'WITHHELD' }),
+      row({ ticker: 'S', latest_verdict: 'SELL' }),
+    ]
+    // asc: BUY, SELL, then the two unranked (stable) at the bottom.
+    expect(sortCoverageRows(rows, { key: 'rating', dir: 'asc' }).map((r) => r.ticker)).toEqual([
+      'B',
+      'S',
+      'N',
+      'W',
+    ])
+    // desc: SELL, BUY, then the unranked STILL last (never floated to the top).
+    expect(sortCoverageRows(rows, { key: 'rating', dir: 'desc' }).map((r) => r.ticker)).toEqual([
+      'S',
+      'B',
+      'N',
+      'W',
+    ])
+  })
+
+  it('is case-insensitive on the verdict token', () => {
+    const rows = [
+      row({ ticker: 'L', latest_verdict: 'buy' }),
+      row({ ticker: 'U', latest_verdict: 'SELL' }),
+    ]
+    expect(sortCoverageRows(rows, { key: 'rating', dir: 'asc' }).map((r) => r.ticker)).toEqual([
+      'L',
+      'U',
+    ])
+  })
+})
+
+describe('normaliseCoverageSort', () => {
+  it('accepts a well-formed sort and preserves the key + dir', () => {
+    expect(normaliseCoverageSort({ key: 'rating', dir: 'asc' })).toEqual({
+      key: 'rating',
+      dir: 'asc',
+    })
+    expect(normaliseCoverageSort({ key: 'needs_action', dir: 'desc' })).toEqual({
+      key: 'needs_action',
+      dir: 'desc',
+    })
+  })
+
+  it('rejects a stale/unknown key so the page can fall back to its default', () => {
+    expect(normaliseCoverageSort({ key: 'pe_ratio_v2', dir: 'asc' })).toBeNull()
+    expect(normaliseCoverageSort({ key: 'rating', dir: 'sideways' })).toBeNull()
+  })
+
+  it('rejects null / undefined / non-objects and missing fields', () => {
+    expect(normaliseCoverageSort(null)).toBeNull()
+    expect(normaliseCoverageSort(undefined)).toBeNull()
+    expect(normaliseCoverageSort('rating')).toBeNull()
+    expect(normaliseCoverageSort({ key: 'rating' })).toBeNull()
+    expect(normaliseCoverageSort({ dir: 'asc' })).toBeNull()
   })
 })

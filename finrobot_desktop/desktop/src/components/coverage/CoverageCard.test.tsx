@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { CoverageCard } from './CoverageCard'
 import type { CoverageRow, MarketImpliedNature } from '../../api/coverage'
@@ -15,6 +15,7 @@ import type { CoverageRow, MarketImpliedNature } from '../../api/coverage'
 function row(over: Partial<CoverageRow>): CoverageRow {
   return {
     ticker: 'AAA',
+    owned: false,
     company: null,
     price: 200,
     change_pct_1d: null,
@@ -244,5 +245,49 @@ describe('CoverageCard verdict signal chroma', () => {
     expect(signal({ latest_verdict: null })).toBe('neutral')
     expect(signal({ latest_verdict: 'WITHHELD' })).toBe('neutral')
     expect(signal({ latest_verdict: 'REVIEW' })).toBe('neutral')
+  })
+})
+
+describe('CoverageCard owned checkbox', () => {
+  function renderOwned(
+    over: Partial<CoverageRow>,
+    opts: {
+      pending?: boolean
+      onSetOwned?: (ticker: string, owned: boolean) => void
+      onOpen?: () => void
+    } = {},
+  ): void {
+    render(
+      <MemoryRouter>
+        <CoverageCard
+          row={row(over)}
+          density="comfort"
+          onOpen={opts.onOpen ?? vi.fn()}
+          onSetOwned={opts.onSetOwned}
+          ownedPending={opts.pending}
+        />
+      </MemoryRouter>,
+    )
+  }
+
+  it('reflects the row owned flag', () => {
+    renderOwned({ ticker: 'AAA', owned: true })
+    expect(screen.getByLabelText('Mark AAA as owned')).toBeChecked()
+  })
+
+  it('calls setOwned with the ticker + new value on toggle, without opening the card', () => {
+    const onSetOwned = vi.fn()
+    const onOpen = vi.fn()
+    renderOwned({ ticker: 'NFLX', owned: false }, { onSetOwned, onOpen })
+    fireEvent.click(screen.getByLabelText('Mark NFLX as owned'))
+    expect(onSetOwned).toHaveBeenCalledTimes(1)
+    expect(onSetOwned).toHaveBeenCalledWith('NFLX', true)
+    // The card is role=link with click-to-open; the checkbox must NOT bubble.
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('is disabled while that ticker’s write is in flight', () => {
+    renderOwned({ ticker: 'AAA', owned: false }, { pending: true })
+    expect(screen.getByLabelText('Mark AAA as owned')).toBeDisabled()
   })
 })

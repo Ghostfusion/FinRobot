@@ -78,6 +78,10 @@ export interface CoverageRowSources {
 
 export interface CoverageRow {
   ticker: string
+  // Analyst's own-book marker — GLOBAL per ticker (one flag across every group),
+  // set from the card footer checkbox via PUT /api/coverage/owned/{ticker}. Also
+  // the `owned` axis of the re-run-all filter (mirrors select_targets).
+  owned: boolean
   company: string | null
   price: number | null
   change_pct_1d: number | null
@@ -139,6 +143,70 @@ export interface CoverageOverview {
   refresh_noop: boolean
 }
 
+// ── Re-run-all batch (mirrors finrobot/run_concurrency.py + coverage/batch.py) ─
+// The router POSTs the filter selection, then the UI polls the batch progress
+// endpoint every 2s until state === 'completed'. Every field the panel renders
+// rides here — no second source of truth.
+
+export type CoverageBatchState = 'queued' | 'running' | 'completed'
+export type CoverageBatchItemState = 'queued' | 'running' | 'completed' | 'failed'
+
+// One provider's concurrency ceiling (declared) or lack thereof (undeclared).
+// `binding` marks the provider that fixed the batch's limit; `source` is the
+// human-readable citation (e.g. "moomoo OpenAPI gateway: 4 concurrent
+// connections (owner-declared)").
+export interface ProviderLimitView {
+  provider: string
+  max_concurrency: number | null
+  source: string | null
+  declared: boolean
+  binding: boolean
+}
+
+export interface CoverageBatchItem {
+  ticker: string
+  state: CoverageBatchItemState
+  run_id: string | null
+  error: string | null
+}
+
+// The four buckets the panel's rating checkboxes filter on. UNRATED covers both
+// "no verdict yet" and legacy non-directional tokens (WITHHELD/REVIEW) — the
+// backend select_targets keys off `(verdict or 'UNRATED').upper()`.
+export type CoverageRating = 'BUY' | 'HOLD' | 'SELL' | 'UNRATED'
+
+export interface CoverageRerunRequest {
+  // null = no ownership filter; true = only owned; false = only not-owned.
+  owned: boolean | null
+  // null / empty = no rating filter; all four = no filter (equivalent).
+  ratings: CoverageRating[] | null
+  pipeline_type: string
+  language?: 'en' | 'zh' | null
+}
+
+export interface CoverageBatchProgress {
+  batch_id: string
+  group_id: string
+  pipeline_type: string
+  state: CoverageBatchState
+  // In-flight ceiling actually used: min(ceiling, every declared provider limit).
+  limit: number
+  // The desktop LLM budget (RUN_CEILING) — `limit` may never exceed it.
+  ceiling: number
+  // The declared provider whose value == limit, else null (then the ceiling binds).
+  binding_provider: string | null
+  binding_reason: string
+  providers: ProviderLimitView[]
+  undeclared_count: number
+  total: number
+  queued: number
+  running: number
+  completed: number
+  failed: number
+  items: CoverageBatchItem[]
+  created_at: string
+}
+
 // ── Requests ─────────────────────────────────────────────────────────────────
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
@@ -177,4 +245,20 @@ export const coverageApi = {
     const suffix = refresh ? '?refresh=true' : ''
     return req<CoverageOverview>(`/api/coverage/groups/${id}/overview${suffix}`)
   },
+
+  // Set the global owned flag for one ticker (upsert). Returns the stored value,
+  // so the caller can confirm what landed rather than assume the request side.
+  setOwned: (ticker: string, owned: boolean) =>
+    req<{ ticker: string; owned: boolean }>(
+      `/api/coverage/owned/${encodeURIComponent(ticker)}`,
+      jsonInit('PUT', { owned }),
+    ),
+
+  // Kick off a filtered re-run of every matching card. Returns the initial batch
+  // progress (state 'queued'|'running'); the client then polls batchProgress.
+  rerunAll: (groupId: string, body: CoverageRerunRequest) =>
+    req<CoverageBatchProgress>(`/api/coverage/groups/${groupId}/rerun`, jsonInit('POST', body)),
+
+  batchProgress: (batchId: string) =>
+    req<CoverageBatchProgress>(`/api/coverage/batches/${encodeURIComponent(batchId)}`),
 }

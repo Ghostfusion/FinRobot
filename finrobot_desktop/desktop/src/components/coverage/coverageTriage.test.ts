@@ -7,6 +7,7 @@ import type { CoverageRow } from '../../api/coverage'
 function row(over: Partial<CoverageRow>): CoverageRow {
   return {
     ticker: 'AAA',
+    owned: false,
     company: null,
     price: null,
     change_pct_1d: null,

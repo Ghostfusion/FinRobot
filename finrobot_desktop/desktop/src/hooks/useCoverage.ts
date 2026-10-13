@@ -5,14 +5,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   coverageApi,
+  type CoverageBatchProgress,
   type CoverageGroupSummary,
   type CoverageGroupDetail,
   type CoverageOverview,
+  type CoverageRerunRequest,
 } from '../api/coverage'
 
 const KEYS = {
   groups: ['coverage', 'groups'] as const,
   overview: (id: string) => ['coverage', 'overview', id] as const,
+  // Every overview (primary cache-only paint AND its nested `fresh` revalidate)
+  // rides this prefix — used to patch the global owned flag across all of them.
+  overviewPrefix: ['coverage', 'overview'] as const,
+  batch: (id: string) => ['coverage', 'batch', id] as const,
 }
 
 export function useCoverageGroups() {
@@ -110,7 +116,59 @@ export function useAddStudiedTicker() {
     mutationFn: (ticker) => coverageApi.addStudiedTicker(ticker),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: KEYS.groups })
-      qc.invalidateQueries({ queryKey: ['coverage', 'overview'] })
+      qc.invalidateQueries({ queryKey: KEYS.overviewPrefix })
     },
+  })
+}
+
+/**
+ * Toggle a ticker's global owned flag. The flag is per-TICKER, not per-group, so
+ * a successful write must patch the row in EVERY cached overview — not just the
+ * one on screen. `setQueriesData` over the `['coverage','overview']` prefix hits
+ * both the cache-only paint and its nested `fresh` revalidate cache; a full
+ * invalidate would re-run the network revalidate for a flag the server already
+ * confirmed via the PUT response, so we rewrite the row in place instead.
+ */
+export function useSetOwned() {
+  const qc = useQueryClient()
+  return useMutation<{ ticker: string; owned: boolean }, Error, { ticker: string; owned: boolean }>(
+    {
+      mutationFn: ({ ticker, owned }) => coverageApi.setOwned(ticker, owned),
+      onSuccess: ({ ticker, owned }) => {
+        qc.setQueriesData<CoverageOverview>({ queryKey: KEYS.overviewPrefix }, (prev) => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            rows: prev.rows.map((r) => (r.ticker === ticker ? { ...r, owned } : r)),
+          }
+        })
+      },
+    },
+  )
+}
+
+/**
+ * Start a filtered re-run-all batch. Returns the initial CoverageBatchProgress;
+ * the caller keeps its `batch_id` and hands it to `useCoverageBatch` to poll.
+ */
+export function useRerunAll(groupId: string) {
+  return useMutation<CoverageBatchProgress, Error, CoverageRerunRequest>({
+    mutationFn: (body) => coverageApi.rerunAll(groupId, body),
+  })
+}
+
+/**
+ * Live batch progress. Polls every 2s ONLY while the batch is not yet
+ * `completed`, and never when there's no batch (batchId null). staleTime 0 so a
+ * poll always reads the live server snapshot, not a cached one.
+ */
+export function useCoverageBatch(batchId: string | null) {
+  return useQuery<CoverageBatchProgress>({
+    queryKey: KEYS.batch(batchId ?? ''),
+    queryFn: () => coverageApi.batchProgress(batchId as string),
+    enabled: !!batchId,
+    staleTime: 0,
+    refetchOnWindowFocus: false,
+    refetchInterval: (query) => (query.state.data?.state === 'completed' ? false : 2000),
   })
 }

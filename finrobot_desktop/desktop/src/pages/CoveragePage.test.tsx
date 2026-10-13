@@ -6,9 +6,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 // CoverageHero pulls in SplineHero (remote <script>) — stub it.
 vi.mock('../components/coverage/CoverageHero', () => ({ CoverageHero: () => null }))
 
-const hooks = {
-  groups: { data: undefined as unknown, isLoading: false, isError: false, refetch: vi.fn() },
-  overview: {
+function makeOverview() {
+  return {
     data: undefined as unknown,
     isLoading: false,
     isError: false,
@@ -17,12 +16,29 @@ const hooks = {
     refetch: vi.fn(),
     refreshing: false,
     refreshNoop: false,
+  }
+}
+
+const hooks = {
+  groups: { data: undefined as unknown, isLoading: false, isError: false, refetch: vi.fn() },
+  overview: makeOverview(),
+  // The page mounts useSetOwned; the re-run panel (opened on demand) mounts
+  // useRerunAll + useCoverageBatch.
+  setOwned: {
+    mutate: vi.fn(),
+    isPending: false,
+    variables: undefined as { ticker: string; owned: boolean } | undefined,
   },
+  rerun: { mutate: vi.fn(), isPending: false, isError: false },
+  batch: { data: undefined as unknown, isError: false },
 }
 
 vi.mock('../hooks/useCoverage', () => ({
   useCoverageGroups: () => hooks.groups,
   useCoverageOverview: () => hooks.overview,
+  useSetOwned: () => hooks.setOwned,
+  useRerunAll: () => hooks.rerun,
+  useCoverageBatch: () => hooks.batch,
 }))
 
 import { CoveragePage } from './CoveragePage'
@@ -41,16 +57,8 @@ function renderPage() {
 describe('CoveragePage error states (BUG-051)', () => {
   beforeEach(() => {
     hooks.groups = { data: undefined, isLoading: false, isError: false, refetch: vi.fn() }
-    hooks.overview = {
-      data: undefined,
-      isLoading: false,
-      isError: false,
-      marketPending: false,
-      marketError: false,
-      refetch: vi.fn(),
-      refreshing: false,
-      refreshNoop: false,
-    }
+    hooks.overview = makeOverview()
+    hooks.setOwned = { mutate: vi.fn(), isPending: false, variables: undefined }
   })
 
   it('shows an error (not the starter) when the groups request fails', () => {
@@ -92,6 +100,7 @@ describe('CoveragePage refresh control', () => {
       refetch: vi.fn(),
     }
     hooks.overview = {
+      ...makeOverview(),
       data: {
         group_id: 'g1',
         group_name: 'Studied Tickers',
@@ -101,14 +110,8 @@ describe('CoveragePage refresh control', () => {
         cache_only: false,
         refresh_noop: false,
       },
-      isLoading: false,
-      isError: false,
-      marketPending: false,
-      marketError: false,
-      refetch: vi.fn(),
-      refreshing: false,
-      refreshNoop: false,
     }
+    hooks.setOwned = { mutate: vi.fn(), isPending: false, variables: undefined }
   })
 
   it('renders the refresh button and re-runs the revalidate on click', () => {
@@ -117,5 +120,90 @@ describe('CoveragePage refresh control', () => {
     expect(btn).toHaveTextContent('Refresh')
     fireEvent.click(btn)
     expect(hooks.overview.refetch).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('CoveragePage header rail', () => {
+  beforeEach(() => {
+    hooks.groups = {
+      data: [{ id: 'g1', name: 'Studied Tickers', member_count: 1, is_system: true }],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    }
+    hooks.overview = {
+      ...makeOverview(),
+      data: {
+        group_id: 'g1',
+        group_name: 'Studied Tickers',
+        rows: [
+          {
+            ticker: 'AAPL',
+            owned: false,
+            company: null,
+            price: null,
+            change_pct_1d: null,
+            price_as_of: null,
+            session_state: null,
+            market_cap: null,
+            revenue_ttm: null,
+            ev_ebitda: null,
+            pe: null,
+            currency: null,
+            latest_verdict: 'BUY',
+            target_price: null,
+            target_date: null,
+            entry_price: null,
+            upside_to_target_live: null,
+            signal: null,
+            artifact_count: 0,
+            research_count: 0,
+            latest_artifact_id: null,
+            latest_type: null,
+            latest_at: null,
+            run_status: null,
+            run_error: null,
+            market_implied: null,
+            market_stale: false,
+            needs_refresh: [],
+            warnings: [],
+            sources: {
+              price: null,
+              change_pct_1d: null,
+              market_cap: null,
+              revenue_ttm: null,
+              ev_ebitda: null,
+              pe: null,
+              upside_to_target_live: null,
+              market_implied: null,
+            },
+          },
+        ],
+        generated_at: '2026-06-08T09:00:00Z',
+        partial: false,
+        cache_only: false,
+        refresh_noop: false,
+      },
+    }
+    hooks.setOwned = { mutate: vi.fn(), isPending: false, variables: undefined }
+    hooks.rerun = { mutate: vi.fn(), isPending: false, isError: false }
+    hooks.batch = { data: undefined, isError: false }
+  })
+
+  it('renders the sort box with exactly the three surfaced keys', () => {
+    renderPage()
+    const select = screen.getByTestId('coverage-sort-select') as HTMLSelectElement
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual([
+      'Needs attention',
+      'Name',
+      'Rating',
+    ])
+  })
+
+  it('opens the re-run-all panel from the rail', () => {
+    renderPage()
+    expect(screen.queryByTestId('coverage-rerun-panel')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('coverage-rerun-open'))
+    expect(screen.getByTestId('coverage-rerun-panel')).toBeInTheDocument()
   })
 })

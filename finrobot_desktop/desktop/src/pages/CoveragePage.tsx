@@ -1,11 +1,13 @@
 // CoveragePage — the coverage archive / management route (`/coverage`). The
 // search-first homepage lives at `/research`; this screen is the studied ticker
-// desk: a wall of ticker cards, nothing else. The whole studied
-// universe is always shown — there is no triage/sort chrome (the user cut it):
-// the cards self-report verdict, freshness, and an amber edge when one needs
-// attention. There is ONE surfaced list — Studied Tickers (the system coverage
-// group); multi-group machinery stays backend-only. Card click opens
-// `/stocks/:ticker`, where research runs and artifact history live.
+// desk: a wall of ticker cards plus a slim header rail. The whole studied
+// universe is always shown, but the rail now carries the controls the owner
+// asked for: a sort box (needs-attention / name / rating + a direction toggle),
+// a "re-run all" button, and the manual refresh. The cards self-report verdict,
+// freshness, and an amber edge when one needs attention. There is ONE surfaced
+// list — Studied Tickers (the system coverage group); multi-group machinery stays
+// backend-only. Card click opens `/stocks/:ticker`, where research runs and
+// artifact history live.
 //
 // A ticker is the primary object: a live market snapshot AND many research
 // artifacts. The card shows the snapshot + latest verdict + report count; the
@@ -15,14 +17,36 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useI18n } from '../i18n'
 import { useCoverageStore } from '../stores/coverageStore'
-import { useCoverageGroups, useCoverageOverview } from '../hooks/useCoverage'
+import { useCoverageGroups, useCoverageOverview, useSetOwned } from '../hooks/useCoverage'
 import { CoverageEmptyState } from '../components/coverage/CoverageEmptyState'
 import { CoverageCardGrid } from '../components/coverage/CoverageCardGrid'
-import { sortCoverageRows, type CoverageSort } from '../components/coverage/coverageSort'
+import { CoverageRerunPanel } from '../components/coverage/CoverageRerunPanel'
+import {
+  normaliseCoverageSort,
+  sortCoverageRows,
+  type CoverageSort,
+  type CoverageSortKey,
+  type SortDir,
+} from '../components/coverage/coverageSort'
 
-// Resting order (no UI control): most-urgent first, so the names that need the
-// analyst surface at the top of the wall.
+// Resting order (no persisted choice yet): most-urgent first, so the names that
+// need the analyst surface at the top of the wall.
 const DEFAULT_SORT: CoverageSort = { key: 'needs_action', dir: 'desc' }
+
+// The three keys the sort box exposes (a deliberate subset of CoverageSortKey).
+// `defaultDir` is the direction a key snaps to when picked, so "rating" opens
+// best-first (BUY first) rather than inheriting the needs-attention desc.
+const SORT_SELECT_KEYS: readonly CoverageSortKey[] = ['needs_action', 'ticker', 'rating']
+const SORT_KEY_LABEL: Record<string, string> = {
+  needs_action: 'coverage.sort.needsAction',
+  ticker: 'coverage.sort.name',
+  rating: 'coverage.sort.rating',
+}
+const SORT_DEFAULT_DIR: Partial<Record<CoverageSortKey, SortDir>> = {
+  needs_action: 'desc',
+  ticker: 'asc',
+  rating: 'asc',
+}
 
 export function CoveragePage(): React.ReactElement {
   const { t } = useI18n()
@@ -34,6 +58,21 @@ export function CoveragePage(): React.ReactElement {
   // One shipped density (comfort). The toggle was cut; the store field stays so
   // the card/grid sizing props keep working, pinned to comfort.
   const density = useCoverageStore((s) => s.density)
+
+  // Card sort — persisted view-state. The stored value is normalised on read, so
+  // a stale/unknown persisted key falls back to DEFAULT_SORT instead of leaving
+  // the wall in an undefined order.
+  const storedSort = useCoverageStore((s) => s.sort)
+  const setSort = useCoverageStore((s) => s.setSort)
+  const sort = useMemo(() => normaliseCoverageSort(storedSort) ?? DEFAULT_SORT, [storedSort])
+
+  // Global owned flag writes. In-flight is scoped to the clicked ticker so only
+  // that card's checkbox locks (the mutation carries its variables).
+  const setOwned = useSetOwned()
+  const ownedPendingTicker = setOwned.isPending ? (setOwned.variables?.ticker ?? null) : null
+
+  // "Re-run all" panel visibility.
+  const [rerunOpen, setRerunOpen] = useState(false)
 
   // Market-degraded retry bar (BUG-032): the cache-only paint filled the table
   // but the network revalidate failed, so the numbers are last-known (possibly
@@ -50,8 +89,9 @@ export function CoveragePage(): React.ReactElement {
   const overviewQuery = useCoverageOverview(activeGroupId)
   const rows = useMemo(() => overviewQuery.data?.rows ?? [], [overviewQuery.data])
 
-  // The whole universe, always — ordered urgent-first for a stable, useful wall.
-  const visibleRows = useMemo(() => sortCoverageRows(rows, DEFAULT_SORT), [rows])
+  // The whole universe, always — ordered by the persisted sort box (default
+  // urgent-first) for a stable, useful wall.
+  const visibleRows = useMemo(() => sortCoverageRows(rows, sort), [rows, sort])
 
   // Re-arm the market-degraded retry bar on each fresh failure: when marketError
   // flips false→true (e.g. a retry failed again, or a new group's revalidate
@@ -104,25 +144,52 @@ export function CoveragePage(): React.ReactElement {
         padding: '20px 24px',
       }}
     >
-      {/* Header rail — just the manual refresh control, right-aligned (the page
-          stays chrome-light: no sort/triage controls, the user cut those). The
-          button re-runs the network revalidate; backend single-flight + the
-          calendar no-op make a closed-market refresh free, so it can't be
-          abused. */}
+      {/* Header rail — the sort box on the left; the re-run-all + refresh
+          controls on the right. The refresh button re-runs the network
+          revalidate; backend single-flight + the calendar no-op make a
+          closed-market refresh free, so it can't be abused. */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'flex-end',
+          justifyContent: 'space-between',
+          gap: 12,
           marginBottom: 14,
           flexShrink: 0,
         }}
       >
-        <CoverageRefreshControl
-          refreshing={overviewQuery.refreshing}
-          noop={overviewQuery.refreshNoop}
-          onRefresh={() => overviewQuery.refetch()}
-        />
+        <CoverageSortControl sort={sort} onChange={(next) => setSort(next)} />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            type="button"
+            data-testid="coverage-rerun-open"
+            onClick={() => setRerunOpen(true)}
+            className="coverage-hover-btn"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              padding: '6px 13px',
+              borderRadius: 'var(--radius-pill)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11.5,
+              fontWeight: 500,
+              letterSpacing: '0.04em',
+              background: 'var(--bg-card-overlay)',
+              color: 'var(--text-secondary)',
+              border: '1px solid var(--border-soft)',
+              cursor: 'pointer',
+            }}
+          >
+            {t('coverage.rerun.button')}
+          </button>
+          <CoverageRefreshControl
+            refreshing={overviewQuery.refreshing}
+            noop={overviewQuery.refreshNoop}
+            onRefresh={() => overviewQuery.refetch()}
+          />
+        </div>
       </div>
 
       {/* Market-degraded retry bar (BUG-032): the table is alive (cache-only
@@ -163,9 +230,109 @@ export function CoveragePage(): React.ReactElement {
             density={density}
             marketPending={overviewQuery.marketPending}
             onOpen={(ticker) => navigate(`/stocks/${ticker}`)}
+            onSetOwned={(ticker, owned) => setOwned.mutate({ ticker, owned })}
+            ownedPendingTicker={ownedPendingTicker}
           />
         )}
       </div>
+
+      {rerunOpen && activeGroupId && (
+        <CoverageRerunPanel
+          groupId={activeGroupId}
+          rows={rows}
+          onClose={() => setRerunOpen(false)}
+          // The batch flipped the rows' run_state server-side; refetch so the
+          // cards pick up the new status instead of the pre-run snapshot.
+          onCompleted={() => overviewQuery.refetch()}
+        />
+      )}
+    </div>
+  )
+}
+
+// Sort box — a labelled select (exactly the three surfaced keys) plus a
+// direction toggle. The direction snaps to the key's sensible default on pick
+// (name/rating ascend, needs-attention descends), and the toggle flips it.
+function CoverageSortControl({
+  sort,
+  onChange,
+}: {
+  sort: CoverageSort
+  onChange: (sort: CoverageSort) => void
+}): React.ReactElement {
+  const { t } = useI18n()
+  // A key outside the three (never produced by this control, but defensively
+  // possible from a hand-edited store) renders as needs-attention rather than a
+  // blank select.
+  const value: CoverageSortKey = SORT_SELECT_KEYS.includes(sort.key) ? sort.key : 'needs_action'
+
+  return (
+    <div
+      data-testid="coverage-sort"
+      style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}
+    >
+      <label
+        htmlFor="coverage-sort-select"
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          letterSpacing: '0.03em',
+          color: 'var(--text-muted)',
+        }}
+      >
+        {t('coverage.sort.label')}
+      </label>
+      <select
+        id="coverage-sort-select"
+        data-testid="coverage-sort-select"
+        value={value}
+        aria-label={t('coverage.sort.aria')}
+        onChange={(e) => {
+          const key = e.target.value as CoverageSortKey
+          onChange({ key, dir: SORT_DEFAULT_DIR[key] ?? 'asc' })
+        }}
+        style={{
+          padding: '5px 9px',
+          borderRadius: 'var(--radius-pill)',
+          border: '1px solid var(--border-soft)',
+          background: 'var(--bg-card-overlay)',
+          color: 'var(--text-secondary)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11.5,
+          cursor: 'pointer',
+        }}
+      >
+        {SORT_SELECT_KEYS.map((key) => (
+          <option key={key} value={key}>
+            {t(SORT_KEY_LABEL[key])}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        data-testid="coverage-sort-dir"
+        onClick={() => onChange({ key: sort.key, dir: sort.dir === 'asc' ? 'desc' : 'asc' })}
+        aria-label={t('coverage.sort.dirToggle')}
+        title={sort.dir === 'asc' ? t('coverage.sort.dirAsc') : t('coverage.sort.dirDesc')}
+        className="coverage-hover-btn"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: 28,
+          height: 26,
+          padding: 0,
+          borderRadius: 'var(--radius-pill)',
+          border: '1px solid var(--border-soft)',
+          background: 'var(--bg-card-overlay)',
+          color: 'var(--text-secondary)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+          cursor: 'pointer',
+        }}
+      >
+        {sort.dir === 'asc' ? '↑' : '↓'}
+      </button>
     </div>
   )
 }

@@ -3033,6 +3033,130 @@ msgid "coverage.refresh.aria"
 msgstr "Refresh market data"
 
 #. js-lingui-explicit-id
+msgid "coverage.owned.label"
+msgstr "Owned"
+
+#. js-lingui-explicit-id
+msgid "coverage.owned.aria"
+msgstr "Mark {ticker} as owned"
+
+#. js-lingui-explicit-id
+msgid "coverage.sort.label"
+msgstr "Sort"
+
+#. js-lingui-explicit-id
+msgid "coverage.sort.aria"
+msgstr "Sort coverage cards"
+
+#. js-lingui-explicit-id
+msgid "coverage.sort.needsAction"
+msgstr "Needs attention"
+
+#. js-lingui-explicit-id
+msgid "coverage.sort.name"
+msgstr "Name"
+
+#. js-lingui-explicit-id
+msgid "coverage.sort.rating"
+msgstr "Rating"
+
+#. js-lingui-explicit-id
+msgid "coverage.sort.dirToggle"
+msgstr "Toggle sort direction"
+
+#. js-lingui-explicit-id
+msgid "coverage.sort.dirAsc"
+msgstr "Ascending"
+
+#. js-lingui-explicit-id
+msgid "coverage.sort.dirDesc"
+msgstr "Descending"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.button"
+msgstr "Re-run all"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.title"
+msgstr "Re-run reports"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.close"
+msgstr "Close"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.ownedOnly"
+msgstr "Owned only"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.ratings"
+msgstr "Ratings"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.rating.buy"
+msgstr "Buy"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.rating.hold"
+msgstr "Hold"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.rating.sell"
+msgstr "Sell"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.rating.unrated"
+msgstr "Not run"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.submit"
+msgstr "Re-run {n} reports"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.submitting"
+msgstr "Starting…"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.startFailed"
+msgstr "Couldn't start the re-run batch."
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.progressFailed"
+msgstr "Couldn't read batch progress."
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.counts"
+msgstr "{queued} queued · {running} running · {completed} done · {failed} failed"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.cap"
+msgstr "Detected cap: {n} concurrent runs"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.boundBy"
+msgstr "bound by {provider}"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.boundByCeiling"
+msgstr "bound by the run ceiling"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.state.queued"
+msgstr "queued"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.state.running"
+msgstr "running"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.state.completed"
+msgstr "done"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.state.failed"
+msgstr "failed"
+
+#. js-lingui-explicit-id
 msgid "runs.error.alreadyActive"
 msgstr "A run for {ticker} is already in progress."
 

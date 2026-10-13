@@ -3033,6 +3033,130 @@ msgid "coverage.refresh.aria"
 msgstr "刷新行情数据"
 
 #. js-lingui-explicit-id
+msgid "coverage.owned.label"
+msgstr "持有"
+
+#. js-lingui-explicit-id
+msgid "coverage.owned.aria"
+msgstr "将 {ticker} 标记为持有"
+
+#. js-lingui-explicit-id
+msgid "coverage.sort.label"
+msgstr "排序"
+
+#. js-lingui-explicit-id
+msgid "coverage.sort.aria"
+msgstr "排序覆盖卡片"
+
+#. js-lingui-explicit-id
+msgid "coverage.sort.needsAction"
+msgstr "待关注"
+
+#. js-lingui-explicit-id
+msgid "coverage.sort.name"
+msgstr "名称"
+
+#. js-lingui-explicit-id
+msgid "coverage.sort.rating"
+msgstr "评级"
+
+#. js-lingui-explicit-id
+msgid "coverage.sort.dirToggle"
+msgstr "切换排序方向"
+
+#. js-lingui-explicit-id
+msgid "coverage.sort.dirAsc"
+msgstr "升序"
+
+#. js-lingui-explicit-id
+msgid "coverage.sort.dirDesc"
+msgstr "降序"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.button"
+msgstr "全部重跑"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.title"
+msgstr "重跑研报"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.close"
+msgstr "关闭"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.ownedOnly"
+msgstr "仅持有"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.ratings"
+msgstr "评级"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.rating.buy"
+msgstr "买入"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.rating.hold"
+msgstr "持有"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.rating.sell"
+msgstr "卖出"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.rating.unrated"
+msgstr "未运行"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.submit"
+msgstr "重跑 {n} 份研报"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.submitting"
+msgstr "正在启动…"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.startFailed"
+msgstr "无法启动重跑批次。"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.progressFailed"
+msgstr "无法读取批次进度。"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.counts"
+msgstr "排队 {queued} · 运行 {running} · 完成 {completed} · 失败 {failed}"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.cap"
+msgstr "检测到的并发上限：{n}"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.boundBy"
+msgstr "受限于 {provider}"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.boundByCeiling"
+msgstr "受限于运行上限"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.state.queued"
+msgstr "排队中"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.state.running"
+msgstr "运行中"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.state.completed"
+msgstr "已完成"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerun.state.failed"
+msgstr "失败"
+
+#. js-lingui-explicit-id
 msgid "runs.error.alreadyActive"
 msgstr "{ticker} 已有任务正在运行。"
 

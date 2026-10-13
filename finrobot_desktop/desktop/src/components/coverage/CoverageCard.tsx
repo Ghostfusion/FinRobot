@@ -32,6 +32,12 @@ interface Props {
   // its last-known numbers with a refreshing hint — never a blank shimmer.
   marketPending?: boolean
   onOpen: (ticker: string) => void
+  // Toggle the ticker's global owned flag (PUT /api/coverage/owned/{ticker}).
+  // Optional so the many card-only tests/uses render without the mutation.
+  onSetOwned?: (ticker: string, owned: boolean) => void
+  // The owned write for THIS ticker is in flight — disable the checkbox so a
+  // double-click can't queue a lost-update pair.
+  ownedPending?: boolean
 }
 
 // Badge text + dot ride the bright signal hue (matches the card's top hairline);
@@ -95,6 +101,8 @@ export const CoverageCard = memo(function CoverageCard({
   density,
   marketPending = false,
   onOpen,
+  onSetOwned,
+  ownedPending = false,
 }: Props): React.ReactElement {
   const { t, locale } = useI18n()
   const compact = density === 'compact'
@@ -345,11 +353,86 @@ export const CoverageCard = memo(function CoverageCard({
         >
           {status.text}
         </span>
-        <span className="coverage-card__report">{reportSummary}</span>
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 10,
+            minWidth: 0,
+          }}
+        >
+          <span className="coverage-card__report">{reportSummary}</span>
+          <OwnedToggle
+            ticker={row.ticker}
+            owned={row.owned}
+            pending={ownedPending}
+            onSetOwned={onSetOwned}
+          />
+        </span>
       </footer>
     </article>
   )
 })
+
+// Footer "owned" chip. The card is a role=link with a click/keydown-to-open
+// handler, so the control MUST swallow its own click + keydown (stopPropagation)
+// or toggling the flag would also navigate to the ticker. Its own aria-label is
+// required because the visible label is terse ("Owned") and the card's own
+// aria-label ("Open NFLX") would otherwise be the only announcement.
+function OwnedToggle({
+  ticker,
+  owned,
+  pending,
+  onSetOwned,
+}: {
+  ticker: string
+  owned: boolean
+  pending: boolean
+  onSetOwned?: (ticker: string, owned: boolean) => void
+}): React.ReactElement {
+  const { t } = useI18n()
+  return (
+    <label
+      data-testid={`coverage-owned-${ticker}`}
+      title={t('coverage.owned.aria', { ticker })}
+      // Swallow both events: the article's handlers open the ticker workspace.
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        flex: 'none',
+        fontFamily: 'var(--font-body)',
+        fontSize: 10.5,
+        fontWeight: 600,
+        letterSpacing: '0.02em',
+        color: owned ? 'var(--accent-cyan)' : 'var(--text-muted)',
+        cursor: pending ? 'default' : 'pointer',
+        opacity: pending ? 0.5 : 1,
+        userSelect: 'none',
+      }}
+    >
+      <input
+        type="checkbox"
+        checked={owned}
+        disabled={pending}
+        aria-label={t('coverage.owned.aria', { ticker })}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+        onChange={(e) => onSetOwned?.(ticker, e.target.checked)}
+        style={{
+          margin: 0,
+          width: 13,
+          height: 13,
+          accentColor: 'var(--accent-cyan)',
+          cursor: pending ? 'default' : 'pointer',
+        }}
+      />
+      {t('coverage.owned.label')}
+    </label>
+  )
+}
 
 function Metric({
   label,

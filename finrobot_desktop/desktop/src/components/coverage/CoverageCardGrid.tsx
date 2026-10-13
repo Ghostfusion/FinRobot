@@ -15,6 +15,10 @@ interface Props {
   density: CoverageDensity
   marketPending?: boolean
   onOpen: (ticker: string) => void
+  // Toggle a ticker's global owned flag (PUT /api/coverage/owned/{ticker}).
+  onSetOwned?: (ticker: string, owned: boolean) => void
+  // The ticker whose owned write is in flight — only that card's checkbox locks.
+  ownedPendingTicker?: string | null
 }
 
 export function CoverageCardGrid({
@@ -22,6 +26,8 @@ export function CoverageCardGrid({
   density,
   marketPending = false,
   onOpen,
+  onSetOwned,
+  ownedPendingTicker = null,
 }: Props): React.ReactElement {
   const { t } = useI18n()
   const compact = density === 'compact'
@@ -70,6 +76,8 @@ export function CoverageCardGrid({
           density={density}
           marketPending={marketPending}
           onOpen={onOpen}
+          onSetOwned={onSetOwned}
+          ownedPending={ownedPendingTicker === row.ticker}
         />
       ))}
     </div>
