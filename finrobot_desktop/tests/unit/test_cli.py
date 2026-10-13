@@ -24,6 +24,15 @@ FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "skills"
 
 
 class FakeDataLayer:
+    def __init__(self) -> None:
+        #: Counted so a test can prove the CLI tore the layer down (the
+        #: exit-hang regression: a leaked layer blocks the interpreter exit).
+        self.closed = 0
+
+    async def close(self) -> None:
+        """Real ``DataLayer.close()`` — the CLI teardown calls this."""
+        self.closed += 1
+
     async def fetch(self, data_type: str, ticker: str, **kwargs) -> DataResult:
         try:
             dtype = DataType(data_type)
@@ -128,6 +137,16 @@ class FakeDataLayer:
         return []
 
 
+def _stub_deps():
+    """Minimal deps shape for testing ``_run_with_teardown`` in isolation.
+
+    The helper only ever reads ``deps.data_layer`` (``shutdown_data_layer``
+    itself is monkeypatched in those tests), so a namespace is enough — no
+    settings, no layer, no config.
+    """
+    return SimpleNamespace(data_layer=SimpleNamespace())
+
+
 def _fake_deps():
     """Create fake deps for testing."""
     from finrobot.config import get_settings
@@ -224,6 +243,85 @@ class TestResearchCommand:
         runner = CliRunner()
         result = runner.invoke(cli, ["research", "AAPL"])
         assert result.exit_code == 0, result.output
+
+
+class TestDataLayerTeardown:
+    """Every CLI command must tear its data layer down before the process exits.
+
+    Regression for the exit hang: each pipeline command printed its complete
+    report and then never returned (observed 2026-10-12 — ``finrobot fund IEI``
+    and ``finrobot research IEI`` were both still alive minutes after their last
+    line, exit 124 under ``timeout``). The layer the CLI builds owns the
+    DataCache aiosqlite connection plus the process-level quote-batch /
+    SEC-holdings singletons; leaking them is what blocks the interpreter at
+    exit, and ``factory.shutdown_data_layer`` exists for exactly this
+    (every ``scripts/*`` tool calls it). The CLI never did.
+    """
+
+    def test_command_closes_the_layer_it_built(self, monkeypatch):
+        fake_deps = _patch_build_deps(monkeypatch)
+        from finrobot.engine.pipelines.base import PipelineResult
+
+        async def mock_execute(self, deps, ticker, **kwargs):
+            return PipelineResult(steps={"data_collection": "revenue 385B " * 40})
+
+        monkeypatch.setattr("finrobot.engine.pipelines.base.Pipeline.execute", mock_execute)
+        result = CliRunner().invoke(cli, ["research", "AAPL"])
+        assert result.exit_code == 0, result.output
+        assert fake_deps.data_layer.closed == 1
+
+    def test_teardown_runs_after_the_workload(self, monkeypatch):
+        from finrobot.cli import _run_with_teardown
+
+        events: list[str] = []
+
+        async def fake_shutdown(data_layer=None):
+            events.append("shutdown")
+
+        async def workload():
+            events.append("workload")
+            return 42
+
+        monkeypatch.setattr("finrobot.engine.data.factory.shutdown_data_layer", fake_shutdown)
+        assert _run_with_teardown(workload(), deps=_stub_deps()) == 42
+        assert events == ["workload", "shutdown"]
+
+    def test_teardown_runs_when_the_workload_raises(self, monkeypatch):
+        from finrobot.cli import _run_with_teardown
+
+        events: list[str] = []
+
+        async def fake_shutdown(data_layer=None):
+            events.append("shutdown")
+
+        async def workload():
+            raise RuntimeError("pipeline blew up")
+
+        monkeypatch.setattr("finrobot.engine.data.factory.shutdown_data_layer", fake_shutdown)
+        with pytest.raises(RuntimeError):
+            _run_with_teardown(workload(), deps=_stub_deps())
+        assert events == ["shutdown"]
+
+    def test_teardown_shares_the_workload_event_loop(self, monkeypatch):
+        """BUG-082: closing on a SECOND loop re-binds the aiosqlite connection to
+        a fresh loop while its worker thread still belongs to the finished one.
+        The teardown must observe the very loop the workload ran on."""
+        import asyncio
+
+        from finrobot.cli import _run_with_teardown
+
+        loops: list[int] = []
+
+        async def fake_shutdown(data_layer=None):
+            loops.append(id(asyncio.get_running_loop()))
+
+        async def workload():
+            loops.append(id(asyncio.get_running_loop()))
+
+        monkeypatch.setattr("finrobot.engine.data.factory.shutdown_data_layer", fake_shutdown)
+        _run_with_teardown(workload(), deps=_stub_deps())
+        assert len(loops) == 2
+        assert loops[0] == loops[1]
 
 
 class TestCompsCommand:

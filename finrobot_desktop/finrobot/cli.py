@@ -3,9 +3,10 @@ from __future__ import annotations
 import asyncio
 import sys
 import threading
+from collections.abc import Coroutine
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import click
 
@@ -135,6 +136,40 @@ def _build_pipeline(key: str, deps: "FinRobotDeps") -> "Pipeline":
     sub_agents = create_sub_agents(deps.settings, skill_registry=deps.skill_runtime)
     pipeline: Pipeline = get_pipeline_factories()[key](sub_agents)
     return pipeline
+
+
+_T = TypeVar("_T")
+
+
+def _run_with_teardown(coro: Coroutine[Any, Any, _T], deps: "FinRobotDeps") -> _T:
+    """Run one CLI workload and shut the data layer down on the SAME event loop.
+
+    A CLI invocation is a one-shot process: it builds a DataLayer, runs a single
+    pipeline and exits. Without an explicit teardown the DataCache's aiosqlite
+    worker and the process-level quote-batch / SEC-holdings singletons outlive the
+    run, and the interpreter blocks at exit joining them — the command printed its
+    entire report and then never returned (observed 2026-10-12: ``finrobot fund
+    IEI`` and ``finrobot research IEI`` both still alive minutes after their last
+    line, exit 124 under ``timeout``; a deps-only script that builds the same
+    layer and exits finished in 6s). ``scripts/*`` tools have always called
+    ``factory.shutdown_data_layer`` for exactly this reason; the CLI never did.
+    The server path is unaffected — it has its own FastAPI-lifespan teardown.
+
+    BUG-082: the teardown MUST share the workload's event loop. Closing the layer
+    from a second ``asyncio.run`` re-binds its aiosqlite connection to a fresh
+    loop while the worker thread still belongs to the finished one — the orphan
+    thread the same bug describes. One loop, one ``asyncio.run``.
+    """
+
+    from finrobot.engine.data.factory import shutdown_data_layer
+
+    async def _guarded() -> _T:
+        try:
+            return await coro
+        finally:
+            await shutdown_data_layer(deps.data_layer)
+
+    return asyncio.run(_guarded())
 
 
 async def _should_use_ddm(deps: "FinRobotDeps", ticker: str) -> bool:
@@ -391,7 +426,9 @@ def research(ticker: str, model: str | None, lang: str | None) -> None:
 
     pipeline = _build_pipeline("research", deps)
 
-    result = asyncio.run(pipeline.execute(deps, ticker, progress=CliProgress(), lang=lang))
+    result = _run_with_teardown(
+        pipeline.execute(deps, ticker, progress=CliProgress(), lang=lang), deps
+    )
     click.echo(result.format_summary())
     click.echo(_HTML_REPORT_NOTE)
 
@@ -443,7 +480,9 @@ def comps(ticker: str, model: str | None, lang: str | None, peers: str | None) -
             )
         extra["peers"] = peers_list
 
-    result = asyncio.run(pipeline.execute(deps, ticker, progress=CliProgress(), lang=lang, **extra))
+    result = _run_with_teardown(
+        pipeline.execute(deps, ticker, progress=CliProgress(), lang=lang, **extra), deps
+    )
     click.echo(result.format_summary())
 
 
@@ -500,7 +539,7 @@ def dcf(ticker: str, model: str | None, force_dcf: bool, lang: str | None) -> No
         dcf_pipeline: Pipeline = factories["dcf"](sub_agents)
         return await dcf_pipeline.execute(deps, ticker, progress=CliProgress(), lang=lang)
 
-    result = asyncio.run(_dcf_or_ddm())
+    result = _run_with_teardown(_dcf_or_ddm(), deps)
     click.echo(result.format_summary())
     click.echo(_HTML_REPORT_NOTE)
 
@@ -526,7 +565,9 @@ def ddm(ticker: str, model: str | None, lang: str | None) -> None:
 
     pipeline = _build_pipeline("ddm", deps)
 
-    result = asyncio.run(pipeline.execute(deps, ticker, progress=CliProgress(), lang=lang))
+    result = _run_with_teardown(
+        pipeline.execute(deps, ticker, progress=CliProgress(), lang=lang), deps
+    )
     click.echo(result.format_summary())
     click.echo(_HTML_REPORT_NOTE)
 
@@ -553,7 +594,9 @@ def fund(ticker: str, model: str | None, lang: str | None) -> None:
 
     pipeline = _build_pipeline("fund_research", deps)
 
-    result = asyncio.run(pipeline.execute(deps, ticker, progress=CliProgress(), lang=lang))
+    result = _run_with_teardown(
+        pipeline.execute(deps, ticker, progress=CliProgress(), lang=lang), deps
+    )
     click.echo(result.format_summary())
     click.echo(_HTML_REPORT_NOTE)
 
@@ -577,7 +620,9 @@ def lbo(ticker: str, model: str | None, lang: str | None) -> None:
 
     pipeline = _build_pipeline("lbo", deps)
 
-    result = asyncio.run(pipeline.execute(deps, ticker, progress=CliProgress(), lang=lang))
+    result = _run_with_teardown(
+        pipeline.execute(deps, ticker, progress=CliProgress(), lang=lang), deps
+    )
     click.echo(result.format_summary())
     click.echo(_HTML_REPORT_NOTE)
 
@@ -601,7 +646,9 @@ def earnings(ticker: str, model: str | None, lang: str | None) -> None:
 
     pipeline = _build_pipeline("earnings", deps)
 
-    result = asyncio.run(pipeline.execute(deps, ticker, progress=CliProgress(), lang=lang))
+    result = _run_with_teardown(
+        pipeline.execute(deps, ticker, progress=CliProgress(), lang=lang), deps
+    )
     click.echo(result.format_summary())
 
 
@@ -624,7 +671,9 @@ def ic_memo(ticker: str, model: str | None, lang: str | None) -> None:
 
     pipeline = _build_pipeline("ic-memo", deps)
 
-    result = asyncio.run(pipeline.execute(deps, ticker, progress=CliProgress(), lang=lang))
+    result = _run_with_teardown(
+        pipeline.execute(deps, ticker, progress=CliProgress(), lang=lang), deps
+    )
     click.echo(result.format_summary())
     click.echo(_HTML_REPORT_NOTE)
 
@@ -688,7 +737,7 @@ def backtest(
     """
     ticker = _validate_ticker_arg(ticker)
 
-    from finrobot.engine.data.factory import build_data_layer
+    from finrobot.engine.data.factory import build_data_layer, shutdown_data_layer
     from finrobot.engine.backtest.engine import BacktestConfig, BacktestResult
 
     if auto:
@@ -719,7 +768,10 @@ def backtest(
                     ledger_path=ledger_target,
                 )
             finally:
-                await data_layer.close()
+                # shutdown_data_layer (not a bare close): the backtest's price
+                # window also opens the process-level quote-batch singleton, and
+                # leaking it is the same exit hang the pipeline commands fixed.
+                await shutdown_data_layer(data_layer)
 
         result = asyncio.run(_run_auto())
         click.echo(result.format_summary())
@@ -758,7 +810,10 @@ def backtest(
             try:
                 return await BackTraderAdapter(data_layer).run(config)
             finally:
-                await data_layer.close()
+                # shutdown_data_layer (not a bare close): the backtest's price
+                # window also opens the process-level quote-batch singleton, and
+                # leaking it is the same exit hang the pipeline commands fixed.
+                await shutdown_data_layer(data_layer)
 
         result = asyncio.run(_run_manual())
         click.echo(result.format_summary())
@@ -923,7 +978,9 @@ def ask(ticker: str, question: str, model: str | None, top_k: int) -> None:
     from finrobot.engine.analysis.qa import run_qa
 
     deps = _build_deps(model)
-    result = asyncio.run(run_qa(deps.data_layer, deps.settings, ticker, question, top_k=top_k))
+    result = _run_with_teardown(
+        run_qa(deps.data_layer, deps.settings, ticker, question, top_k=top_k), deps
+    )
     click.echo(result)
 
 
@@ -947,8 +1004,8 @@ def analyze(ticker: str, analysis_type: str, model: str | None) -> None:
     from finrobot.engine.analysis.prompts import run_analysis
 
     deps = _build_deps(model)
-    result = asyncio.run(
-        run_analysis(deps.data_layer, deps.settings, ticker, analysis_type.lower())
+    result = _run_with_teardown(
+        run_analysis(deps.data_layer, deps.settings, ticker, analysis_type.lower()), deps
     )
     click.echo(result)
 
