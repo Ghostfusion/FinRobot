@@ -128,6 +128,7 @@ def net_income_divergence_warning(
     provider_source: str | None,
     xbrl_net_income: float | None,
     xbrl_source: str | None,
+    nci_earnings: float | None = None,
 ) -> str | None:
     """Disclose a >5% gap between the SEC XBRL TTM net income and the provider's.
 
@@ -135,14 +136,24 @@ def net_income_divergence_warning(
     net-income authorities: the income-statement table's provider TTM net income
     and the XBRL ``us-gaap:NetIncomeLoss`` TTM filing fact the narrative may cite.
     A gap above ``_NET_INCOME_DIVERGENCE_TOL`` relative is a caliber difference
-    (concept / window / filing rounding) that must be DISCLOSED rather than
-    absorbed silently into prose — the EHC review found $621M (XBRL), $603.7M
-    (provider) and ~$590M (the old P/E-implied fourth number) inside one report.
+    that must be DISCLOSED rather than absorbed silently into prose — the EHC
+    review found $621M (XBRL), $603.7M (provider) and ~$590M (the old P/E-implied
+    fourth number) inside one report.
+
+    ``nci_earnings`` — the noncontrolling-interest share of net income the
+    provider's own statement frame reports (``Net Income Including Noncontrolling
+    Interests`` − ``Net Income Common Stockholders`` / the ``Minority Interests``
+    row) — lets us NAME the cause instead of guessing. When the observed gap
+    MATCHES that share, the two authorities are simply different CALIBERS: the SEC
+    ``NetIncomeLoss`` is consolidated (incl. NCI) while the provider's
+    ``netIncomeToCommon`` is attributable to the parent. THC: 3.174B (consolidated)
+    vs 2.241B (parent) = 933M of NCI earnings — not a typo, and not "concept /
+    window / filing rounding".
 
     Returns a warning naming BOTH values and BOTH sources, or None when either
     figure is missing / non-finite or the two agree within tolerance. Pure and
-    side-effect free: the caller (the report's data-collection step — the one place
-    both values are in scope) appends the string to ``FinancialData.warnings``.
+    side-effect free. When the gap is NOT explained by the reported NCI share the
+    conservative caliber-gap wording is kept.
     """
     if provider_net_income is None or xbrl_net_income is None:
         return None
@@ -154,6 +165,26 @@ def net_income_divergence_warning(
     gap = abs(provider_net_income - xbrl_net_income) / denominator
     if gap <= _NET_INCOME_DIVERGENCE_TOL:
         return None
+    if (
+        nci_earnings is not None
+        and math.isfinite(nci_earnings)
+        and abs(abs(provider_net_income - xbrl_net_income) - abs(nci_earnings))
+        / max(abs(provider_net_income - xbrl_net_income), abs(nci_earnings), 1.0)
+        <= _NET_INCOME_DIVERGENCE_TOL
+    ):
+        consolidated, parent = (
+            (xbrl_net_income, provider_net_income)
+            if abs(xbrl_net_income) >= abs(provider_net_income)
+            else (provider_net_income, xbrl_net_income)
+        )
+        return (
+            f"Net income disagreement ({gap:.1%}) is the noncontrolling-interest "
+            f"share of earnings, not a typo: the consolidated figure "
+            f"{consolidated:,.0f} (incl. noncontrolling interests) differs from the "
+            f"amount attributable to the parent {parent:,.0f} by {abs(nci_earnings):,.0f} "
+            f"of NCI earnings. Cite ONE basis explicitly — consolidated (incl. NCI) vs "
+            f"attributable to the parent — instead of mixing the two."
+        )
     return (
         f"Net income disagreement ({gap:.1%}): the income statement's TTM net income is "
         f"{provider_net_income:,.0f} ({provider_source or 'provider'}) while the SEC XBRL "
@@ -198,7 +229,7 @@ def extract_financial_data(
         raise FundInstrumentError(ticker, fin.quote_type)
 
     revenue = fin.revenue
-    market_cap = fin.market_cap
+    provider_market_cap = fin.market_cap
 
     # Banks have no COGS, so gross margin is undefined. FMP forces its non-bank
     # template (~60% phantom) and yfinance returns 0% — suppress to None at this
@@ -227,8 +258,6 @@ def extract_financial_data(
 
     if not revenue:
         raise ValueError(f"Missing or zero revenue for {ticker}")
-    if not market_cap:
-        raise ValueError(f"Missing or zero market_cap for {ticker}")
 
     warnings: list[str] = []
     field_warnings: dict[str, list[str]] = {}
@@ -246,40 +275,55 @@ def extract_financial_data(
             "Ensure the price provider is configured and returning data."
         )
 
-    # --- shares_outstanding: price-consistent count for per-share valuation ---
-    # Every per-share figure downstream (DCF implied price via seed_dcf_inputs,
-    # comps EPS, LBO/EV-EBITDA/P-FCF targets) divides an equity/enterprise TOTAL
-    # by this count and compares the result to current_price — so the count MUST
-    # be on the SAME basis as the price, i.e. market_cap / current_price. A
-    # reported filing count that covers only ONE class of a multi-class issuer
-    # (yfinance .info reports single-class for GOOG/META/FOX) would put total
-    # net_income over a single-class denominator and overstate EPS ~class-ratio×.
-    # FMP already reports the all-class mc/price count, so this only corrects the
-    # degraded yfinance-only path — making it symmetric with FMP (no Mode A/B gap).
-    implied_shares = market_cap / current_price
+    # --- shares_outstanding: the provider/SEC count for per-share valuation ---
+    # The count must be an INDEPENDENT observation, not a market-cap division:
+    # deriving shares = market_cap/price and then publishing market_cap = shares ×
+    # price makes the two mutually derived (authority._derived_from then always
+    # flags the count as derived, and the share-count check is a tautology). So we
+    # keep the provider/SEC count whenever it exists, flag a large divergence from
+    # market_cap/price (multi-class single-class .info count / ADR ratio) WITHOUT
+    # swapping in the derived value, and only fall back to market_cap/price when no
+    # count is reported at all (labelled).
     reported_shares = fin.shares_outstanding
-    if reported_shares is None or reported_shares <= 0:
-        shares = implied_shares
+    if reported_shares is not None and reported_shares > 0:
+        if provider_market_cap and provider_market_cap > 0:
+            implied = provider_market_cap / current_price
+            if abs(reported_shares - implied) / implied > _SHARES_PRICE_CONSISTENCY_TOL:
+                # Divergent counts are single-CLASS counts of a multi-class issuer
+                # (or an ADR ratio), and the numerator is TOTAL equity value: keeping
+                # the class count overstates every per-share figure by the class ratio.
+                # Probed 2026-10-14: Yahoo still reports GOOG 5.527bn vs cap/price
+                # 12.230bn (54.8%), META 2.205bn vs 2.548bn (13.4%), FOX 220M vs 422M
+                # (47.8%) — while BP and THC tie exactly. So the price-consistent
+                # count wins on divergence and the divergence is DISCLOSED (never
+                # silent) so the reader knows which basis the per-share metrics use.
+                warnings.append(
+                    f"shares_outstanding from {fin.provenance.provider} for {ticker} "
+                    f"({reported_shares:,.0f}) diverges "
+                    f"{abs(reported_shares - implied) / implied:.0%} from market_cap/price "
+                    f"({implied:,.0f}) — likely a single share class of a multi-class "
+                    "issuer or an ADR ratio. Using the price-consistent count so per-share "
+                    "metrics (EPS, P/E, implied price) stay on the market's basis."
+                )
+                field_warnings.setdefault("pe", []).append(FIELD_WARN_SHARES_DERIVED)
+                shares = implied
+            else:
+                shares = reported_shares
+        else:
+            shares = reported_shares
+    elif provider_market_cap and provider_market_cap > 0:
+        shares = provider_market_cap / current_price
         warnings.append(
             f"shares_outstanding missing or invalid from {fin.provenance.provider} "
             f"for {ticker} — derived as market_cap/price ({shares:,.0f}). "
             "Per-share metrics (EPS, P/E) may be approximate."
         )
         field_warnings.setdefault("pe", []).append(FIELD_WARN_SHARES_DERIVED)
-    elif abs(reported_shares - implied_shares) / implied_shares > _SHARES_PRICE_CONSISTENCY_TOL:
-        shares = implied_shares
-        warnings.append(
-            f"shares_outstanding from {fin.provenance.provider} for {ticker} "
-            f"({reported_shares:,.0f}) diverges "
-            f"{abs(reported_shares - implied_shares) / implied_shares:.0%} from "
-            f"market_cap/price ({implied_shares:,.0f}) — likely a single share class "
-            "of a multi-class issuer or an ADR ratio. Using the price-consistent "
-            "count so per-share metrics (EPS, P/E, implied price) stay on the "
-            "market's basis."
-        )
-        field_warnings.setdefault("pe", []).append(FIELD_WARN_SHARES_DERIVED)
     else:
-        shares = reported_shares
+        raise ValueError(
+            f"Neither shares_outstanding nor market_cap available from "
+            f"{fin.provenance.provider} for {ticker} — cannot form market_cap/price."
+        )
 
     # --- book value per share on the SAME price-consistent basis as `shares`/EPS ---
     # The provider divided book equity by `reported_shares`; when that count is off
@@ -288,28 +332,28 @@ def extract_financial_data(
     # it in lockstep with `shares` above (same tol, same market_cap/current_price) so
     # the displayed bvps and the comps_pb anchor (peer median P/B × bvps) sit on the
     # per-ADR price basis. No-op / byte-identical for US issuers and price-consistent
-    # ADRs (SHEL/HSBC/TSM). `market_cap` is still the raw provider cap here (marked to
-    # the live price just below), matching `implied_shares` computed above.
+    # ADRs (SHEL/HSBC/TSM). `market_cap` is still the raw provider cap here (used
+    # verbatim just below).
     bvps_price_consistent, bvps_note = reconcile_book_value_to_price_basis(
-        fin.book_value_per_share, reported_shares, market_cap, current_price
+        fin.book_value_per_share, reported_shares, provider_market_cap, current_price
     )
     if bvps_note is not None:
         warnings.append(bvps_note)
 
-    # --- mark market_cap to the live price basis ---
-    # The provider market_cap rides a cached profile snapshot that can lag
-    # current_price (FMP profile mktCap froze at the prior close while the quote
-    # moved intraday), leaving market_cap / P/E / EV-EBITDA ~the day's move below
-    # the live price shown right beside them. `shares` is already forced onto
-    # current_price's basis above, so shares × current_price is the coherent live
-    # cap, and EV / P/E rebuild from it below. When `shares` was DERIVED (degraded
-    # or single-class fallback = market_cap/current_price) this recovers the
-    # provider cap unchanged — a no-op on those paths (regression 2026-06-09:
-    # KO/TSM +0.00%, AAPL +1.84%, MU +9.95% on a +10% day; shares × price == FMP
-    # live marketCap to 0.00% across the basket).
-    mc_reported = market_cap
-    market_cap = shares * current_price
-    mc_ratio = market_cap / mc_reported if mc_reported else 1.0
+    # --- market_cap: the provider's reported value, else a labelled fallback ---
+    # F3: the old ``market_cap = shares × current_price`` made the cap and the
+    # share count mutually derived (a later market_cap/price share-count check is
+    # then a tautology). Use the provider's cap when reported; only when it is
+    # absent do we derive shares × price and LABEL it as approximate.
+    if provider_market_cap and provider_market_cap > 0:
+        market_cap = provider_market_cap
+    else:
+        market_cap = shares * current_price
+        warnings.append(
+            f"market_cap missing or invalid from {fin.provenance.provider} for {ticker} "
+            f"— derived as shares × current_price ({market_cap:,.0f}); treat as approximate."
+        )
+    mc_ratio = 1.0
 
     # --- N15: consistent EV handling ---
     # Only compute EV when both total_debt and total_cash are available.
@@ -465,6 +509,10 @@ def extract_financial_data(
             # is withheld (data unavailable) rather than fabricated as a real 0.
             ebitda=ebitda,
             net_income=fin.net_income,
+            # The NCI share of that same TTM net income, so a reader (and the
+            # divergence warning below) can tell a consolidation-caliber
+            # difference from a data error.
+            nci_earnings=fin.nci_earnings,
             # Withhold an economically-impossible margin (>100% / <-500%) so a broken
             # provider figure (UL: FMP grossProfit ≥ revenue) shows N/A instead of
             # crashing the IncomeStatement le bound or printing a fabricated 100%.

@@ -389,6 +389,7 @@ async def fetch_reverse_multiple_band(
     *,
     years: int = REPORT_BAND_WINDOW_YEARS,
     current_override: float | None = None,
+    shares_override: float | None = None,
 ) -> HistoricalBandSpread | None:
     """Resolve the (p25, p75) historical-multiple band for a reverse method.
 
@@ -408,9 +409,25 @@ async def fetch_reverse_multiple_band(
     """
     if data_layer is None:
         return None
+    # ``shares_override`` is LOAD-BEARING, not a nicety: the per-year share counts
+    # are unavailable from the serving providers, so without the run's own count
+    # ``compute_bands_via_data_layer`` returns "shares_outstanding unavailable —
+    # historical bands cannot be computed" with 0 samples, p25/p75 None → this
+    # function returns None → the EV/EBITDA reverse-multiple row AND the
+    # own-history cross-check silently vanish from the synthesis. The technical
+    # chapter's identical call passes the count and gets the full 948-sample band,
+    # so the same report could show an own-history band whose cross-check the
+    # verdict path had never seen (THC 2026-10-14: the audited artifact's row was
+    # back-filled post-verdict by audit.publish_band_cross_check, leaving a lone
+    # DCF free to publish +99.5% against a band of $70–$255).
     try:
         band = await compute_bands_via_data_layer(
-            ticker, metric, years, data_layer, current_override=current_override
+            ticker,
+            metric,
+            years,
+            data_layer,
+            current_override=current_override,
+            shares_override=shares_override,
         )
     except (ProviderError, ValueError, KeyError, TypeError) as exc:
         logger.info("reverse-multiple band fetch failed for %s/%s: %s", ticker, metric, exc)

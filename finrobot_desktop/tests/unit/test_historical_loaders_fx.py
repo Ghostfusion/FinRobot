@@ -299,7 +299,9 @@ def _band(*, p25, p75, sample_count, current=24.0):
 async def test_fetch_reverse_multiple_band_returns_spread(monkeypatch):
     from finrobot.engine.data import historical_loaders as hl
 
-    async def _fake(ticker, metric, years, data_layer, *, current_override=None):
+    async def _fake(
+        ticker, metric, years, data_layer, *, current_override=None, shares_override=None
+    ):
         return _band(p25=20.0, p75=30.0, sample_count=900)
 
     monkeypatch.setattr(hl, "compute_bands_via_data_layer", _fake)
@@ -314,7 +316,9 @@ async def test_fetch_reverse_multiple_band_withholds_thin_history(monkeypatch):
     echo one multiple dressed as a range. Withhold rather than emit a fake range."""
     from finrobot.engine.data import historical_loaders as hl
 
-    async def _fake(ticker, metric, years, data_layer, *, current_override=None):
+    async def _fake(
+        ticker, metric, years, data_layer, *, current_override=None, shares_override=None
+    ):
         return _band(p25=23.0, p75=23.0, sample_count=hl._MIN_BAND_SAMPLES - 1)
 
     monkeypatch.setattr(hl, "compute_bands_via_data_layer", _fake)
@@ -325,7 +329,9 @@ async def test_fetch_reverse_multiple_band_withholds_thin_history(monkeypatch):
 async def test_fetch_reverse_multiple_band_withholds_nonpositive_band(monkeypatch):
     from finrobot.engine.data import historical_loaders as hl
 
-    async def _fake(ticker, metric, years, data_layer, *, current_override=None):
+    async def _fake(
+        ticker, metric, years, data_layer, *, current_override=None, shares_override=None
+    ):
         return _band(p25=None, p75=None, sample_count=900)
 
     monkeypatch.setattr(hl, "compute_bands_via_data_layer", _fake)
@@ -337,6 +343,39 @@ async def test_fetch_reverse_multiple_band_none_layer_returns_none():
     from finrobot.engine.data import historical_loaders as hl
 
     assert await hl.fetch_reverse_multiple_band("X", "ev_ebitda", None) is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_reverse_multiple_band_forwards_the_share_count(monkeypatch):
+    """The band CANNOT be computed without a share count.
+
+    The serving providers publish no per-year share counts, so a call that omits
+    the run's own count gets "shares_outstanding unavailable — historical bands
+    cannot be computed" back: 0 samples, p25/p75 None — and the EV/EBITDA reverse
+    row AND the own-history cross-check both vanish from the synthesis. The
+    technical chapter's identical call passes the count, so the same report could
+    display an own-history band whose cross-check the verdict path never saw (THC
+    2026-10-14: the cross-check only reached the artifact post-verdict via
+    audit.publish_band_cross_check, leaving a lone DCF free to publish +99.5%
+    against a band of $70–$255).
+    """
+    from finrobot.engine.data import historical_loaders as hl
+
+    seen: dict[str, float | None] = {}
+
+    async def _fake(
+        ticker, metric, years, data_layer, *, current_override=None, shares_override=None
+    ):
+        seen["shares"] = shares_override
+        return _band(p25=20.0, p75=30.0, sample_count=900)
+
+    monkeypatch.setattr(hl, "compute_bands_via_data_layer", _fake)
+    spread = await hl.fetch_reverse_multiple_band(
+        "THC", "ev_ebitda", object(), shares_override=80_519_000.0
+    )
+
+    assert spread is not None
+    assert seen["shares"] == 80_519_000.0
 
 
 # ---------------------------------------------------------------------------
@@ -377,7 +416,9 @@ async def test_fetch_reverse_multiple_band_carries_the_structural_break(monkeypa
 
     band = _break_band()
 
-    async def _fake(ticker, metric, years, data_layer, *, current_override=None):
+    async def _fake(
+        ticker, metric, years, data_layer, *, current_override=None, shares_override=None
+    ):
         return band
 
     monkeypatch.setattr(hl, "compute_bands_via_data_layer", _fake)
@@ -396,7 +437,9 @@ async def test_fetch_reverse_multiple_band_carries_the_structural_break(monkeypa
 async def test_fetch_reverse_multiple_band_without_a_break_carries_no_caveat(monkeypatch):
     from finrobot.engine.data import historical_loaders as hl
 
-    async def _fake(ticker, metric, years, data_layer, *, current_override=None):
+    async def _fake(
+        ticker, metric, years, data_layer, *, current_override=None, shares_override=None
+    ):
         return _band(p25=20.0, p75=30.0, sample_count=900)
 
     monkeypatch.setattr(hl, "compute_bands_via_data_layer", _fake)

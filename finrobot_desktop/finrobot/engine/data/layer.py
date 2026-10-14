@@ -642,6 +642,26 @@ class DataLayer:
         # artifact's ``raw_data``. None when the fetch fed no reconcilable metric.
         if isinstance(normalized, (NormalizedFinancials, NormalizedPrice)):
             normalized.reconciliation = raw.reconciliation
+            # F4: a RAW-cache payload predating the ``reconciliation`` field
+            # deserializes with reconciliation=None. The canonical-cache read path
+            # already discloses this (DEGRADED_AUTHORITY_RECORD_MISSING in
+            # ``_deserialize_canonical``), but the raw-cache path shipped
+            # ``data_authority = null`` with NO disclosure — the audited THC run.
+            # A fresh fetch ALWAYS carries a record (see the FINANCIALS walk and
+            # fetch_price), so None here means a pre-feature raw payload; flag it
+            # the same way.
+            if (
+                normalized.reconciliation is None
+                and DEGRADED_AUTHORITY_RECORD_MISSING not in normalized.provenance.degraded
+            ):
+                normalized.provenance.degraded.append(DEGRADED_AUTHORITY_RECORD_MISSING)
+                logger.warning(
+                    "Canonical %s/%s built from a raw-cache payload with no "
+                    "reconciliation record (pre-feature payload) — flagged %s.",
+                    data_type.value,
+                    ticker,
+                    DEGRADED_AUTHORITY_RECORD_MISSING,
+                )
         # BUG-007: promote the STRUCTURED key-field divergences to
         # Provenance.degraded (in addition to the prose warning above) so
         # dcf_seed / comps can programmatically down-confidence or tag [金融待核]

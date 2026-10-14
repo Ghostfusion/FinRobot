@@ -227,3 +227,43 @@ describe('FootballField "Target" label points only at the headline point', () =>
     }
   })
 })
+
+// External audit: with the point target WITHHELD, the per-method upside
+// `(mid − current)/current` is a CLIENT-side number, not a published target. For a
+// lone far-from-market method (THC: one DCF $732 vs a $267 market) it printed
+// "+174%" beside the withheld target and read as the report's headline claim. It
+// must be suppressed for that report and the suppression explained.
+describe('FootballField withheld point target suppresses per-method upside', () => {
+  const LONE_DCF = [{ method: 'dcf', low: 549, mid: 732, high: 915 }]
+
+  it('does not print the +174% client upside when valuationWithheld', () => {
+    const { container } = render(
+      <FootballField
+        data={LONE_DCF}
+        title="FF"
+        currentPrice={266.91}
+        valuationWithheld
+        targetBand={{ low: 549, high: 915, point: null }}
+      />,
+    )
+    // No directional % anywhere in the figure.
+    expect(container.textContent).not.toMatch(/\+\d+\.\d%/)
+    expect(container.textContent).not.toMatch(/174/)
+    // The withheld state is disclosed instead.
+    expect(screen.getByTestId('football-upside-withheld')).toBeInTheDocument()
+  })
+
+  it('prints the per-method upside when a point target is published (not withheld)', () => {
+    const { container } = render(
+      <FootballField
+        data={LONE_DCF}
+        title="FF"
+        currentPrice={266.91}
+        valuationWithheld={false}
+        targetBand={{ low: 549, high: 915, point: 732 }}
+      />,
+    )
+    expect(container.textContent).toMatch(/\+174\.\d%/)
+    expect(screen.queryByTestId('football-upside-withheld')).not.toBeInTheDocument()
+  })
+})

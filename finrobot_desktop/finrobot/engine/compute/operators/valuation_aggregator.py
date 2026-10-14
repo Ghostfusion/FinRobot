@@ -654,7 +654,20 @@ def _dcf_assumptions(dcf: DCFResult) -> str:
             growth = f"{len(rates)}yr growth {g0:.0%}→{tg:.1%}"
     else:
         growth = f"terminal growth {tg:.1%}"
-    return f"WACC {dcf.wacc:.1%} · {growth} · β{dcf.inputs.beta:.2f}"
+    beta_line = f"β{dcf.inputs.beta:.2f}"
+    provenance = dcf.inputs.assumption_provenance
+    beta_basis = provenance.get("beta") if isinstance(provenance, dict) else None
+    if isinstance(beta_basis, str) and "industry" in beta_basis.lower():
+        # A sector proxy is an ASSUMPTION about the industry, not a measurement of
+        # this issuer: it stands in when the provider-reported 5y beta is missing
+        # (or implausibly low — a vendor short-window artifact). The discount rate
+        # is the single input a DCF answer is most sensitive to, so the report says
+        # which beta it used instead of printing a naked "β0.80" (owner audit
+        # 2026-10-14: THC shipped a 6.24% WACC on the Hospitals industry proxy
+        # β0.80 while the source reports 1.199 for the issuer — a 3.2pp gap to the
+        # market-implied rate; the surface said only "β0.80").
+        beta_line += " (industry levered beta proxy — no issuer market beta)"
+    return f"WACC {dcf.wacc:.1%} · {growth} · {beta_line}"
 
 
 def _dcf_band(mid: float) -> tuple[float, float, str]:

@@ -30,6 +30,13 @@ interface ChartProps {
   // Implied terminal EV/EBITDA vs today's multiple — a RATIO-space comparison
   // (cannot share the price axis), rendered as a labelled row under the plot.
   terminalMultiple?: TerminalMultipleRow | null
+  // True when the synthesis honestly WITHHELD its point target
+  // (valuation_synthesis.valuation_withheld). The method ranges are still real and
+  // still vote on the band, but the client-computed per-method upside vs the current
+  // price must NOT be published as a directional claim: a lone far-from-market method
+  // (THC: one DCF $732) otherwise prints "+174%" beside a withheld target and reads
+  // as the report's headline call (external audit). Suppresses that column + says why.
+  valuationWithheld?: boolean
 }
 
 /** An independent cross-check range on the price axis. */
@@ -124,6 +131,7 @@ export default function FootballField({
   targetBand,
   crossChecks,
   terminalMultiple,
+  valuationWithheld,
 }: ChartProps) {
   const { t } = useI18n()
   // Method bars first (they vote on the target), cross-checks after — appended
@@ -595,7 +603,13 @@ export default function FootballField({
             }}
           >
             {rows.map((r) => {
-              const upside = cp !== null && cp > 0 ? ((r.mid - cp) / cp) * 100 : null
+              // Withheld point target ⇒ no directional per-method upside: the % was
+              // a CLIENT-side `(mid − current)/current`, never a published target, and
+              // beside a withheld headline it fabricated a "+174%" call (external
+              // audit). Suppress it entirely; the range bars still show where each
+              // method sits. A footnote below explains the suppression.
+              const upside =
+                !valuationWithheld && cp !== null && cp > 0 ? ((r.mid - cp) / cp) * 100 : null
               const up = upside !== null && upside >= 0
               const isCross = r.kind === 'crosscheck'
               return (
@@ -625,6 +639,21 @@ export default function FootballField({
             })}
           </div>
         </div>
+
+        {valuationWithheld && (
+          <p
+            data-testid="football-upside-withheld"
+            style={{
+              margin: '10px 0 0',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10.5,
+              lineHeight: 1.5,
+              color: 'var(--text-muted)',
+            }}
+          >
+            {t('chart.footballField.upsideWithheld')}
+          </p>
+        )}
 
         {rows.some((r) => r.kind === 'crosscheck') && (
           <p

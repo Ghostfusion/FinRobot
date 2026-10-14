@@ -269,3 +269,29 @@ class TestRedactionWarning:
         drift = detect_report_drift("price $276.43", {276.43})
         assert drift.orphan_tokens == []
         assert redaction_warning(drift) is None
+
+
+class TestMagnitudeMatchedTokens:
+    """A token whose MAGNITUDE matches a computed leaf is never an ORPHAN.
+
+    The orphan bucket is the redaction set — "near NOTHING the artifact computed" —
+    but prose writes arithmetic as signs. THC 2026-10-14 (owner audit) had
+    "-$11.078B" redacted as unsupported while the same artifact publishes
+    net_debt = 11,078,000,128 and its own narrative spells out the subtraction
+    (13.248B − 2.170B). The value is supported; only the sentence's operator
+    convention disagrees, so it is surfaced for review, never erased.
+    """
+
+    _LEAVES = {11_078_000_128.0, 266.91}
+
+    def test_sign_mismatch_with_a_matching_magnitude_is_not_orphaned(self):
+        drift = detect_report_drift("the EV less net debt -$11.078B", self._LEAVES)
+        assert drift.orphan_tokens == []
+        assert drift.orphan_count == 0
+        assert drift.approximate_count == 1
+        assert drift.unmatched_count == 1  # still surfaced for review
+
+    def test_a_token_near_no_magnitude_is_still_an_orphan(self):
+        drift = detect_report_drift("a fabricated $999B claim", self._LEAVES)
+        assert drift.orphan_tokens == ["$999B"]
+        assert drift.orphan_count == 1

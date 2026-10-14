@@ -307,6 +307,9 @@ describe('ChapterValuation football-field target = headline, not the discarded b
     const band = lastTargetBand()
     expect(band?.point).toBe(188.31) // headline (anchor value)
     expect(band?.point).not.toBe(208.65) // never the discarded weighted blend
+    // A published target ⇒ the football field MAY show per-method upside.
+    const props = footballProps.mock.calls.at(-1)![0] as Record<string, unknown>
+    expect(props.valuationWithheld).toBe(false)
   })
 
   it('withheld point (thesis.price_target absent) draws no marker but keeps the band', () => {
@@ -319,6 +322,10 @@ describe('ChapterValuation football-field target = headline, not the discarded b
     expect(band?.point).toBeNull() // 撤点: no headline point → no marker
     expect(band?.low).toBe(170) // ≠撤区间: the fair-value band still renders
     expect(band?.high).toBe(205)
+    // Withheld point target ⇒ FootballField MUST suppress the client-computed
+    // per-method upside (a lone method's +174% read as the headline claim).
+    const props = footballProps.mock.calls.at(-1)![0] as Record<string, unknown>
+    expect(props.valuationWithheld).toBe(true)
   })
 
   // Regression (no-anchor / TSM shape): when methods corroborate, the backend

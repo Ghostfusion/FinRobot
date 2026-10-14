@@ -236,16 +236,20 @@ def test_extract_financial_data_zero_shares_outstanding_warns():
     assert any("shares_outstanding" in w for w in fd.warnings)
 
 
-def test_extract_multi_class_uses_price_consistent_shares():
-    """A reported count covering only ONE class of a multi-class issuer (e.g.
-    yfinance .info for GOOG) diverges from market_cap/price. Per-share valuation
-    must divide by the price-consistent (all-class) count, not the single-class
-    filing count — else total net_income ÷ single-class shares overstates EPS."""
+def test_extract_multi_class_uses_the_price_consistent_count_and_discloses_it():
+    """The denominator must sit on the QUOTED PRICE's basis, and a divergence must
+    be disclosed rather than swapped in silently.
+
+    A reported count covering only ONE class of a multi-class issuer still diverges
+    from market_cap/price in the live source (probed 2026-10-14: GOOG 5.527bn vs
+    12.230bn = 54.8%, META 13.4%, FOX 47.8%, while BP and THC tie exactly) — and the
+    numerator is TOTAL equity value, so keeping the class count would overstate every
+    per-share figure by the class ratio.
+    """
     # market_cap 3e12 / price 200 = 15e9 implied; reported only 7e9 (one class).
     fd = extract_financial_data(_make_fin(shares_outstanding=7e9), _make_price())
     assert fd.market.shares_outstanding == pytest.approx(15e9, rel=1e-6)
-    assert any("diverges" in w and "per-share" in w for w in fd.warnings)
-    assert fd.field_warnings.get("pe") == ["shares_derived"]
+    assert any("diverges" in w and "price-consistent count" in w for w in fd.warnings)
 
 
 def test_extract_minor_share_noise_keeps_reported_count():
@@ -256,39 +260,60 @@ def test_extract_minor_share_noise_keeps_reported_count():
     assert fd.market.shares_outstanding == pytest.approx(15.3e9, rel=1e-6)
 
 
-def test_extract_marks_market_cap_to_live_price():
-    """The provider market_cap can ride a cache-stale profile snapshot that lags
-    the live quote (FMP profile mktCap froze at the prior close while the quote
-    moved intraday). Since shares is forced onto current_price's basis, the cap
-    must be too — market_cap = shares × current_price — else market_cap / P/E /
-    EV-EBITDA read ~the day's move below the live price beside them (regression
-    2026-06-09: AAPL ~+2%, MU ~+10% on up days)."""
+def test_extract_uses_provider_market_cap_not_shares_times_price():
+    """F3: ``market_cap`` must be the provider's reported cap, NOT
+    shares × current_price. The old derivation made the share count and the cap
+    mutually derived — a later market_cap/price share-count check is then a
+    tautology (authority._derived_from always fired). Live FMP caps can lag the
+    quote; we publish the provider value and keep the derived value only as a
+    LABELLED fallback (below)."""
     stale_cap = 15e9 * 196.0  # provider froze ~2% below the live 200 quote
     fin = _make_fin(market_cap=stale_cap, shares_outstanding=15e9)
     fd = extract_financial_data(fin, _make_price())  # current_price = 200
-    live_cap = 15e9 * 200.0
-    assert fd.market.market_cap == pytest.approx(live_cap, rel=1e-9)
-    assert fd.market.market_cap != pytest.approx(stale_cap, rel=1e-6)
-    assert fd.market.market_cap == pytest.approx(fd.market.shares_outstanding * 200.0, rel=1e-9)
-    # P/E now derives from the SAME figures the report prints (one net-income
-    # authority): live market_cap ÷ TTM net_income — NOT the provider's own
-    # trailingPE, which rides a different (diluted-EPS) denominator and implied a
-    # fourth net income in the EHC report (owner review). Updated 2026-10-13; the
-    # old assertion encoded the superseded "scale the provider ratio" behaviour.
-    assert fd.market.pe_ratio == pytest.approx(live_cap / fin.net_income, rel=1e-9)
+    assert fd.market.market_cap == pytest.approx(stale_cap, rel=1e-9)
+    assert fd.market.shares_outstanding == pytest.approx(15e9, rel=1e-6)
+    # P/E still derives from the SAME printed figures (provider cap ÷ TTM net income).
+    assert fd.market.pe_ratio == pytest.approx(stale_cap / fin.net_income, rel=1e-9)
     assert fd.market.pe_basis is not None
     assert "one net-income authority" in fd.market.pe_basis
 
 
+def test_extract_derives_market_cap_only_when_provider_omits_it():
+    """F3 fallback path: with NO provider cap, derive shares × current_price and
+    LABEL it (the only labelled fallback), rather than raising."""
+    fin = _make_fin(market_cap=None, shares_outstanding=15e9)
+    fd = extract_financial_data(fin, _make_price())
+    assert fd.market.market_cap == pytest.approx(15e9 * 200.0, rel=1e-9)
+    assert any("market_cap" in w and "derived" in w for w in fd.warnings)
+
+
+def test_extract_carries_the_nci_earnings_share_onto_the_income_statement():
+    """The provider's NCI earnings share must survive normalization and reach
+    ``income.nci_earnings``. Without it the SEC-XBRL-vs-provider net-income
+    divergence cannot name a CONSOLIDATION caliber difference and calls every gap a
+    "concept / window / filing rounding" one — the defect the auditor had to trace
+    by hand on THC 2026-10-14 (SEC consolidated 3.174B vs the provider's
+    parent-attributable 2.241B = 933M of noncontrolling-interest earnings)."""
+    fd = extract_financial_data(_make_fin(nci_earnings=933e6), _make_price())
+    assert fd.income.nci_earnings == pytest.approx(933e6)
+
+
+def test_extract_leaves_nci_earnings_none_when_the_provider_reports_no_nci():
+    """None ≠ 0: a provider with no NCI rows says nothing about the NCI share, and
+    the divergence warning keeps its conservative wording."""
+    fd = extract_financial_data(_make_fin(), _make_price())
+    assert fd.income.nci_earnings is None
+
+
 def test_extract_live_cap_flows_into_ev():
-    """EV / EV-EBITDA rebuild from the live cap, not the stale provider cap."""
+    """EV / EV-EBITDA rebuild from the published cap (the provider value)."""
     stale_cap = 15e9 * 196.0
     fd = extract_financial_data(
         _make_fin(market_cap=stale_cap, shares_outstanding=15e9, total_debt=0, total_cash=0),
         _make_price(),
     )
-    # zero net debt → EV == live market_cap == shares × current_price
-    assert fd.valuation.enterprise_value == pytest.approx(15e9 * 200.0, rel=1e-9)
+    # zero net debt → EV == published market_cap
+    assert fd.valuation.enterprise_value == pytest.approx(stale_cap, rel=1e-9)
 
 
 def test_extract_market_cap_noop_when_shares_derived():

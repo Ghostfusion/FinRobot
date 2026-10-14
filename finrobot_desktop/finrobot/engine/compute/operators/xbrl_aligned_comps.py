@@ -129,6 +129,47 @@ def _fact_period_end(entry: dict[str, Any]) -> date | None:
         return None
 
 
+def _equity_identity_note(raw_xbrl: dict[str, Any]) -> dict[str, Any] | None:
+    """Explicit ``Assets − Liabilities = total equity`` identity for the context.
+
+    The snapshot feeds the model ``Assets``, ``Liabilities`` and
+    ``StockholdersEquity`` as independent leaves, so the model is free to write
+    "assets against $X of liabilities, leaving $Y of stockholders' equity" — a
+    subtraction that is WRONG whenever the issuer carries a noncontrolling
+    interest (THC: 30.676 − 21.976 = 8.700 total equity, but parent
+    ``StockholdersEquity`` is 4.658; the 4.042 gap is NCI, not a miscalculation).
+    Publishing the components makes the identity impossible to mis-state.
+    """
+
+    def _usd(key: str) -> float | None:
+        entry = raw_xbrl.get(key)
+        if not isinstance(entry, dict):
+            return None
+        return _num(entry.get("value"))
+
+    assets = _usd("latest_total_assets")
+    liabilities = _usd("latest_total_liabilities")
+    parent_equity = _usd("latest_shareholders_equity")
+    if assets is None or liabilities is None or parent_equity is None:
+        return None
+    total_equity = assets - liabilities
+    nci = total_equity - parent_equity
+    return {
+        "note": (
+            f"Assets {assets:,.0f} − Liabilities {liabilities:,.0f} = total equity "
+            f"{total_equity:,.0f}; of which noncontrolling interest {nci:,.0f} and "
+            f"parent (StockholdersEquity) {parent_equity:,.0f}. StockholdersEquity is "
+            "the PARENT-ONLY figure — it does NOT equal Assets − Liabilities when a "
+            "noncontrolling interest exists."
+        ),
+        "assets": assets,
+        "liabilities": liabilities,
+        "total_equity": total_equity,
+        "parent_stockholders_equity": parent_equity,
+        "noncontrolling_interest": nci,
+    }
+
+
 def _flag_stale_facts(snapshot: dict[str, list[dict[str, Any]]]) -> None:
     """Annotate every fact more than one year older than the newest one, in place.
 
@@ -218,6 +259,13 @@ def xbrl_concept_snapshot(raw_xbrl: dict[str, Any]) -> dict[str, list[dict[str, 
     # Never present a stale fact as current — annotate any fact whose period is
     # more than a year behind the snapshot's newest (see _flag_stale_facts).
     _flag_stale_facts(snapshot)
+
+    # Give the model the equity identity alongside the Assets / Liabilities /
+    # StockholdersEquity leaves so it cannot mis-state A − L as parent equity
+    # when an NCI exists (see _equity_identity_note).
+    identity = _equity_identity_note(raw_xbrl)
+    if identity is not None:
+        snapshot["_equity_identity"] = [identity]
 
     return snapshot
 

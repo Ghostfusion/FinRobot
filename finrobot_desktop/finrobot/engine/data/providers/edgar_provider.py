@@ -570,6 +570,75 @@ def _select_recent_ttm(
 # exactly as ``_get_standardized_concept_value`` does internally.
 
 
+def _concept_facts(facts: Any, concept: str) -> list[Any] | None:
+    """Every fact for one concept via the public query API, or ``None``.
+
+    ``None`` means the multi-fact API is unavailable (the test doubles, or a
+    degraded edgartools build); the caller then falls back to the single-fact
+    getters. An empty list means the API answered and the concept genuinely has
+    no facts — a real "not found", never a fallback trigger.
+
+    We read through ``query().by_concept(...).execute()`` rather than
+    ``get_fact``/``get_annual_fact`` because those getters return a SINGLE fact
+    keyed on ``(filing_date, period_end)`` — filing date FIRST — so a late-filed
+    fact for an OLD fiscal period shadows a newer one (THC's FY2010 net income,
+    re-filed years later, beat the FY2025 fact and became "latest annual").
+    """
+    query = getattr(facts, "query", None)
+    if not callable(query):
+        return None
+    try:
+        return list(query().by_concept(concept, exact=True).execute())
+    except _ADAPTER_CATCH:
+        return None
+
+
+def _newest_usd_fact(
+    candidates: list[Any], variant: str, warnings: list[str] | None
+) -> dict[str, Any] | None:
+    """Newest-period USD fact among ``candidates`` for one concept variant.
+
+    Selection key is ``(period_end, filing_date)`` — **period_end FIRST** so a
+    newer reporting period always wins; the filing date only tie-breaks two
+    facts for the SAME period (an original vs. a later amendment/restatement).
+    Non-USD facts (a 20-F filer's native EUR/GBP/…) are skipped with a warning —
+    edgartools applies no FX, so surfacing the native magnitude as USD would
+    corrupt the snapshot.
+    """
+    best: dict[str, Any] | None = None
+    best_key: tuple[date, date] | None = None
+    for fact in candidates:
+        numeric = getattr(fact, "numeric_value", None)
+        period_end = getattr(fact, "period_end", None)
+        if isinstance(period_end, datetime):
+            period_end = period_end.date()
+        if numeric is None or not isinstance(period_end, date):
+            continue
+        unit = getattr(fact, "unit", "USD")
+        if not _is_usd_unit(unit):
+            if warnings is not None:
+                warnings.append(
+                    f"SEC XBRL fact {getattr(fact, 'concept', variant)} reported in "
+                    f"{unit}, not USD; suppressed (no FX in provider)."
+                )
+            continue
+        filing_date = getattr(fact, "filing_date", None)
+        if isinstance(filing_date, datetime):
+            filing_date = filing_date.date()
+        if not isinstance(filing_date, date):
+            filing_date = date.min
+        key = (period_end, filing_date)
+        if best_key is None or key > best_key:
+            best_key = key
+            best = {
+                "concept": str(getattr(fact, "concept", variant)),
+                "value": float(numeric),
+                "period_end": period_end,
+                "units": str(unit or "USD"),
+            }
+    return best
+
+
 def _select_latest_fact(
     facts: Any,
     concepts: tuple[str, ...],
@@ -581,12 +650,16 @@ def _select_latest_fact(
     """Recover the matched ``FinancialFact`` for a point-in-time concept.
 
     Walks ``concepts`` in priority order, trying each taxonomy-prefixed variant
-    (``us-gaap:`` / ``ifrs-full:``) and — when ``annual`` — preferring the FY
-    fact (``get_annual_fact``) before falling back to the most recent point
-    (``get_fact``), mirroring edgartools' ``_get_standardized_concept_value``.
-    Returns ``{"concept", "value", "period_end", "units"}`` aligned to
-    ``XBRLFact`` (concept/period_end/units required), or None when no concept
-    matches.
+    (``us-gaap:`` / ``ifrs-full:``). Within ONE concept we read EVERY fact
+    (``_concept_facts``) and rank by **period_end first**, ``filing_date`` only
+    as the same-period tie-breaker (see ``_newest_usd_fact``) — so a late-filed
+    fact for an old fiscal period can never shadow a newer one. (When ``annual``
+    the candidate set is restricted to FY facts, replicating ``get_annual_fact``.)
+    edgartools' own getters key on ``(filing_date, period_end)`` — filing date
+    FIRST — which is the defect THC exposed: its FY2010 net income, re-filed
+    years later, out-ranked the FY2025 fact and became "latest annual". Returns
+    ``{"concept", "value", "period_end", "units"}`` aligned to ``XBRLFact``
+    (concept/period_end/units required), or None when no concept matches.
 
     ``prefer_recent`` selects among ALL matching concepts by latest period_end,
     tie-broken by concept rank (earlier in ``concepts`` wins). This is required
@@ -629,38 +702,35 @@ def _select_latest_fact(
     try:
         for rank, concept in enumerate(concepts):
             for variant in (concept, f"us-gaap:{concept}", f"ifrs-full:{concept}"):
-                fact = None
-                try:
-                    if annual and callable(get_annual):
-                        fact = get_annual(variant)
-                    if fact is None:
-                        fact = get_fact(variant)
-                except _ADAPTER_CATCH:
+                candidates = _concept_facts(facts, variant)
+                if candidates is None:
+                    # Multi-fact API unavailable — fall back to the single-fact
+                    # getters. NOTE: those getters key on ``(filing_date,
+                    # period_end)`` (filing date FIRST), so this arm retains the
+                    # stale-period risk; it exists only for the test doubles and
+                    # a degraded edgartools build. The getter already filters to
+                    # FY for ``get_annual_fact``, so no second FY filter here.
+                    fact = None
+                    try:
+                        if annual and callable(get_annual):
+                            fact = get_annual(variant)
+                        if fact is None:
+                            fact = get_fact(variant)
+                    except _ADAPTER_CATCH:
+                        continue
+                    candidates = [] if fact is None else [fact]
+                elif annual:
+                    # Replicate ``get_annual_fact``'s FY filter over the full
+                    # fact set, then rank by period_end (newest period wins).
+                    candidates = [
+                        f for f in candidates if getattr(f, "fiscal_period", None) == "FY"
+                    ]
+                result = _newest_usd_fact(candidates, variant, warnings)
+                if result is None:
                     continue
-                if fact is None:
-                    continue
-                numeric = getattr(fact, "numeric_value", None)
-                period_end = getattr(fact, "period_end", None)
-                if isinstance(period_end, datetime):
-                    period_end = period_end.date()
-                if numeric is None or not isinstance(period_end, date):
-                    continue
-                unit = getattr(fact, "unit", "USD")
-                if not _is_usd_unit(unit):
-                    if warnings is not None:
-                        warnings.append(
-                            f"SEC XBRL fact {getattr(fact, 'concept', variant)} reported in "
-                            f"{unit}, not USD; suppressed (no FX in provider)."
-                        )
-                    continue
-                result = {
-                    "concept": str(getattr(fact, "concept", variant)),
-                    "value": float(numeric),
-                    "period_end": period_end,
-                    "units": str(unit or "USD"),
-                }
                 if not prefer_recent:
                     return result
+                period_end = result["period_end"]
                 if (
                     best_pe is None
                     or period_end > best_pe

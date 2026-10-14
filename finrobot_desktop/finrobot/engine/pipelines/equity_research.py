@@ -39,6 +39,7 @@ from finrobot.engine.compute.operators.catalyst import (
     extract_catalysts_from_news,
     cluster_near_duplicates,
     filter_fresh_news,
+    filter_fresh_sec_8k_catalysts,
     compute_expected_impact,
     summarize_catalyst_outlook,
 )
@@ -242,6 +243,11 @@ async def _execute_data_collection_with_sec(
             else None,
             _ttm_ni.get("value") if isinstance(_ttm_ni, dict) else None,
             "SEC XBRL us-gaap:NetIncomeLoss:ttm",
+            # The provider's own NCI earnings share: when it explains the gap, the
+            # warning NAMES the consolidation caliber instead of calling a real
+            # consolidation difference a "concept / window / filing rounding" gap
+            # (THC 2026-10-14 audit: 3.174B consolidated vs 2.241B parent = 933M).
+            nci_earnings=financial_output.structured.income.nci_earnings,
         )
         if _divergence and _divergence not in financial_output.structured.warnings:
             financial_output.structured.warnings.append(_divergence)
@@ -418,6 +424,12 @@ async def _execute_catalyst_analysis(
     # repeated N times. Conservative clustering — never false-merges distinct
     # events. Runs after the 8-K append so SEC events are deduped against news too.
     catalysts = cluster_near_duplicates(catalysts)
+    # compute_expected_impact applies the same 30-day age gate to the SEC 8-K
+    # catalysts but can only return the survivors — so count the dropped ones here
+    # and disclose them below. Without that the catalyst mix silently shrinks
+    # against the published 8-K index window (a reader sees an index count that the
+    # category breakdown no longer adds up to, with nothing explaining the gap).
+    _, dropped_8k_catalysts = filter_fresh_sec_8k_catalysts(catalysts)
     catalysts = compute_expected_impact(catalysts)
     # Disclose BOTH feeds' coverage windows. The news feed is a same-day ~20-item
     # window (the 2026-09-28 $150B buyback was structurally invisible to it) and
@@ -451,6 +463,18 @@ async def _execute_catalyst_analysis(
         overall = "neutral"
 
     top_pos = summary["top_positive"]
+    # The age gate removes stale 8-K catalysts from the mix; say so rather than
+    # leaving the published index window and the category breakdown silently
+    # inconsistent. Reuses the staleness-disclosure channel (same theme: the 8-K
+    # side of the catalyst picture is incomplete), so no new model field.
+    stale_warning = summary["sec_8k_staleness_warning"]
+    if dropped_8k_catalysts > 0:
+        exclusion = (
+            f"{dropped_8k_catalysts} material SEC 8-K catalyst(s) filed more than the 30-day "
+            "news window ago were excluded from the catalyst list — the filings themselves "
+            "remain in the filings chapter."
+        )
+        stale_warning = f"{stale_warning} {exclusion}".strip() if stale_warning else exclusion
     analysis = CatalystAnalysis(
         events=catalysts,
         overall_sentiment=overall,
@@ -462,7 +486,7 @@ async def _execute_catalyst_analysis(
         news_window=summary["news_window"],
         sec_8k_window=summary["sec_8k_window"],
         sec_8k_category_breakdown=summary["sec_8k_category_breakdown"],
-        sec_8k_staleness_warning=summary["sec_8k_staleness_warning"],
+        sec_8k_staleness_warning=stale_warning,
     )
 
     # Build narrative. The category counts are source-labelled — "News" vs
@@ -877,7 +901,21 @@ async def _execute_financial_modeling(
         if current_price > 0:
             from finrobot.engine.pipelines._helpers import build_valuation_synthesis
 
-            ev_band = await fetch_reverse_multiple_band(ticker, "ev_ebitda", deps.data_layer)
+            ev_band = await fetch_reverse_multiple_band(
+                ticker,
+                "ev_ebitda",
+                deps.data_layer,
+                # The per-year share counts are unavailable from the serving
+                # providers, so the band needs the run's own count to compute at
+                # all (see fetch_reverse_multiple_band) — without it the band
+                # resolves to 0 samples and the own-history cross-check never
+                # reaches the synthesis.
+                shares_override=(
+                    financial_data.market.shares_outstanding
+                    if isinstance(financial_data, FinancialData)
+                    else None
+                ),
+            )
             vs = build_valuation_synthesis(
                 structured_context,
                 current_price,
@@ -1063,7 +1101,21 @@ async def _execute_financial_modeling(
         # band=None, so the football field lost a whole real method and the
         # synthesis ran on fewer corroborating methods (lower confidence). Every
         # input is a reported figure; net debt stays None≠0-gated downstream.
-        ev_band = await fetch_reverse_multiple_band(ticker, "ev_ebitda", deps.data_layer)
+        ev_band = await fetch_reverse_multiple_band(
+            ticker,
+            "ev_ebitda",
+            deps.data_layer,
+            # Load-bearing: without the run's own share count the band resolves to
+            # 0 samples (per-year counts are unavailable from the providers) and
+            # BOTH the EV/EBITDA row and the own-history cross-check vanish from
+            # the synthesis — the cross-check then only appeared post-verdict via
+            # audit.publish_band_cross_check, invisible to the verdict path.
+            shares_override=(
+                financial_data.market.shares_outstanding
+                if isinstance(financial_data, FinancialData)
+                else None
+            ),
+        )
         # Record what the synthesis actually received. A None band silently
         # removes BOTH the EV/EBITDA method row and the own-history cross-check
         # (and with them the only check on the target's implied multiple), so the
@@ -1570,8 +1622,45 @@ def _reconcile_narrative_targets(
     return thesis, drift_found
 
 
+def _published_citable_amounts(structured_context: dict[str, object]) -> list[float]:
+    """Non-target figures the artifact itself publishes, so prose citing them is citation.
+
+    The withheld-path scrubber erases every prose $-amount that is not a whitelisted
+    method mid, band bound or the market price — which also erased figures the SAME
+    artifact publishes elsewhere. THC 2026-10-14 shipped "insiders were net sellers of
+    [target withheld] … with [target withheld] of open-market purchases, anchored by a
+    [target withheld] sale by CEO Saumya Sutaria" while the risk bullets on the same
+    report quoted $49,991,274 and $10,223,358 for exactly those figures (owner audit
+    2026-10-14). Withholding a VALUE must not censor unrelated published data — it
+    leaves the narrative contradicting its own risk list, and it hides the insider
+    flow the report is asking the reader to weigh.
+
+    Only the ownership-flow aggregates are pulled: they are published data a thesis
+    routinely cites and the same figures the insider-flow verifier checks the prose
+    against. A missing/unknown section yields nothing (never a guess) — a wrong entry
+    here would let a fabricated amount through the guard.
+    """
+    ownership = structured_context.get("ownership_governance")
+    if not isinstance(ownership, dict):
+        return []
+    amounts: list[float] = []
+    for key in ("insider_net_flow", "insider_buy_value", "insider_sell_value"):
+        value = ownership.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            amounts.append(float(value))
+    largest = ownership.get("insider_largest_sale")
+    if isinstance(largest, dict):
+        value = largest.get("value")
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            amounts.append(float(value))
+    return amounts
+
+
 def apply_canonical_override(
-    thesis: ThesisResult, canonical: CanonicalThesis, vs: object
+    thesis: ThesisResult,
+    canonical: CanonicalThesis,
+    vs: object,
+    published_amounts: list[float] | None = None,
 ) -> ThesisResult:
     """Force the LLM's headline fields onto the canonical (deterministic) values.
 
@@ -1610,6 +1699,10 @@ def apply_canonical_override(
     # so prose citing them is citation, not a smuggled fabricated point.
     if isinstance(vs, ValuationSynthesis):
         allowed_mids += [b for b in (vs.target_low, vs.target_high) if b is not None]
+    # Published DATA figures (the insider-flow aggregates the same artifact prints in
+    # its risk bullets) are citations, not smuggled point targets — the scrubber must
+    # not censor them. See _published_citable_amounts.
+    allowed_mids += list(published_amounts or [])
     market_price = vs.current_price if isinstance(vs, ValuationSynthesis) else None
 
     if canonical_target is not None and canonical_basis is not None:
@@ -1810,7 +1903,9 @@ async def _execute_thesis(
     # Hard-enforce the deterministic target + verdict onto the LLM output (pure;
     # logs any drift, neutralizes drifting $-amounts in the narrative). Same
     # inputs always produce the same numbers — see apply_canonical_override.
-    thesis = apply_canonical_override(thesis, canonical, vs)
+    thesis = apply_canonical_override(
+        thesis, canonical, vs, published_amounts=_published_citable_amounts(structured_context)
+    )
 
     # Deterministic bear-case backstop: when the revenue base is government
     # payors (Medicare/Medicaid/Medicare Advantage) the reimbursement exposure is

@@ -676,11 +676,59 @@ class _FakeFinancialFact:
         numeric_value: float,
         period_end: date,
         unit: str = "USD",
+        filing_date: date | None = None,
+        fiscal_period: str | None = None,
     ) -> None:
         self.concept = concept
         self.numeric_value = numeric_value
         self.period_end = period_end
         self.unit = unit
+        self.filing_date = filing_date
+        self.fiscal_period = fiscal_period
+
+
+class _FakeQuery:
+    """Minimal stand-in for edgartools' ``FactQuery`` (by_concept → execute)."""
+
+    def __init__(self, facts: list[_FakeFinancialFact]) -> None:
+        self._facts = facts
+
+    def by_concept(self, concept: str, exact: bool = False) -> "_FakeQuery":
+        self._facts = [f for f in self._facts if f.concept == concept]
+        return self
+
+    def execute(self) -> list[_FakeFinancialFact]:
+        return list(self._facts)
+
+
+class _FakeMultiFactFacts:
+    """Fake EntityFacts exposing the public ``query()`` multi-fact API.
+
+    ``get_annual_fact``/``get_fact`` mirror edgartools' ``max(key=(filing_date,
+    period_end))`` so the pre-fix selection is reproducible: a late-filed FY2010
+    fact wins over the FY2025 fact with the same filing ordering. ``query()``
+    surfaces EVERY fact so the fixed selector can rank by period_end first.
+    """
+
+    def __init__(self, facts: list[_FakeFinancialFact]) -> None:
+        self._facts = facts
+
+    def query(self) -> _FakeQuery:
+        return _FakeQuery(self._facts)
+
+    def _latest(self, concept: str, *, annual: bool) -> _FakeFinancialFact | None:
+        pool = [f for f in self._facts if f.concept == concept]
+        if annual:
+            pool = [f for f in pool if f.fiscal_period == "FY"]
+        if not pool:
+            return None
+        return max(pool, key=lambda f: (f.filing_date or date.min, f.period_end))
+
+    def get_annual_fact(self, concept: str) -> _FakeFinancialFact | None:
+        return self._latest(concept, annual=True)
+
+    def get_fact(self, concept: str) -> _FakeFinancialFact | None:
+        return self._latest(concept, annual=False)
 
 
 class _FakeLatestFacts:
@@ -867,6 +915,73 @@ def test_select_latest_fact_revenue_recency_beats_rank() -> None:
     assert out is not None
     assert out["value"] == 416_161_000_000
     assert "RevenueFromContractWithCustomer" in out["concept"]
+
+
+def test_select_latest_fact_period_end_beats_filing_date_within_concept() -> None:
+    """F1 (THC): edgartools' getters key a concept's facts on
+    ``(filing_date, period_end)`` — filing date FIRST — so a late-filed fact for
+    an OLD fiscal year shadows a newer one. THC's FY2010 net income ($1.119B),
+    re-filed years later, out-ranked its FY2025 fact and shipped as "latest
+    annual". The selector must rank by period_end first, filing_date only as the
+    same-period tie-breaker."""
+    from finrobot.engine.data.providers.edgar_provider import (
+        _LATEST_NET_INCOME_CONCEPTS,
+        _select_latest_fact,
+    )
+
+    late_filed_2010 = _FakeFinancialFact(
+        "us-gaap:NetIncomeLoss",
+        1_119_000_000,
+        date(2010, 12, 31),
+        filing_date=date(2026, 9, 1),  # re-filed LATE, after the FY2025 fact below
+        fiscal_period="FY",
+    )
+    fy2025 = _FakeFinancialFact(
+        "us-gaap:NetIncomeLoss",
+        3_174_000_000,
+        date(2025, 12, 31),
+        filing_date=date(2026, 2, 17),
+        fiscal_period="FY",
+    )
+    facts = _FakeMultiFactFacts([late_filed_2010, fy2025])
+
+    # Pre-fix selection (edgartools getter semantics) picks the 2010 fact.
+    assert facts.get_annual_fact("us-gaap:NetIncomeLoss") is late_filed_2010
+
+    out = _select_latest_fact(facts, _LATEST_NET_INCOME_CONCEPTS, annual=True, prefer_recent=True)
+    assert out is not None
+    assert out["value"] == 3_174_000_000
+    assert out["period_end"] == date(2025, 12, 31)
+
+
+def test_select_latest_fact_same_period_prefers_later_filing_date() -> None:
+    """Within one period the filing date is still the tie-breaker: of two FY2025
+    facts, the later (amended/restated) filing wins."""
+    from finrobot.engine.data.providers.edgar_provider import (
+        _LATEST_NET_INCOME_CONCEPTS,
+        _select_latest_fact,
+    )
+
+    original = _FakeFinancialFact(
+        "us-gaap:NetIncomeLoss",
+        3_174_000_000,
+        date(2025, 12, 31),
+        filing_date=date(2026, 2, 17),
+        fiscal_period="FY",
+    )
+    amended = _FakeFinancialFact(
+        "us-gaap:NetIncomeLoss",
+        3_200_000_000,
+        date(2025, 12, 31),
+        filing_date=date(2026, 5, 1),
+        fiscal_period="FY",
+    )
+    facts = _FakeMultiFactFacts([original, amended])
+
+    out = _select_latest_fact(facts, _LATEST_NET_INCOME_CONCEPTS, annual=True, prefer_recent=True)
+    assert out is not None
+    assert out["value"] == 3_200_000_000
+    assert out["period_end"] == date(2025, 12, 31)
 
 
 @pytest.mark.asyncio

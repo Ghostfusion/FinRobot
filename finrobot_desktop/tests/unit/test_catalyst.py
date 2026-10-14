@@ -9,6 +9,7 @@ from finrobot.engine.compute.operators.catalyst import (
     extract_catalysts_from_news,
     cluster_near_duplicates,
     filter_fresh_news,
+    filter_fresh_sec_8k_catalysts,
     compute_expected_impact,
     summarize_catalyst_outlook,
     build_news_window,
@@ -355,6 +356,67 @@ class TestComputeExpectedImpact:
 
     def test_empty_list(self):
         assert compute_expected_impact([]) == []
+
+
+class TestSec8KAgeGate:
+    """F5: the 30-day window applies to news only upstream; the SEC 8-K catalysts
+    merged into the same list were appended unfiltered, so a Feb-Apr 8-K could be
+    presented under the "last 30 days" label. The 8-K events must be age-gated
+    on the same window."""
+
+    @staticmethod
+    def _sec_8k(published):
+        return CatalystEvent(
+            category="management",
+            headline="SEC 8-K: Executive / director change",
+            sentiment="neutral",
+            impact_score=3,
+            probability=1.0,
+            reasoning=SEC_8K_SOURCE_MARKER,
+            published=published,
+        )
+
+    def test_filter_drops_stale_and_undated_8k_keeps_fresh(self):
+        now = datetime.now(tz=timezone.utc)
+        fresh = self._sec_8k(now - timedelta(days=5))
+        stale = self._sec_8k(now - timedelta(days=100))
+        undated = self._sec_8k(None)
+        kept, dropped = filter_fresh_sec_8k_catalysts([fresh, stale, undated])
+        assert kept == [fresh]
+        assert dropped == 2
+
+    def test_filter_never_drops_news_events(self):
+        now = datetime.now(tz=timezone.utc)
+        news = CatalystEvent(
+            category="earnings",
+            headline="Old news",
+            sentiment="positive",
+            impact_score=4,
+            probability=0.7,
+            reasoning="a news item",
+            published=now - timedelta(days=200),
+        )
+        kept, dropped = filter_fresh_sec_8k_catalysts([news])
+        assert kept == [news]
+        assert dropped == 0
+
+    def test_compute_expected_impact_removes_stale_8k_from_the_event_list(self):
+        now = datetime.now(tz=timezone.utc)
+        news = CatalystEvent(
+            category="earnings",
+            headline="Guidance raise",
+            sentiment="positive",
+            impact_score=5,
+            probability=0.7,
+            reasoning="a news item",
+            published=now - timedelta(days=3),
+        )
+        fresh_8k = self._sec_8k(now - timedelta(days=3))
+        stale_8k = self._sec_8k(now - timedelta(days=90))
+        out = compute_expected_impact([news, fresh_8k, stale_8k])
+        assert stale_8k not in out
+        assert fresh_8k in out
+        assert news in out
 
 
 class TestSummarizeCatalystOutlook:

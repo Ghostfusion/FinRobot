@@ -930,12 +930,21 @@ def compute_expected_impact(events: list[CatalystEvent]) -> list[CatalystEvent]:
     expected_impact = impact_score x probability x sentiment_multiplier
     sentiment_multiplier: positive=+1, negative=-1, neutral=0
 
+    SEC 8-K catalysts are appended to the news catalysts in the SAME list (see
+    ``equity_research._sec_8k_to_catalyst``), but only the NEWS feed was
+    age-filtered upstream (``filter_fresh_news``, 30d) — a Feb-Apr 8-K rode into
+    the list the report labels "last 30 days". This function is the last
+    catalyst transform before the artifact's event list, so it age-gates the
+    SEC 8-K events on the same window (``filter_fresh_sec_8k_catalysts``); the
+    news events are left untouched (already fresh by construction).
+
     Args:
         events: Catalyst events to score.
 
     Returns:
-        Events sorted by absolute expected impact, highest first.
+        Fresh events sorted by absolute expected impact, highest first.
     """
+    events, _ = filter_fresh_sec_8k_catalysts(events)
     scored = [(abs(_expected_impact(e)), e) for e in events]
     scored.sort(key=lambda x: x[0], reverse=True)
     return [s[1] for s in scored]
@@ -954,6 +963,49 @@ SEC_8K_SOURCE_MARKER = (
 def _is_sec_8k_event(event: CatalystEvent) -> bool:
     """True iff `event` was produced by equity_research._sec_8k_to_catalyst."""
     return event.reasoning.startswith(SEC_8K_SOURCE_MARKER)
+
+
+# The same window ``equity_research`` applies to the news feed
+# (``filter_fresh_news(news_items, max_age_days=30)``). Company-filed 8-K
+# catalysts must be held to it too: nothing in the report says "30 days" about a
+# months-old filing.
+_SEC_8K_MAX_AGE_DAYS = 30
+
+
+def filter_fresh_sec_8k_catalysts(
+    events: list[CatalystEvent], max_age_days: int = _SEC_8K_MAX_AGE_DAYS
+) -> tuple[list[CatalystEvent], int]:
+    """Drop SEC 8-K catalyst events FILED more than ``max_age_days`` ago.
+
+    News-derived catalysts are age-filtered upstream (``filter_fresh_news``), but
+    the 8-K catalysts merged into the same list were not — so a Feb-Apr filing
+    could be counted and presented inside the report's "last 30 days" window. An
+    8-K with no ``published`` filing date cannot be proven fresh and is dropped
+    too, mirroring ``filter_fresh_news``. News events are always kept (they were
+    filtered before extraction).
+
+    Returns:
+        (fresh_events, dropped_count) — the same list with stale/undated 8-K
+        events removed, and how many were removed.
+    """
+    now = datetime.now(tz=timezone.utc)
+    kept: list[CatalystEvent] = []
+    dropped = 0
+    for event in events:
+        if not _is_sec_8k_event(event):
+            kept.append(event)
+            continue
+        pub = event.published
+        if pub is None:
+            dropped += 1
+            continue
+        if pub.tzinfo is None:
+            pub = pub.replace(tzinfo=timezone.utc)
+        if (now - pub).days <= max_age_days:
+            kept.append(event)
+        else:
+            dropped += 1
+    return kept, dropped
 
 
 def _utc(dt: datetime) -> datetime:

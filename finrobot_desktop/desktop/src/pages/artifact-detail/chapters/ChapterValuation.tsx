@@ -600,6 +600,10 @@ export function ValuationBody({
               current: todayEvEbitda,
               metric: 'EV/EBITDA',
             }}
+            // Withheld point target ⇒ FootballField suppresses the client-computed
+            // per-method upside (it would otherwise print a lone method's +174% as a
+            // directional claim beside a target the report refused to publish).
+            valuationWithheld={valuationSynthesis?.valuation_withheld === true}
           />
           {/* Structural-break caveat for the band's CHEAP/FAIR/EXPENSIVE rail: when a
               YoY EBITDA step sits inside the band window, the quantiles (and the

@@ -437,6 +437,15 @@ const signalCaveat: React.CSSProperties = {
   lineHeight: 1.45,
   color: 'var(--text-dim)',
 }
+// Subset disclosure above the insider table (the list caps at 12 while the flow
+// aggregate sums every row) — quiet, mono, reads as a table caption not a warning.
+const tableCapNote: React.CSSProperties = {
+  margin: '0 0 6px',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10.5,
+  lineHeight: 1.45,
+  color: 'var(--text-dim)',
+}
 
 function InsiderTable({
   rows,
@@ -449,62 +458,76 @@ function InsiderTable({
 }): React.ReactElement {
   // Sort descending by filing_date — most recent first
   const sorted = [...rows].sort((a, b) => (a.filing_date < b.filing_date ? 1 : -1)).slice(0, 12)
+  // The card's aggregate (OwnershipSignalStrip) sums EVERY received row; this table
+  // shows only the most recent 12. Without a label an analyst summed the visible 12
+  // and reported a $9.9M gap vs the aggregate that does not exist (external audit).
+  // `rows.length` is the full set the card received; disclose the subset.
+  const capped = rows.length > sorted.length
   return (
-    <TableScroll>
-      <table style={tableStyle}>
-        <thead>
-          <tr>
-            <th style={thStyle}>{t('chapter.ownership.col.date')}</th>
-            <th style={thStyle}>{t('chapter.ownership.col.name')}</th>
-            <th style={thStyle}>{t('chapter.ownership.col.role')}</th>
-            <th style={thStyle}>{t('chapter.ownership.col.transaction')}</th>
-            <th style={{ ...thStyle, textAlign: 'right' }}>{t('chapter.ownership.col.shares')}</th>
-            <th style={{ ...thStyle, textAlign: 'right' }}>{t('chapter.ownership.col.value')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((r, i) => {
-            const isBuy = r.transaction_type === 'purchase'
-            const isSell = r.transaction_type === 'sale'
-            return (
-              // index guards against identical (accession, insider, shares, value)
-              // rows — a filer can report two matching lines in one Form 4.
-              <tr key={`${r.accession_no}-${r.insider_name}-${r.shares}-${r.value}-${i}`}>
-                <td style={tdStyle}>
-                  <ProvenanceLink prov={r.provenance} locale={locale} t={t}>
-                    {formatDate(r.filing_date, locale)}
-                  </ProvenanceLink>
-                </td>
-                <td style={tdStyle}>{r.insider_name}</td>
-                <td style={{ ...tdStyle, color: 'var(--text-muted)' }}>
-                  {r.insider_position ?? '—'}
-                </td>
-                <td
-                  style={{
-                    ...tdStyle,
-                    color: isBuy
-                      ? 'var(--success)'
-                      : isSell
-                        ? 'var(--danger)'
-                        : 'var(--text-muted)',
-                    fontWeight: 500,
-                  }}
-                >
-                  {transactionLabel(r.transaction_type, t)}
-                </td>
-                <td style={{ ...tdStyle, textAlign: 'right' }}>
-                  {formatCompactNumber(r.shares, locale)}
-                </td>
-                <td style={{ ...tdStyle, textAlign: 'right' }}>
-                  {/* Form 4 transaction value — SEC EDGAR, USD-denominated. */}
-                  {r.value > 0 ? formatCurrencyCompact(r.value, 'USD', locale) : '—'}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </TableScroll>
+    <>
+      {capped && (
+        <p data-testid="insider-table-cap" style={tableCapNote}>
+          {t('chapter.ownership.table.capped', { shown: sorted.length, total: rows.length })}
+        </p>
+      )}
+      <TableScroll>
+        <table style={tableStyle}>
+          <thead>
+            <tr>
+              <th style={thStyle}>{t('chapter.ownership.col.date')}</th>
+              <th style={thStyle}>{t('chapter.ownership.col.name')}</th>
+              <th style={thStyle}>{t('chapter.ownership.col.role')}</th>
+              <th style={thStyle}>{t('chapter.ownership.col.transaction')}</th>
+              <th style={{ ...thStyle, textAlign: 'right' }}>
+                {t('chapter.ownership.col.shares')}
+              </th>
+              <th style={{ ...thStyle, textAlign: 'right' }}>{t('chapter.ownership.col.value')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((r, i) => {
+              const isBuy = r.transaction_type === 'purchase'
+              const isSell = r.transaction_type === 'sale'
+              return (
+                // index guards against identical (accession, insider, shares, value)
+                // rows — a filer can report two matching lines in one Form 4.
+                <tr key={`${r.accession_no}-${r.insider_name}-${r.shares}-${r.value}-${i}`}>
+                  <td style={tdStyle}>
+                    <ProvenanceLink prov={r.provenance} locale={locale} t={t}>
+                      {formatDate(r.filing_date, locale)}
+                    </ProvenanceLink>
+                  </td>
+                  <td style={tdStyle}>{r.insider_name}</td>
+                  <td style={{ ...tdStyle, color: 'var(--text-muted)' }}>
+                    {r.insider_position ?? '—'}
+                  </td>
+                  <td
+                    style={{
+                      ...tdStyle,
+                      color: isBuy
+                        ? 'var(--success)'
+                        : isSell
+                          ? 'var(--danger)'
+                          : 'var(--text-muted)',
+                      fontWeight: 500,
+                    }}
+                  >
+                    {transactionLabel(r.transaction_type, t)}
+                  </td>
+                  <td style={{ ...tdStyle, textAlign: 'right' }}>
+                    {formatCompactNumber(r.shares, locale)}
+                  </td>
+                  <td style={{ ...tdStyle, textAlign: 'right' }}>
+                    {/* Form 4 transaction value — SEC EDGAR, USD-denominated. */}
+                    {r.value > 0 ? formatCurrencyCompact(r.value, 'USD', locale) : '—'}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </TableScroll>
+    </>
   )
 }
 

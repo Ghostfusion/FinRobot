@@ -423,3 +423,84 @@ def test_withheld_path_keeps_a_zero_amount() -> None:
         "insider_largest_sale": {"value": 2237502.0},
     }
     assert insider_flow_amount_findings([text], ownership) == []
+
+
+def _thc_withheld_vs() -> ValuationSynthesis:
+    """The THC 2026-10-14 shape: one far-from-market DCF, point withheld."""
+    return ValuationSynthesis(
+        methods=[
+            ValuationMethod(
+                name="dcf",
+                low=585.66,
+                mid=732.07,
+                high=878.49,
+                confidence=0.85,
+                source="implied_price ± 20%",
+            )
+        ],
+        current_price=266.91,
+        confidence="very_low",
+        weighted_price=None,
+        upside_downside=None,
+        target_low=549.05,
+        target_high=915.09,
+        valuation_withheld=True,
+        degradation_note="single method dcf $732 is 2.7x the market price",
+    )
+
+
+def _thc_withheld_canonical() -> CanonicalThesis:
+    return CanonicalThesis(
+        verdict="HOLD",
+        target=None,
+        basis="DIRECTION WITHHELD — the lone DCF $732.07 …",
+        upside=None,
+        valuation_withheld=True,
+        confidence="very_low",
+    )
+
+
+def test_published_data_figures_survive_the_withheld_scrub() -> None:
+    """A withheld POINT must not censor the report's own published data.
+
+    THC 2026-10-14 (owner audit): the withheld-path scrubber erased the insider
+    flow figures from the narrative — "insiders were net sellers of [target
+    withheld] … with [target withheld] of open-market purchases, anchored by a
+    [target withheld] sale by CEO Saumya Sutaria" — while the risk bullets on the
+    same report quoted $49,991,274 and $10,223,358 for exactly those figures. The
+    marker is for a smuggled POINT TARGET, not for data the artifact publishes.
+    """
+    thesis = _thesis(
+        narrative=(
+            "Insiders were net sellers of $49,991,274 over 90 days with $0 of "
+            "open-market purchases, anchored by a $10,223,358 sale by CEO Saumya Sutaria."
+        )
+    )
+
+    out = apply_canonical_override(
+        thesis,
+        _thc_withheld_canonical(),
+        _thc_withheld_vs(),
+        published_amounts=[49_991_273.96, 0.0, 49_991_273.96, 10_223_358.4],
+    )
+
+    narrative = out.narrative or ""
+    assert "[target withheld]" not in narrative
+    assert "$49,991,274" in narrative
+    assert "$10,223,358" in narrative
+
+
+def test_a_smuggled_point_target_is_still_erased_alongside_data_figures() -> None:
+    """Whitelisting published data must not open the door for a fabricated point."""
+    thesis = _thesis(valuation_overview="Our fair value is $742.11 per share, well above the tape.")
+
+    out = apply_canonical_override(
+        thesis,
+        _thc_withheld_canonical(),
+        _thc_withheld_vs(),
+        published_amounts=[49_991_273.96],
+    )
+
+    overview = out.valuation_overview or ""
+    assert "$742.11" not in overview
+    assert "[target withheld]" in overview

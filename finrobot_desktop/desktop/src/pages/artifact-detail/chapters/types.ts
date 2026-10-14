@@ -757,6 +757,10 @@ export interface ValuationSynthesisShape {
   valuation_withheld?: boolean
   /** Human-readable disclosure of what degraded + which proxy/anchor was used. */
   degradation_note?: string | null
+  /** True when the issuer is mid-way through a post-acquisition transition — the
+   *  reason the point target was withheld (NOT method divergence). Lets the NEUTRAL
+   *  sniper note name the real cause instead of asserting "DCF vs comps diverge". */
+  mna_transition?: boolean
   /** True for a balance-sheet financial (bank / insurer) whose cash-flow methods
    * (FCFF-DCF, EV/EBITDA, P/FCF) are category errors and suppressed at the source.
    * Lets the DCF / Monte-Carlo / EV-EBITDA-band / sensitivity chapters frame the

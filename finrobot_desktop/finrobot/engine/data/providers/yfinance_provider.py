@@ -77,6 +77,19 @@ _NET_INCOME_NAMES = [
     "Net Income Common Stockholders",
     "Net Income From Continuing And Discontinued Operation",
 ]
+# NCI share of earnings, read off the same TTM income frame as the lines above.
+# The consolidated figure and the parent-attributable figure differ by exactly the
+# noncontrolling-interest earnings — the $933M explaining THC's 3.174B (SEC
+# consolidated NetIncomeLoss TTM) vs 2.241B (provider netIncomeToCommon). Yahoo
+# exposes it three ways; ``NetIncomeLoss`` (consolidated) − common is the primary
+# derivation, with the ``Minority Interests`` row (stored as a NEGATIVE deduction)
+# as the fallback.
+_NET_INCOME_INCL_NCI_NAMES = ["Net Income Including Noncontrolling Interests"]
+_NET_INCOME_COMMON_NAMES = ["Net Income Common Stockholders", "Net Income"]
+_MINORITY_EARNINGS_NAMES = [
+    "Minority Interests",
+    "Net Income Attributable To Noncontrolling Interest",
+]
 _EPS_NAMES = ["Basic EPS", "Diluted EPS", "EPS"]
 _SGA_NAMES = [
     "Selling General Administrative",
@@ -268,6 +281,23 @@ def _ttm_capex(info: dict[str, Any], from_frame: float | None) -> float | None:
         return None
     derived = float(ocf) - float(fcf)
     return derived if derived >= 0 else None
+
+
+def _nci_earnings(income: pd.DataFrame, col: Any) -> float | None:
+    """Noncontrolling-interest share of TTM net income, off the income frame.
+
+    Preferred derivation is consolidated − parent (``Net Income Including
+    Noncontrolling Interests`` − ``Net Income Common Stockholders``); the
+    ``Minority Interests`` row is the fallback (Yahoo stores it as a NEGATIVE
+    deduction, so it is negated to a positive contribution). Returns None when
+    the frame reports none of the three rows — a missing NCI is not a zero.
+    """
+    incl = _cell(_get_row(income, _NET_INCOME_INCL_NCI_NAMES), col)
+    common = _cell(_get_row(income, _NET_INCOME_COMMON_NAMES), col)
+    if incl is not None and common is not None:
+        return incl - common
+    minority = _cell(_get_row(income, _MINORITY_EARNINGS_NAMES), col)
+    return -minority if minority is not None else None
 
 
 def _build_yearly_financials(
@@ -633,6 +663,29 @@ class YFinanceProvider(DataProvider):
                 f"yfinance fetch exited without populating ticker/info for '{ticker}'"
             )
 
+        # F6(b): Yahoo occasionally serves an ``info`` page with no ``beta`` even
+        # though the quote page reports one (THC: ``market.beta`` came back null
+        # while the source reported 1.199). One retry of the same cheap ``.info``
+        # read, BEFORE the flat snapshot is built, recovers it; a failed/empty retry
+        # leaves beta honestly None rather than failing the whole FINANCIALS fetch.
+        if data_type == DataType.FINANCIALS and info.get("beta") is None:
+            try:
+                retry_info = await asyncio.to_thread(lambda: _t.info)
+            except (
+                YFRateLimitError,
+                YFException,
+                ValueError,
+                KeyError,
+                TypeError,
+                AttributeError,
+                RuntimeError,
+                OSError,
+            ) as e:
+                logger.warning(f"beta retry for {ticker} failed: {e}")
+            else:
+                if isinstance(retry_info, dict) and retry_info.get("beta") is not None:
+                    info = {**info, "beta": retry_info["beta"]}
+
         if data_type == DataType.FINANCIALS:
             years_kwarg = kwargs.get("years")
             if years_kwarg and years_kwarg > 1:
@@ -924,6 +977,8 @@ class YFinanceProvider(DataProvider):
             "capital_expenditure": None,
             "revenue": None,
             "gross_profit": None,
+            "nci_earnings": None,
+            "net_income_incl_nci": None,
         }
         income = await self._read_statement(ticker, t, "ttm_income_stmt")
         if income is not None and not income.empty:
@@ -938,6 +993,8 @@ class YFinanceProvider(DataProvider):
                     "interest_expense": _cell(_get_row(income, _INTEREST_EXPENSE_NAMES), col),
                     "revenue": _cell(_get_row(income, _REVENUE_NAMES), col),
                     "gross_profit": _cell(_get_row(income, _GROSS_PROFIT_NAMES), col),
+                    "nci_earnings": _nci_earnings(income, col),
+                    "net_income_incl_nci": _cell(_get_row(income, _NET_INCOME_INCL_NCI_NAMES), col),
                 }
             )
         cashflow = await self._read_statement(ticker, t, "ttm_cashflow")
@@ -1023,24 +1080,77 @@ class YFinanceProvider(DataProvider):
         # gross margin (68.97% vs 68.55% from the frame's own Gross Profit). The
         # denominator is the frame's revenue when it resolved, so numerator and
         # denominator share a period and a basis; the published ``revenue`` field is
-        # untouched. Falls back to the scalar only when the frame rows are absent
-        # (faithful, never fabricated).
+        # untouched.
+        #
+        # F6(a): when the frame lacks a row we fall back to the ``info`` scalar only
+        # for GROSS margin, and we MARK that basis (row vs provider_scalar) and warn
+        # it. For OPERATING margin a scalar is NEVER published: without the frame's
+        # own Operating Income row there is no numerator-consistent margin, and
+        # Yahoo's scalar silently described a different numerator (THC shipped 18.2%
+        # beside an unreported ``operating_income``). Withhold it instead.
         ratio_revenue = meta.get("revenue") or info.get("totalRevenue")
         gross_margin_frame = _ratio(meta.get("gross_profit"), ratio_revenue)
         operating_margin_frame = _ratio(meta.get("operating_income"), ratio_revenue)
+        warnings: list[str] = []
+        scalar_gross = info.get("grossMargins")
+        if gross_margin_frame is not None:
+            gross_margin, gross_margin_basis = gross_margin_frame, "row"
+        elif scalar_gross is not None:
+            gross_margin, gross_margin_basis = scalar_gross, "provider_scalar"
+            warnings.append(
+                "gross_margin taken from Yahoo's info.grossMargins scalar — the TTM "
+                "Gross Profit row was unavailable, so this ratio is not derived from "
+                "the statement rows it sits beside."
+            )
+        else:
+            gross_margin, gross_margin_basis = None, None
+        if operating_margin_frame is not None:
+            operating_margin, operating_margin_basis = operating_margin_frame, "row"
+        else:
+            operating_margin, operating_margin_basis = None, "withheld_no_operating_income_row"
+            if info.get("operatingMargins") is not None:
+                warnings.append(
+                    "operating_margin withheld — the TTM frame has no Operating Income "
+                    "row, so no numerator-consistent margin can be published (Yahoo's "
+                    "info.operatingMargins scalar was NOT used)."
+                )
+        # Publish the NCI-earnings caliber explicitly: the stated net income is
+        # attributable to the parent, while the SEC XBRL TTM ``NetIncomeLoss`` is
+        # consolidated — the difference IS this NCI share. Naming it here keeps the
+        # two authorities from reading as a data error (THC: 2.241B parent vs 3.174B
+        # consolidated). It rides FinancialData.warnings into the artifact.
+        nci_earnings = meta.get("nci_earnings")
+        published_ni = info.get("netIncomeToCommon")
+        if (
+            nci_earnings is not None
+            and math.isfinite(nci_earnings)
+            and abs(nci_earnings) > 0
+            and published_ni is not None
+            and math.isfinite(published_ni)
+        ):
+            consolidated = meta.get("net_income_incl_nci")
+            if consolidated is None:
+                consolidated = published_ni + nci_earnings
+            warnings.append(
+                f"TTM net income {published_ni:,.0f} is attributable to the parent "
+                f"(netIncomeToCommon); the consolidated figure including noncontrolling "
+                f"interests is {consolidated:,.0f} — {abs(nci_earnings):,.0f} of earnings "
+                "belong to noncontrolling interests and are NOT attributable to the parent."
+            )
         # dict.get() never raises; no try/except needed here
         data = {
             "revenue": info.get("totalRevenue"),
             "ebitda": (ebitda_operating if ebitda_operating is not None else info.get("ebitda")),
             "net_income": info.get("netIncomeToCommon"),
-            "gross_margin": (
-                gross_margin_frame if gross_margin_frame is not None else info.get("grossMargins")
-            ),
-            "operating_margin": (
-                operating_margin_frame
-                if operating_margin_frame is not None
-                else info.get("operatingMargins")
-            ),
+            "gross_margin": gross_margin,
+            "gross_margin_basis": gross_margin_basis,
+            "operating_margin": operating_margin,
+            "operating_margin_basis": operating_margin_basis,
+            # Noncontrolling-interest share of TTM net income, so the SEC-vs-provider
+            # net-income gap can be named as a CALIBER difference (consolidated incl.
+            # NCI vs attributable to the parent) instead of guessed at. None when the
+            # frame reports no NCI rows — a missing NCI is not a zero.
+            "nci_earnings": meta.get("nci_earnings"),
             "pe_ratio": info.get("trailingPE"),
             "market_cap": info.get("marketCap"),
             "shares_outstanding": info.get("sharesOutstanding"),
@@ -1147,6 +1257,7 @@ class YFinanceProvider(DataProvider):
             ticker=ticker,
             data_type=DataType.FINANCIALS,
             timestamp=datetime.now(tz=timezone.utc),
+            warnings=warnings,
         )
 
     async def _fetch_historical_financials(

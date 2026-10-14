@@ -438,3 +438,53 @@ def test_xbrl_concept_snapshot_without_periods_is_never_flagged() -> None:
         {"latest_revenue": {"concept": "us-gaap:Revenues", "value": 10.0}}
     )
     assert "warning" not in snapshot["us-gaap:Revenues"][0]
+
+
+def test_xbrl_concept_snapshot_publishes_equity_identity_with_nci() -> None:
+    """F7 (THC): the narrative read "assets (30.676B) against 21.976B of
+    liabilities, leaving 4.658B of stockholders' equity" — but 30.676 − 21.976 =
+    8.700B total equity; the 4.658B leaf is PARENT equity and the 4.042B gap is
+    noncontrolling interest. The snapshot must publish the identity so the
+    subtraction cannot be mis-stated."""
+    snapshot = xbrl_concept_snapshot(
+        {
+            "latest_total_assets": {
+                "concept": "us-gaap:Assets",
+                "value": 30_676_000_000.0,
+                "period_end": "2026-06-30",
+                "units": "USD",
+            },
+            "latest_total_liabilities": {
+                "concept": "us-gaap:Liabilities",
+                "value": 21_976_000_000.0,
+                "period_end": "2026-06-30",
+                "units": "USD",
+            },
+            "latest_shareholders_equity": {
+                "concept": "us-gaap:StockholdersEquity",
+                "value": 4_658_000_000.0,
+                "period_end": "2026-06-30",
+                "units": "USD",
+            },
+        }
+    )
+    identity = snapshot["_equity_identity"][0]
+    assert identity["total_equity"] == 8_700_000_000.0
+    assert identity["noncontrolling_interest"] == 4_042_000_000.0
+    assert identity["parent_stockholders_equity"] == 4_658_000_000.0
+    assert "noncontrolling interest" in identity["note"]
+    assert "PARENT-ONLY" in identity["note"]
+    # The plain A/L/E leaves are untouched, so the identity lives beside them.
+    assert snapshot["us-gaap:Assets"][0]["value"] == 30_676_000_000.0
+
+
+def test_xbrl_concept_snapshot_no_identity_without_all_three_leaves() -> None:
+    """The identity note is only emitted when Assets, Liabilities AND parent
+    equity are all present — never a partial subtraction."""
+    snapshot = xbrl_concept_snapshot(
+        {
+            "latest_total_assets": {"concept": "us-gaap:Assets", "value": 100.0},
+            "latest_total_liabilities": {"concept": "us-gaap:Liabilities", "value": 40.0},
+        }
+    )
+    assert "_equity_identity" not in snapshot

@@ -211,6 +211,19 @@ def detect_report_drift(
             for leaf in leaves
         )
 
+    def _nearest_magnitude_gap(value: float) -> float | None:
+        """Smallest relative distance between |value| and any leaf's magnitude.
+
+        Answers a DIFFERENT question from ``_nearest_gap``: that one asks "is this
+        the same number?", this one asks "could this be a real computed figure
+        written with a prose operator's sign?". Both are needed because the orphan
+        bucket is defined as "near NOTHING the artifact computed" — see the
+        classification below.
+        """
+        if not leaves:
+            return None
+        return min(abs(abs(value) - abs(leaf)) / max(abs(leaf), _ABS_EPSILON) for leaf in leaves)
+
     total = 0
     findings: list[ReportDriftFinding] = []
     unmatched_count = 0
@@ -242,7 +255,20 @@ def detect_report_drift(
         if gap is not None and gap <= tolerance:
             continue
         unmatched_count += 1
-        if gap is not None and gap <= approximation_band:
+        # The orphan bucket — the only one a builder may REDACT — means "near
+        # NOTHING the artifact computed", so the classification also asks the
+        # magnitude question. Prose writes arithmetic as signs ("the ev less net
+        # debt -$11.078B" for the +11,078,000,128 net_debt leaf), and the token's
+        # ledger entry is the VALUE, not the sentence's operator convention: owner
+        # audit 2026-10-14 had THC's "-$11.078B" redacted as unsupported while
+        # 13.248B − 2.170B = 11.078B is published in that same artifact. A
+        # magnitude-matched token is an APPROXIMATION — surfaced for review, kept in
+        # prose — never an orphan; a sign disagreement is still disclosed.
+        magnitude_gap = _nearest_magnitude_gap(value)
+        near_a_leaf = (gap is not None and gap <= approximation_band) or (
+            magnitude_gap is not None and magnitude_gap <= approximation_band
+        )
+        if near_a_leaf:
             approximate_count += 1
         else:
             orphan_occurrences += 1

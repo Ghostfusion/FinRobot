@@ -44,6 +44,16 @@ interface ChapterTechnicalProps {
   // even when the verdict is HOLD, so the two must be reconciled in the reader's view
   // (owner review: HOLD beside an "Ideal Buy 246.88 above the 228.52 market, R/R 0.94").
   recommendation?: string | null
+  // Cause inputs for the NEUTRAL sniper note. The backend keys NEUTRAL purely on
+  // `has_anchor_target = not valuation_withheld`, NOT on whether the methods actually
+  // diverge — so a lone method (THC: one DCF, no comps) was narrated as "DCF vs comps
+  // diverge" (external audit). We pick the wording that matches the REAL cause.
+  /** valuation_synthesis.mna_transition — the target was withheld because the issuer
+   *  is mid-way through a post-acquisition transition, not because methods diverged. */
+  mnaTransition?: boolean
+  /** valuation_synthesis.methods.length — 1 means no second method existed to
+   *  corroborate the sole method's output (a derivation, not a divergence). */
+  methodCount?: number
 }
 
 export function ChapterTechnical({
@@ -55,6 +65,8 @@ export function ChapterTechnical({
   snapshot52wHigh,
   snapshot52wLow,
   recommendation = null,
+  mnaTransition = false,
+  methodCount = 0,
 }: ChapterTechnicalProps): React.ReactElement {
   const { t, locale } = useI18n()
   const fmtPx = (v: number): string => formatCurrency(v, quoteCurrency, locale, 2)
@@ -124,6 +136,19 @@ export function ChapterTechnical({
         : 'HOLD — mechanical reference levels, not a trade signal. The directional levels below are derived mechanically from the DCF fair value; with the published verdict on HOLD they are levels to monitor, not an entry instruction.'
       : null
 
+  // NEUTRAL sniper note, worded to the ACTUAL cause of the withheld target (the
+  // backend sets NEUTRAL whenever the point target is withheld, regardless of WHY).
+  // mna_transition ⇒ post-acquisition transition; a lone method ⇒ nothing to
+  // corroborate it; otherwise ⇒ genuine cross-method divergence. Pre-resolved here so
+  // the panel stays free of cause logic (mirrors holdNote).
+  const neutralNote = t(
+    mnaTransition
+      ? 'chapter.technical.sniper.withheldMnaTransition'
+      : methodCount === 1
+        ? 'chapter.technical.sniper.withheldSingleMethod'
+        : 'chapter.technical.sniper.withheldUnreliable',
+  )
+
   return (
     <Chapter id="technical">
       {cells.length > 0 ? (
@@ -152,7 +177,13 @@ export function ChapterTechnical({
       )}
 
       {sniper !== null && (
-        <SniperPanel sniper={sniper} t={t} fmtPx={fmtPx} holdNote={holdReconciliation} />
+        <SniperPanel
+          sniper={sniper}
+          t={t}
+          fmtPx={fmtPx}
+          holdNote={holdReconciliation}
+          neutralNote={neutralNote}
+        />
       )}
 
       {bands !== null && (
@@ -401,6 +432,7 @@ function SniperPanel({
   t,
   fmtPx,
   holdNote = null,
+  neutralNote,
 }: {
   sniper: SniperShape
   t: (key: string, params?: Record<string, string | number>) => string
@@ -409,6 +441,9 @@ function SniperPanel({
   // panel stays free of verdict/locale logic. Rendered only when the box actually
   // publishes directional cells (in NEUTRAL there are none).
   holdNote?: string | null
+  // The NEUTRAL withheld-target note, worded to the real cause by the chapter and
+  // rendered only in NEUTRAL (where the point target was withheld).
+  neutralNote: string
 }): React.ReactElement {
   type Cell = MetricCell
   // Two distinct readouts, NOT one trading-desk block (BACKLOG PM-review ②):
@@ -533,7 +568,7 @@ function SniperPanel({
     <div style={{ margin: '22px 0' }}>
       {isNeutral && (
         <p style={mutedNote} data-testid="sniper-neutral-note">
-          {t('chapter.technical.sniper.withheldUnreliable')}
+          {neutralNote}
         </p>
       )}
       {/* Objective technical levels — the analytical content of this section. */}

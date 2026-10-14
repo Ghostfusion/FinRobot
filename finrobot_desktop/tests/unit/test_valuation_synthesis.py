@@ -1,9 +1,10 @@
 """Tests for valuation synthesis with confidence-weighted averaging."""
 
 import pytest
-from finrobot.engine.models.financial import ValuationMethod
+from finrobot.engine.models.financial import CrossCheck, ValuationMethod
 from finrobot.engine.compute.operators.valuation_synthesis import (
     _VERDICT_BANDS,
+    cross_check_contradicts_method,
     resolve_canonical_thesis,
     synthesize_valuations,
     verdict_from_upside,
@@ -1325,3 +1326,124 @@ class TestStreetRangeDisclosure:
         )
 
         assert street_range_disclosure(274.0, 480.0, 360.0) is None  # low > high
+
+
+class TestCrossCheckContradiction:
+    """A lone method must not outvote the report's own cross-check.
+
+    THC 2026-10-14 (owner audit): the lone DCF mid ($732.07) sat 2.7x above the
+    $266.91 tape while the report's only cross-check — the issuer's own 5-year
+    EV/EBITDA band, $47.48–$216.31 — sat entirely BELOW it, and the headline still
+    shipped BUY off the ±25% confidence dial's band edge.
+    """
+
+    # The THC artifact's own numbers.
+    _THC_METHOD = ValuationMethod(
+        name="dcf", low=585.66, mid=732.07, high=878.49, confidence=0.85, source="DCF"
+    )
+    _THC_CROSS_CHECK = CrossCheck(
+        name="ev_ebitda_band",
+        label="Own 5-year EV/EBITDA",
+        low=47.47898423916747,
+        mid=183.99898196678808,
+        high=216.30753575026267,
+        basis="Own 5-year EV/EBITDA band (p25 3.91x · median 6.18x · p75 6.72x)",
+        note="Mean-reversion cross-check only — excluded from the published target blend.",
+    )
+
+    def test_a_cross_check_on_the_other_side_is_detected(self):
+        check = cross_check_contradicts_method([self._THC_METHOD], [self._THC_CROSS_CHECK], 266.91)
+        assert check is not None
+        assert check.name == "ev_ebitda_band"
+
+    def test_a_bracketing_cross_check_claims_no_side(self):
+        """A band that CONTAINS the market price says "fairly valued" — it can
+        neither contradict nor corroborate, so the direction keeps its old read."""
+        bracketing = self._THC_CROSS_CHECK.model_copy(update={"low": 100.0, "high": 900.0})
+        assert cross_check_contradicts_method([self._THC_METHOD], [bracketing], 266.91) is None
+
+    def test_a_corroborating_cross_check_vetoes_the_reading(self):
+        agreeing = self._THC_CROSS_CHECK.model_copy(update={"low": 400.0, "high": 900.0})
+        assert cross_check_contradicts_method([self._THC_METHOD], [agreeing], 266.91) is None
+
+    def test_one_corroborating_check_is_enough_to_keep_the_direction(self):
+        """Mixed evidence (one agrees, one contradicts) is not a contradiction: the
+        direction then stands on an agreeing number, not on the dial alone."""
+        agreeing = self._THC_CROSS_CHECK.model_copy(update={"low": 400.0, "high": 900.0})
+        assert (
+            cross_check_contradicts_method(
+                [self._THC_METHOD], [self._THC_CROSS_CHECK, agreeing], 266.91
+            )
+            is None
+        )
+
+    def test_multiple_methods_are_out_of_scope(self):
+        """With ≥2 methods the synthesis already grades agreement; this reading is
+        about a LONE method that has nothing to corroborate it."""
+        other = ValuationMethod(
+            name="comps_pe", low=200.0, mid=250.0, high=300.0, confidence=0.5, source="comps"
+        )
+        assert (
+            cross_check_contradicts_method(
+                [self._THC_METHOD, other], [self._THC_CROSS_CHECK], 266.91
+            )
+            is None
+        )
+
+    def test_thc_shape_withholds_the_point_and_holds_the_verdict(self):
+        """End-to-end on the artifact's own numbers: the point is withheld AND the
+        verdict is neutral — not BUY read off the dial edge (+105.7% upside)."""
+        vs = synthesize_valuations(
+            [self._THC_METHOD],
+            current_price=266.91,
+            cross_checks=[self._THC_CROSS_CHECK],
+        )
+        assert vs.valuation_withheld is True
+        assert vs.upside_downside is None
+        assert vs.degradation_note is not None
+        assert "cross-check" in vs.degradation_note
+        # The band still ships for transparency (never a blanked field).
+        assert vs.target_low == pytest.approx(549.05, abs=0.01)
+        assert vs.target_high == pytest.approx(915.09, abs=0.01)
+
+        thesis = resolve_canonical_thesis(vs, "THC")
+        assert thesis.verdict == "HOLD"
+        assert thesis.target is None
+        assert thesis.upside is None
+        assert thesis.valuation_withheld is True
+        assert "DIRECTION WITHHELD" in (thesis.basis or "")
+        assert "Own 5-year EV/EBITDA" in (thesis.basis or "")
+
+    def test_lone_method_without_cross_checks_keeps_the_edge_read(self):
+        """Regression: with NO cross-check computed there is nothing to contradict,
+        so the documented edge read still ships a direction (never a refusal)."""
+        vs = synthesize_valuations([self._THC_METHOD], current_price=266.91)
+        assert vs.valuation_withheld is True
+        thesis = resolve_canonical_thesis(vs, "THC")
+        assert thesis.verdict == "BUY"  # +105.7% off the $549.05 band edge
+        assert thesis.upside == pytest.approx(1.057, abs=0.01)
+        assert thesis.target is None
+
+    def test_in_band_method_contradicted_by_a_cross_check_withholds(self):
+        """The gate is not only about the far-from-market case: a lone method that
+        sits INSIDE the calibration band but is contradicted by the report's own
+        cross-check still cannot buy the report a direction."""
+        in_band = self._THC_METHOD.model_copy(update={"low": 280.0, "mid": 320.0, "high": 360.0})
+        vs = synthesize_valuations(
+            [in_band], current_price=266.91, cross_checks=[self._THC_CROSS_CHECK]
+        )
+        assert vs.valuation_withheld is True
+        thesis = resolve_canonical_thesis(vs, "THC")
+        assert thesis.verdict == "HOLD"
+        assert thesis.target is None
+
+    def test_in_band_method_corroborated_by_a_cross_check_still_publishes(self):
+        """Regression: with the evidence agreeing, the published point and the
+        directional verdict are unchanged (medium confidence, no withhold)."""
+        in_band = self._THC_METHOD.model_copy(update={"low": 280.0, "mid": 320.0, "high": 360.0})
+        agreeing = self._THC_CROSS_CHECK.model_copy(update={"low": 300.0, "high": 400.0})
+        vs = synthesize_valuations([in_band], current_price=266.91, cross_checks=[agreeing])
+        assert vs.valuation_withheld is False
+        thesis = resolve_canonical_thesis(vs, "THC")
+        assert thesis.verdict == "HOLD"  # +20% sits inside the very_low→medium bands
+        assert thesis.target == pytest.approx(320.0, abs=0.01)

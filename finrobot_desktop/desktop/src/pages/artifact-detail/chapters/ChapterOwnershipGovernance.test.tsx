@@ -63,6 +63,53 @@ describe('ChapterOwnershipGovernance', () => {
     expect(screen.getByText('Sale')).toBeInTheDocument()
   })
 
+  // External audit: the list caps at 12 rows while the flow aggregate sums EVERY
+  // row the card received (THC: 12 shown of 20). An analyst summed the visible 12
+  // and reported a $9.9M gap vs the aggregate that does not exist. The list must
+  // disclose the subset it shows.
+  it('labels the insider list as a subset when it caps at 12 of more rows', () => {
+    const rows: InsiderTransactionShape[] = Array.from({ length: 20 }, (_, i) => ({
+      filing_date: `2026-04-${String(20 - i).padStart(2, '0')}`,
+      accession_no: `0001234567-26-0000${String(i).padStart(2, '0')}`,
+      insider_name: `Insider ${i}`,
+      transaction_type: 'sale',
+      code: 'S',
+      shares: 1000,
+      value: 100_000,
+      provenance: baseProv('4'),
+    }))
+    const ownership: OwnershipGovernanceShape = {
+      insider_transactions: rows,
+      generated_at: '2026-05-27T09:00:00Z',
+      degraded_sections: [],
+    }
+    render(wrap(<ChapterOwnershipGovernance ownership={ownership} reportingCurrency="USD" />))
+    const cap = screen.getByTestId('insider-table-cap').textContent ?? ''
+    expect(cap).toMatch(/12/) // rows shown
+    expect(cap).toMatch(/20/) // rows the aggregate covers
+    expect(cap).toMatch(/aggregates all 20/i)
+  })
+
+  it('omits the subset label when the list is not capped', () => {
+    const rows: InsiderTransactionShape[] = Array.from({ length: 3 }, (_, i) => ({
+      filing_date: `2026-04-0${i + 1}`,
+      accession_no: `0001234567-26-00010${i}`,
+      insider_name: `Insider ${i}`,
+      transaction_type: 'purchase',
+      code: 'P',
+      shares: 1000,
+      value: 100_000,
+      provenance: baseProv('4'),
+    }))
+    const ownership: OwnershipGovernanceShape = {
+      insider_transactions: rows,
+      generated_at: '2026-05-27T09:00:00Z',
+      degraded_sections: [],
+    }
+    render(wrap(<ChapterOwnershipGovernance ownership={ownership} reportingCurrency="USD" />))
+    expect(screen.queryByTestId('insider-table-cap')).not.toBeInTheDocument()
+  })
+
   it('renders institutional holdings sorted by value descending', () => {
     const small: InstitutionalHoldingShape = {
       holder_name: 'Small Fund',

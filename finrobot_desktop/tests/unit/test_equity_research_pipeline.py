@@ -731,8 +731,58 @@ async def test_catalyst_analysis_publishes_feed_windows(mock_deps):
     assert analysis.sec_8k_window is not None
     assert analysis.sec_8k_window["count"] == 1
     assert analysis.sec_8k_window["newest"] == "2026-09-03"
-    assert analysis.sec_8k_category_breakdown == {"other": 1}
+    # The INDEX window above is the raw fetch; the CATALYST mix is age-gated. This
+    # fixture's only 8-K was filed 2026-09-03 — more than the 30-day window before
+    # the report — so it is excluded from the category breakdown and from the
+    # sentiment, and the exclusion is disclosed instead of silent (a Feb-Apr 8-K
+    # riding inside a "last 30 days" list was the owner-audit defect).
+    assert analysis.sec_8k_category_breakdown == {}
     assert analysis.sec_8k_staleness_warning is not None
+    assert "excluded from the catalyst list" in analysis.sec_8k_staleness_warning
+
+
+@pytest.mark.asyncio
+async def test_catalyst_analysis_counts_fresh_8k_and_discloses_the_dropped_ones(mock_deps):
+    """A FRESH 8-K still counts in the catalyst mix; only the stale one is dropped
+    and named. Guards the age gate against over-dropping every 8-K."""
+    from finrobot.engine.pipelines.equity_research import _execute_catalyst_analysis
+
+    _now = datetime.now(tz=timezone.utc)
+    news_result = DataResult(
+        data={"news_items": []},
+        provider="fake",
+        ticker="AAPL",
+        data_type="news",
+        timestamp=_now,
+    )
+    mock_deps.data_layer.fetch = AsyncMock(return_value=news_result)
+    stale_days = 200
+    structured_context = {
+        "sec_filings": {
+            "8k_events": [
+                {"filing_date": _now.date().isoformat(), "items": ["Item 8.01"]},
+                {
+                    "filing_date": (_now - timedelta(days=stale_days)).date().isoformat(),
+                    "items": ["Item 8.01"],
+                },
+            ]
+        }
+    }
+    mock_agent = MagicMock()
+    with patch(
+        "finrobot.engine.pipelines.equity_research.classify_news",
+        return_value=[],
+    ):
+        output = await _execute_catalyst_analysis(
+            mock_agent, mock_deps, "prompt", structured_context, "AAPL"
+        )
+
+    analysis = output.structured
+    assert analysis.sec_8k_window is not None
+    assert analysis.sec_8k_window["count"] == 2  # the raw index keeps both
+    assert analysis.sec_8k_category_breakdown == {"other": 1}  # only the fresh one
+    assert analysis.sec_8k_staleness_warning is not None
+    assert "1 material SEC 8-K catalyst(s)" in analysis.sec_8k_staleness_warning
 
 
 @pytest.mark.asyncio

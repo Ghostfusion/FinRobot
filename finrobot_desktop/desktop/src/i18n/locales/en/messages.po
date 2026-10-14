@@ -937,6 +937,14 @@ msgid "chapter.technical.sniper.withheldUnreliable"
 msgstr "Directional trade levels withheld: the valuation methods do not corroborate (DCF vs comps diverge too far — the headline point target was withheld), so there is no defensible target to anchor a trade. The directional rating still stands; support / resistance below are shown for reference only."
 
 #. js-lingui-explicit-id
+msgid "chapter.technical.sniper.withheldMnaTransition"
+msgstr "Directional trade levels withheld: the issuer is mid-way through a post-acquisition transition, so the headline point target was withheld and there is no defensible target to anchor a trade. The directional rating still stands; support / resistance below are shown for reference only."
+
+#. js-lingui-explicit-id
+msgid "chapter.technical.sniper.withheldSingleMethod"
+msgstr "Directional trade levels withheld: a single valuation method ran with no second method to corroborate it, so the headline point target was withheld and there is no defensible target to anchor a trade. The directional rating still stands; support / resistance below are shown for reference only."
+
+#. js-lingui-explicit-id
 msgid "chapter.technical.sniper.tacticalFraming"
 msgstr "Mechanical entry / exit levels derived from the DCF fair value and recent price action — a tactical implementation reference, not the investment thesis."
 
@@ -1011,6 +1019,10 @@ msgstr "not extracted from proxy"
 #. js-lingui-explicit-id
 msgid "chapter.ownership.heading.insiders"
 msgstr "Insider Transactions (Form 4)"
+
+#. js-lingui-explicit-id
+msgid "chapter.ownership.table.capped"
+msgstr "Showing the {shown} most recent of {total} filings in the window — the flow summary above aggregates all {total}."
 
 #. js-lingui-explicit-id
 msgid "chapter.ownership.heading.institutions"
@@ -2739,6 +2751,10 @@ msgstr "Terminal {metric} {implied} vs {current} today"
 #. js-lingui-explicit-id
 msgid "chart.footballField.terminalMultipleSolo"
 msgstr "Terminal {metric} {implied}"
+
+#. js-lingui-explicit-id
+msgid "chart.footballField.upsideWithheld"
+msgstr "Point target withheld — per-method upside is not published. The ranges above are reference values, not a directional call."
 
 #. js-lingui-explicit-id
 msgid "coverage.col.mcap"

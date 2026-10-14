@@ -186,6 +186,37 @@ class TestNetIncomeDivergenceWarning:
         assert warning is not None
         assert "133.3%" in warning
 
+    def test_gap_explained_by_nci_earnings_is_named_not_called_a_caliber_gap(self) -> None:
+        """F2 (THC): provider net income is attributable to the parent (2.241B),
+        the SEC XBRL TTM ``NetIncomeLoss`` is consolidated incl. NCI (3.174B); the
+        933M gap IS the noncontrolling-interest earnings. The warning must NAME
+        that — dollar amount + basis — instead of the misleading 'caliber gap
+        (concept / window / filing rounding), not a typo'."""
+        warning = net_income_divergence_warning(
+            2_241_000_000,
+            "yfinance",
+            3_174_000_000,
+            "SEC XBRL us-gaap:NetIncomeLoss:ttm",
+            nci_earnings=933_000_000,
+        )
+        assert warning is not None
+        assert "noncontrolling-interest" in warning
+        assert "933,000,000" in warning
+        assert "consolidated" in warning
+        assert "attributable to the parent" in warning
+        # The old guessy wording must be gone when the cause is known.
+        assert "caliber gap" not in warning
+
+    def test_unexplained_gap_keeps_conservative_wording(self) -> None:
+        """When the reported NCI share does NOT match the gap, keep the
+        conservative caliber-gap wording — never fabricate an NCI cause."""
+        warning = net_income_divergence_warning(
+            500_000_000, "yfinance", 620_000_000, "SEC XBRL", nci_earnings=1_000_000
+        )
+        assert warning is not None
+        assert "caliber gap" in warning
+        assert "noncontrolling-interest" not in warning
+
 
 class TestQuoteBasis:
     """The report printed "Live $124.42" for a previous session's close (owner

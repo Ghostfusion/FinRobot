@@ -50,6 +50,12 @@ class IncomeStatement(BaseModel):
     # comps target can hand calculate_core_pe a period-consistent EBIT instead of
     # operating_margin × a possibly XBRL-overridden revenue (BUG-017).
     operating_income: float | None = None
+    # Noncontrolling-interest share of the same TTM net income (the FLOW). Carried
+    # so the SEC-XBRL-vs-provider net-income divergence can name its cause —
+    # consolidated (incl. NCI) vs attributable to the parent — instead of calling
+    # every gap a "concept / window / filing rounding" difference. None ≠ 0: a
+    # provider that reports no NCI rows says nothing about the NCI share.
+    nci_earnings: float | None = None
     depreciation_amortization: float | None = None
     # Capital expenditure in USD, positive magnitude (outflow). Caliber matches the
     # snapshot's period_basis — TTM sum-of-4-quarters cash-flow-statement capex when

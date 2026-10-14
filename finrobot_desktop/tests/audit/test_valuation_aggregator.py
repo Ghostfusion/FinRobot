@@ -607,6 +607,45 @@ class TestAggregatorContract:
         row = next(m for m in agg.methods if m.method == "dcf")
         assert row.assumptions == "WACC 8.2% · 5yr growth 3%↗18%→2.5% · β1.20"
 
+    def test_industry_proxy_beta_is_named_on_the_row(self) -> None:
+        """A sector beta is an assumption about the INDUSTRY, not a measurement of
+        this issuer — the row must not print a naked "β0.80".
+
+        Owner audit 2026-10-14: THC shipped a 6.24% WACC built on the Hospitals
+        industry levered beta (0.80) while the data source reports 1.199 for the
+        issuer, and the report surface said only "β0.80" — the single input the
+        reader most needs to argue with was the one the row did not label.
+        """
+        dcf = _dcf(implied_price=505.0)
+        dcf.inputs.assumption_provenance = {
+            "beta": "0.80 (Hospitals/Healthcare Facilities industry levered beta)"
+        }
+        agg = aggregate_valuation(
+            ticker="THC",
+            current_price=266.91,
+            dcf=dcf,
+            as_of=AS_OF,
+        )
+        row = next(m for m in agg.methods if m.method == "dcf")
+        assert row.assumptions == (
+            "WACC 8.2% · 3yr growth 10%→2.5% · β1.20 "
+            "(industry levered beta proxy — no issuer market beta)"
+        )
+
+    def test_provider_reported_beta_needs_no_proxy_marker(self) -> None:
+        """An issuer beta measured from its own market data is a measurement — the
+        row must not imply it is a sector proxy."""
+        dcf = _dcf(implied_price=505.0)
+        dcf.inputs.assumption_provenance = {"beta": "1.20 (provider-reported 5y beta)"}
+        agg = aggregate_valuation(
+            ticker="THC",
+            current_price=266.91,
+            dcf=dcf,
+            as_of=AS_OF,
+        )
+        row = next(m for m in agg.methods if m.method == "dcf")
+        assert row.assumptions == "WACC 8.2% · 3yr growth 10%→2.5% · β1.20"
+
     def test_comps_pe_row_carries_caliber_assumption(self) -> None:
         """comps_pe's load-bearing bet is 'NVDA deserves the peer median P/E' on a
         named EPS caliber — the assumption that put NVDA at $341 on inflated EPS."""

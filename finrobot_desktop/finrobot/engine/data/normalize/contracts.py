@@ -426,6 +426,17 @@ class NormalizedFinancials(BaseModel):
     # schema version is intentionally NOT bumped (same call as BUG-038/039/042).
     preferred_stock: float | None = None
     noncontrolling_interest: float | None = None
+    # The noncontrolling-interest share of TTM NET INCOME — the FLOW, not the
+    # balance-sheet stock above. It exists so the SEC-vs-provider net-income
+    # divergence can NAME its cause instead of guessing: the SEC
+    # ``us-gaap:NetIncomeLoss`` fact is CONSOLIDATED (incl. NCI) while the
+    # provider's ``netIncomeToCommon`` is attributable to the parent, so a gap
+    # equal to this figure is a caliber difference, not a typo. THC 2026-10-14:
+    # 3.174B (consolidated) vs 2.241B (parent) = 933M of NCI earnings, which the
+    # report called a "concept / window / filing rounding" gap and the auditor
+    # had to trace by hand. Optional → read-compatible with cached canonical
+    # payloads (BUG-038 precedent), so no schema-version bump.
+    nci_earnings: float | None = None
     depreciation_amortization: float | None = None
     rd_expense: float | None = None
     sga_expense: float | None = None

@@ -1334,10 +1334,95 @@ class TestFlatMarginCaliber:
 
     @pytest.mark.asyncio
     async def test_margins_fall_back_to_the_info_scalars_without_a_frame(self):
+        """Gross margin may fall back to the ``info`` scalar (and is MARKED as
+        provider-scalar); operating margin may NOT — without the frame's own
+        Operating Income row there is no numerator-consistent margin, so it is
+        withheld rather than publishing Yahoo's differently-based scalar."""
         mock_ticker = _make_mock_ticker(VALID_INFO)
         with patch(
             "finrobot.engine.data.providers.yfinance_provider.yf.Ticker", return_value=mock_ticker
         ):
             result = await YFinanceProvider().fetch("AAPL", "financials")
-        assert result.data["operating_margin"] == 0.30
+        assert result.data["operating_margin"] is None
+        assert result.data["operating_margin_basis"] == "withheld_no_operating_income_row"
         assert result.data["gross_margin"] == 0.44
+        assert result.data["gross_margin_basis"] == "provider_scalar"
+        assert any("info.grossMargins scalar" in w for w in result.warnings)
+        assert any("operating_margin withheld" in w for w in result.warnings)
+
+    @pytest.mark.asyncio
+    async def test_operating_margin_withheld_when_frame_lacks_operating_income(self):
+        """F6(a) THC: the TTM frame carried Gross Profit + Revenue but no Operating
+        Income, so the snapshot published Yahoo's 18.2% operatingMargins scalar
+        beside an unreported ``operating_income``. The row-derived gross margin is
+        published, the operating margin is withheld, and both bases are marked."""
+        frame = pd.DataFrame(
+            {
+                pd.Timestamp("2026-06-30"): {
+                    "Total Revenue": 22_638_000_000.0,
+                    "Gross Profit": 18_752_000_000.0,
+                }
+            }
+        )
+        info = dict(
+            VALID_INFO,
+            totalRevenue=22_638_000_000.0,
+            grossMargins=0.41661,
+            operatingMargins=0.18159,
+        )
+        info.pop("sharesOutstanding", None)
+        mock_ticker = _make_mock_ticker(info, ttm_income_stmt=frame)
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker", return_value=mock_ticker
+        ):
+            result = await YFinanceProvider().fetch("THC", "financials")
+        assert result.data["gross_margin"] == pytest.approx(18_752_000_000.0 / 22_638_000_000.0)
+        assert result.data["gross_margin_basis"] == "row"
+        assert result.data["operating_margin"] is None
+        assert result.data["operating_margin_basis"] == "withheld_no_operating_income_row"
+
+    @pytest.mark.asyncio
+    async def test_nci_earnings_read_from_the_ttm_frame(self):
+        """F2: the NCI share of TTM earnings is read off the same income frame
+        (consolidated − parent), so the SEC-vs-provider net-income gap can be named
+        as a caliber difference. THC: 3,174 − 2,241 = 933M."""
+        frame = pd.DataFrame(
+            {
+                pd.Timestamp("2026-06-30"): {
+                    "Total Revenue": 22_638_000_000.0,
+                    "Net Income Including Noncontrolling Interests": 3_174_000_000.0,
+                    "Net Income Common Stockholders": 2_241_000_000.0,
+                    "Minority Interests": -933_000_000.0,
+                }
+            }
+        )
+        mock_ticker = _make_mock_ticker(VALID_INFO, ttm_income_stmt=frame)
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker", return_value=mock_ticker
+        ):
+            result = await YFinanceProvider().fetch("THC", "financials")
+        assert result.data["nci_earnings"] == pytest.approx(933_000_000.0)
+        assert any("noncontrolling" in w and "parent" in w for w in result.warnings)
+
+    @pytest.mark.asyncio
+    async def test_beta_retried_once_when_info_omits_it(self):
+        """F6(b) THC: the first ``info`` page carried no beta while the source
+        reports 1.199. One retry recovers it; otherwise beta stays None."""
+        info_without_beta = dict(VALID_INFO)
+        info_without_beta.pop("beta", None)
+        info_with_beta = dict(VALID_INFO, beta=1.199)
+        read = iter([info_without_beta, info_with_beta])
+
+        class _BetaTicker(MagicMock):
+            # A real property on a LOCAL subclass — a property set on MagicMock
+            # itself would leak across the whole test session.
+            @property
+            def info(self) -> dict:
+                return next(read, info_with_beta)
+
+        mock_ticker = _BetaTicker()
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker", return_value=mock_ticker
+        ):
+            result = await YFinanceProvider().fetch("THC", "financials")
+        assert result.data["beta"] == pytest.approx(1.199)

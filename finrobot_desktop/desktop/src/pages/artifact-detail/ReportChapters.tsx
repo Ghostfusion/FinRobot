@@ -244,6 +244,11 @@ function EquityReportChapters({
         // The published verdict — the tactical box reconciles its mechanical
         // directional levels against it (HOLD beside an "Ideal Buy" is the defect).
         recommendation={d.thesis?.recommendation ?? null}
+        // Cause inputs for the NEUTRAL sniper note: the backend keys NEUTRAL on
+        // `not valuation_withheld` alone, so the note must say WHY the target was
+        // withheld (post-acquisition transition / lone method / real divergence).
+        mnaTransition={d.valuationSynthesis?.mna_transition === true}
+        methodCount={d.valuationSynthesis?.methods?.length ?? 0}
       />
       {/* Credit & Default Risk closes the analytical spine: the DEBT leg of the
           same capital structure the valuation prices from the equity side, and

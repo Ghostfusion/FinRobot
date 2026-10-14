@@ -91,6 +91,50 @@ def _floor_tier(a: ConfidenceTier, b: ConfidenceTier) -> ConfidenceTier:
     return a if _TIER_ORDER.index(a) <= _TIER_ORDER.index(b) else b
 
 
+def cross_check_contradicts_method(
+    methods: list[ValuationMethod],
+    cross_checks: list[CrossCheck],
+    current_price: float,
+) -> CrossCheck | None:
+    """The published cross-check pointing the OPPOSITE way from a lone method.
+
+    A cross-check is not a valuation method (it never enters the blend), but it IS
+    computed evidence the report displays on the same page — and the verdict path
+    used to ignore it entirely: the dial withheld the POINT on a lone
+    far-from-market method, then resolve_canonical_thesis read the direction off
+    that method's own ±25% dial band edge. THC 2026-10-14 shipped BUY that way —
+    the lone DCF mid ($732.07) sat 2.7x above the $266.91 tape while the only
+    cross-check on the page (own 5-year EV/EBITDA, $47.48–$216.31) sat entirely
+    BELOW it. Two published numbers pointing opposite ways is a disagreement, not
+    a call (owner audit 2026-10-14).
+
+    Returns the first cross-check whose whole band lies on the opposite side of
+    the market price from the method's point — but only when EVERY cross-check
+    that resolves to a side does. A cross-check band that BRACKETS the market
+    price claims no side ("fairly valued"), so it can neither contradict nor
+    corroborate; a corroborating one vetoes the whole reading (the direction then
+    stands on two agreeing numbers, not one).
+    """
+    if len(methods) != 1 or not cross_checks or current_price <= 0:
+        return None
+    mid = methods[0].mid
+    if mid == current_price:
+        return None
+    method_side = 1.0 if mid > current_price else -1.0
+    contradicting: CrossCheck | None = None
+    for check in cross_checks:
+        if check.low is None or check.high is None:
+            continue
+        lo, hi = sorted((check.low, check.high))
+        if lo <= current_price <= hi:
+            continue
+        if (1.0 if lo > current_price else -1.0) == method_side:
+            return None
+        if contradicting is None:
+            contradicting = check
+    return contradicting
+
+
 def _select_anchor(methods: list[ValuationMethod], cyclical: bool) -> ValuationMethod | None:
     """Comparability anchor for a divergent method set (sell-side convention).
 
@@ -114,6 +158,7 @@ def _confidence_dial(
     current_price: float,
     cyclical: bool,
     financial_sector: bool,
+    cross_checks: list[CrossCheck] | None = None,
 ) -> tuple[ConfidenceTier, str | None, float | None, float | None, bool, str | None]:
     """Return (confidence, anchor_method, target_low, target_high, withheld, note).
 
@@ -134,7 +179,13 @@ def _confidence_dial(
         only = methods[0]
         ratio = only.mid / current_price if current_price > 0 else float("inf")
         band = abs(only.mid) * _DIAL_SINGLE_BAND_FRAC
-        if 1.0 / SINGLE_METHOD_DIVERGENCE_RATIO_K <= ratio <= SINGLE_METHOD_DIVERGENCE_RATIO_K:
+        contradiction = cross_check_contradicts_method(
+            methods, list(cross_checks or []), current_price
+        )
+        in_band = (
+            1.0 / SINGLE_METHOD_DIVERGENCE_RATIO_K <= ratio <= SINGLE_METHOD_DIVERGENCE_RATIO_K
+        )
+        if in_band and contradiction is None:
             return (
                 "medium",
                 None,
@@ -142,6 +193,27 @@ def _confidence_dial(
                 only.mid + band,
                 False,
                 f"single method {only.name} with no cross-validation — band widened, confidence medium.",
+            )
+        if contradiction is not None:
+            # The point is not the only thing unsupported here: the DIRECTION the
+            # band edge would give rests on the dial's own ±_DIAL_SINGLE_BAND_FRAC
+            # width, while the report's one computed cross-check says the opposite.
+            # Withhold the point and say why (resolve_canonical_thesis holds the
+            # verdict neutral on this same reading).
+            c_lo, c_hi = sorted((float(contradiction.low), float(contradiction.high)))
+            side = "below" if c_hi < current_price else "above"
+            return (
+                "very_low",
+                None,
+                only.mid - band,
+                only.mid + band,
+                True,
+                f"single method {only.name} ${only.mid:.0f} is {ratio:.2g}x the market price and the "
+                f"only computed cross-check points the other way — {contradiction.label} "
+                f"${c_lo:.2f}–${c_hi:.2f} sits entirely {side} the ${current_price:.2f} market price. "
+                f"A lone method contradicted by the report's own cross-check is a disagreement, not a "
+                f"call: point target withheld and the verdict held neutral (the band still ships for "
+                f"transparency).",
             )
         # Off the single-method calibration band: withhold the POINT (no false-precise
         # headline stamped on a lone, far-from-market method) — but STILL ship the band.
@@ -158,7 +230,9 @@ def _confidence_dial(
             f"single method {only.name} ${only.mid:.0f} is {ratio:.2g}x the market price, outside the "
             f"[{1.0 / SINGLE_METHOD_DIVERGENCE_RATIO_K:.2g}x,"
             f"{SINGLE_METHOD_DIVERGENCE_RATIO_K:.0f}x] single-method calibration band — point target withheld (avoid stamping "
-            f"false precision on a lone far-from-market method); the band still provides a fundamental floor, with direction taken from the market implied.",
+            f"false precision on a lone far-from-market method); the band still provides a fundamental "
+            f"floor and the direction reads off its nearest edge (the interior point is the fabricated "
+            f"one), never a republished point.",
         )
 
     # ≥2 methods: tier from inter-method agreement (NOT market distance).
@@ -511,7 +585,7 @@ def synthesize_valuations(
             methods[0].name,
         )
         conf, anchor, t_lo, t_hi, withheld, note = _confidence_dial(
-            methods, current_price, cyclical, financial_sector
+            methods, current_price, cyclical, financial_sector, cross_checks=cross_checks
         )
         withheld, note = _apply_mna_transition(withheld, note, mna_transition)
         return ValuationSynthesis(
@@ -562,7 +636,7 @@ def synthesize_valuations(
                 )
 
     conf, anchor, t_lo, t_hi, withheld, note = _confidence_dial(
-        methods, current_price, cyclical, financial_sector
+        methods, current_price, cyclical, financial_sector, cross_checks=cross_checks
     )
     withheld, note = _apply_mna_transition(withheld, note, mna_transition)
 
@@ -988,6 +1062,39 @@ def resolve_canonical_thesis(vs: object, ticker: str) -> CanonicalThesis:
             basis=basis,
             upside=upside,
             valuation_withheld=withheld,
+            confidence=vs.confidence,
+        )
+
+    # A lone method contradicted by the report's own cross-check: the direction the
+    # edge read below would produce rests on the dial's ±_DIAL_SINGLE_BAND_FRAC width,
+    # not on evidence. THC 2026-10-14 shipped BUY that way — lone DCF $732.07 against a
+    # $266.91 tape while the only cross-check (own 5-year EV/EBITDA $47.48–$216.31) sat
+    # entirely BELOW the price. Two computed numbers pointing opposite ways is a
+    # disagreement, not a call, so hold the verdict neutral (the dial already withheld
+    # the point on the same reading; the band still ships for transparency). HOLD is a
+    # judgment about the evidence, not a refusal to rate.
+    contradiction = (
+        cross_check_contradicts_method(vs.methods, vs.cross_checks, vs.current_price)
+        if vs.valuation_withheld and len(vs.methods) == 1
+        else None
+    )
+    if contradiction is not None:
+        method_breakdown = ", ".join(f"{_method_label(m.name)} ${m.mid:.2f}" for m in vs.methods)
+        c_lo, c_hi = sorted((float(contradiction.low), float(contradiction.high)))
+        side = "below" if c_hi < vs.current_price else "above"
+        return CanonicalThesis(
+            target=None,
+            verdict="HOLD",
+            basis=(
+                f"DIRECTION WITHHELD — the lone {method_breakdown} sits on the opposite side of the "
+                f"${vs.current_price:.2f} market price from this report's own computed cross-check "
+                f"({contradiction.label} ${c_lo:.2f}–${c_hi:.2f}, entirely {side} it). A lone method "
+                f"contradicted by its own cross-check is a disagreement, not a call: the point stays "
+                f"withheld and the verdict holds neutral rather than reading a direction off the "
+                f"±{_DIAL_SINGLE_BAND_FRAC:.0%} confidence dial. The band still ships for transparency."
+            ),
+            upside=None,
+            valuation_withheld=True,
             confidence=vs.confidence,
         )
 

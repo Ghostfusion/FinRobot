@@ -16,6 +16,7 @@ from finrobot.engine.data.layer import DataLayer
 from finrobot.engine.data.provider_health import ProviderHealth
 from finrobot.engine.data.normalize import NormalizedFinancials, NormalizedPrice
 from finrobot.engine.data.normalize.contracts import (
+    DEGRADED_AUTHORITY_RECORD_MISSING,
     DEGRADED_CIRCUIT_OPEN_PREFIX,
     DEGRADED_FX_NORMALIZED,
     DEGRADED_FX_UNAVAILABLE,
@@ -772,6 +773,32 @@ class TestReadCanonicalCached:
         layer = DataLayer([MockProvider("mock", ["news"])], cache)
         with pytest.raises(ValueError, match="PRICE / FINANCIALS"):
             await layer.read_canonical_cached(DataType.NEWS, "AAPL")
+
+
+class TestRawCacheAuthorityDisclosure:
+    """F4: a run served off the RAW-cache path with a payload that carries no
+    authority record (``reconciliation=None``) must disclose it — the canonical
+    read path already stamps DEGRADED_AUTHORITY_RECORD_MISSING, but the raw path
+    shipped ``data_authority = null`` silently (the audited THC run)."""
+
+    async def test_raw_cache_payload_without_reconciliation_is_flagged(self, cache):
+        # A pre-feature RAW row: reconciliation None. No canonical row, no providers.
+        await cache.set(DataType.FINANCIALS, "AAPL", _make_result())
+        layer = DataLayer([], cache)
+
+        out = await layer.fetch_canonical(DataType.FINANCIALS, "AAPL")
+        assert isinstance(out, NormalizedFinancials)
+        assert out.reconciliation is None
+        assert DEGRADED_AUTHORITY_RECORD_MISSING in out.provenance.degraded
+
+    async def test_fresh_fetch_with_reconciliation_is_not_flagged(self, cache):
+        provider = MockProvider("mock", ["financials"])
+        layer = DataLayer([provider], cache)
+
+        out = await layer.fetch_canonical(DataType.FINANCIALS, "AAPL")
+        assert isinstance(out, NormalizedFinancials)
+        assert out.reconciliation is not None
+        assert DEGRADED_AUTHORITY_RECORD_MISSING not in out.provenance.degraded
 
 
 class TestCorruptCacheSelfHeal:

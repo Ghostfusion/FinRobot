@@ -937,6 +937,14 @@ msgid "chapter.technical.sniper.withheldUnreliable"
 msgstr "方向性交易点位已隐去：估值方法未交叉验证（DCF 与可比公司分歧过大，点位目标价已扣发），无可锚定的可靠目标。方向性评级仍然成立；仅保留下方支撑 / 阻力供参考。"
 
 #. js-lingui-explicit-id
+msgid "chapter.technical.sniper.withheldMnaTransition"
+msgstr "方向性交易点位已隐去：发行方正处并购后的过渡期，点位目标价已扣发，无可锚定的可靠目标。方向性评级仍然成立；仅保留下方支撑 / 阻力供参考。"
+
+#. js-lingui-explicit-id
+msgid "chapter.technical.sniper.withheldSingleMethod"
+msgstr "方向性交易点位已隐去：仅有一种估值方法运行，无第二种方法交叉验证，点位目标价已扣发，无可锚定的可靠目标。方向性评级仍然成立；仅保留下方支撑 / 阻力供参考。"
+
+#. js-lingui-explicit-id
 msgid "chapter.technical.sniper.tacticalFraming"
 msgstr "由 DCF 公允价值与近期价格走势机械推导的进出场参考位——仅为执行层的战术参照，并非投资论点本身。"
 
@@ -1011,6 +1019,10 @@ msgstr "未从代理文件中提取"
 #. js-lingui-explicit-id
 msgid "chapter.ownership.heading.insiders"
 msgstr "内部人交易（Form 4）"
+
+#. js-lingui-explicit-id
+msgid "chapter.ownership.table.capped"
+msgstr "仅显示窗口内 {total} 笔申报中最新的 {shown} 笔——上方流量汇总统计全部 {total} 笔。"
 
 #. js-lingui-explicit-id
 msgid "chapter.ownership.heading.institutions"
@@ -2739,6 +2751,10 @@ msgstr "终值 {metric} {implied}，当前 {current}"
 #. js-lingui-explicit-id
 msgid "chart.footballField.terminalMultipleSolo"
 msgstr "终值 {metric} {implied}"
+
+#. js-lingui-explicit-id
+msgid "chart.footballField.upsideWithheld"
+msgstr "点位目标价已扣发——不发布各方法的上行/下行空间。上方区间仅为参考数值，不构成方向性判断。"
 
 #. js-lingui-explicit-id
 msgid "coverage.col.mcap"

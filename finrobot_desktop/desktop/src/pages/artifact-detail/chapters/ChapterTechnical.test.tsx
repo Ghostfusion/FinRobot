@@ -13,6 +13,7 @@ function renderChapter(
   technical: TechnicalAnalysisShape | null,
   financialSector = false,
   recommendation: string | null = null,
+  cause: { mnaTransition?: boolean; methodCount?: number } = {},
 ) {
   return render(
     <ChapterTechnical
@@ -24,8 +25,28 @@ function renderChapter(
       snapshot52wHigh={180}
       snapshot52wLow={110}
       recommendation={recommendation}
+      mnaTransition={cause.mnaTransition ?? false}
+      methodCount={cause.methodCount ?? 0}
     />,
   )
+}
+
+// A NEUTRAL sniper (the point target was withheld). Used by the cause-wording
+// cases below — the note must name WHY, not blanket-assert "DCF vs comps diverge".
+const NEUTRAL_SNIPER: TechnicalAnalysisShape = {
+  sniper: {
+    ideal_buy: null,
+    secondary_buy: null,
+    stop_loss: null,
+    take_profit: null,
+    position_size_pct: null,
+    safety_margin: null,
+    support_level: 292.68,
+    resistance_level: 315.2,
+    risk_reward_ratio: null,
+    direction: 'NEUTRAL',
+    sell_mode: false,
+  },
 }
 
 describe('ChapterTechnical', () => {
@@ -173,6 +194,30 @@ describe('ChapterTechnical', () => {
     expect(screen.queryByText('Take Profit')).not.toBeInTheDocument()
     expect(screen.queryByText('Stop Loss')).not.toBeInTheDocument()
     expect(screen.queryByText('R / R Ratio')).not.toBeInTheDocument()
+  })
+
+  // External audit: NEUTRAL is keyed on `not valuation_withheld` alone, so the note
+  // asserted "DCF vs comps diverge" even when NO comps method existed (THC: a lone
+  // DCF). The wording must name the real cause from data the page already has.
+  it('NEUTRAL sniper names the post-acquisition transition when mna_transition is set', () => {
+    renderChapter(NEUTRAL_SNIPER, false, null, { mnaTransition: true, methodCount: 1 })
+    const note = screen.getByTestId('sniper-neutral-note').textContent ?? ''
+    expect(note).toMatch(/post-acquisition transition/i)
+    expect(note).not.toMatch(/do not corroborate/i)
+  })
+
+  it('NEUTRAL sniper says a lone method had nothing to corroborate it (no comps ran)', () => {
+    renderChapter(NEUTRAL_SNIPER, false, null, { methodCount: 1 })
+    const note = screen.getByTestId('sniper-neutral-note').textContent ?? ''
+    expect(note).toMatch(/single valuation method ran with no second method to corroborate/i)
+    expect(note).not.toMatch(/DCF vs comps diverge/i)
+  })
+
+  it('NEUTRAL sniper keeps the divergence wording only when multiple methods disagree', () => {
+    renderChapter(NEUTRAL_SNIPER, false, null, { methodCount: 3 })
+    expect(screen.getByTestId('sniper-neutral-note').textContent ?? '').toMatch(
+      /do not corroborate/i,
+    )
   })
 
   it('explains an entry zone the market already sits inside, with both discounts', () => {
