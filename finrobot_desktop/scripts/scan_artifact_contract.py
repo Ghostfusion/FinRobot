@@ -28,6 +28,7 @@ Usage:
     python scripts/scan_artifact_contract.py                # scan all, all clauses
     python scripts/scan_artifact_contract.py --clause C1    # only the C1 catch list
     python scripts/scan_artifact_contract.py --limit 50     # sample the newest 50
+    python scripts/scan_artifact_contract.py --proposed     # the STAGED clause set
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ from dataclasses import dataclass
 
 from finrobot.artifact.contract import CONTRACT_CLAUSES, ContractClause
 from finrobot.artifact.models import Artifact, ArtifactSummary
+from finrobot.artifact.proposed_clauses import PROPOSED_CLAUSES
 from finrobot.artifact.store import ArtifactStore
 from finrobot.artifact.summary_extractor import (
     extract_entry_price,
@@ -183,19 +185,28 @@ def _report(total: int, clauses: list[ContractClause], flags: list[Flag]) -> Non
             print(f"      evidence: {flag.evidence}")
 
 
-def _select_clauses(clause_filter: str | None) -> list[ContractClause]:
+def _select_clauses(clause_filter: str | None, proposed: bool) -> list[ContractClause]:
+    """The clause universe is either the LIVE set or the staged proposal set.
+
+    ``--proposed`` measures clauses that are not in the live gate yet
+    (``artifact/proposed_clauses.py``): the promotion instrument of the design
+    doc §7.1 — a clause is quantified here BEFORE it can withhold anything in
+    production. The two universes are never mixed, so a rate always reads against
+    the set that would actually run.
+    """
+    universe = list(PROPOSED_CLAUSES) if proposed else list(CONTRACT_CLAUSES)
     if clause_filter is None:
-        return list(CONTRACT_CLAUSES)
+        return universe
     wanted = clause_filter.upper()
-    selected = [c for c in CONTRACT_CLAUSES if c.id.upper() == wanted]
+    selected = [c for c in universe if c.id.upper() == wanted]
     if not selected:
-        available = ", ".join(c.id for c in CONTRACT_CLAUSES)
+        available = ", ".join(c.id for c in universe)
         raise SystemExit(f"unknown clause {clause_filter!r}; available: {available}")
     return selected
 
 
-async def _run(clause_filter: str | None, limit: int | None) -> int:
-    clauses = _select_clauses(clause_filter)
+async def _run(clause_filter: str | None, limit: int | None, proposed: bool = False) -> int:
+    clauses = _select_clauses(clause_filter, proposed)
     store = ArtifactStore()
     try:
         artifacts = await _enumerate_artifacts(store, limit)
@@ -226,10 +237,18 @@ def main() -> int:
         default=None,
         help="Sample only the newest N artifacts. Default: scan the whole store.",
     )
+    parser.add_argument(
+        "--proposed",
+        action="store_true",
+        help=(
+            "Scan the STAGED proposal set (artifact/proposed_clauses.py) instead of the live "
+            "clauses. Use this to quantify a clause before promoting it into CONTRACT_CLAUSES."
+        ),
+    )
     args = parser.parse_args()
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be >= 1")
-    return asyncio.run(_run(args.clause, args.limit))
+    return asyncio.run(_run(args.clause, args.limit, args.proposed))
 
 
 if __name__ == "__main__":
