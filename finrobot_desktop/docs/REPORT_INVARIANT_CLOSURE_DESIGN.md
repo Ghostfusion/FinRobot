@@ -152,7 +152,7 @@ docstring states the design contract:
 | single-method disclosure | `C6` (S) | note in 59 artifacts | the note is derived from **method count only**, so it asserts "no cross-validation" while a cross-check is printed (instance B) | fix `C6` derivation — §4.8 |
 | resurrection scrub | `C7` (H, internal) | fired ×31 | working as designed | keep |
 | **verdict vs its own published cross-checks** | *nobody* | **8 artifacts shipped a contradicted BUY/SELL** | no clause reads `cross_checks` against the direction | **`C8`** |
-| **cross-check band plausibility** | *nobody* | SKM published a cross-check band of **−$2.97 … −$1.23** against a $34.42 price; HMY $1.22–$3.74 against $16.71 | a band that is negative or degenerate is published as if it were evidence | **`C9`** |
+| **cross-check band plausibility** | *nobody* | SKM published a cross-check band of **−$2.97 … −$1.23** against a $34.42 price — degenerate; HMY's $1.22–$3.74 against $16.71 is positive and fully sampled but sits ~5× below the tape, which `C8` catches, not `C9` | a band that is negative or degenerate is published as if it were evidence | **`C9`** |
 | **conclusion-ratio operands (source / caliber / period) and numerator presence** | numeric audit on `FinancialData` only (`ev_bridge`, `ttm_period`, `currency_caliber`) | `ev_bridge_unverified` ×106 (review) | ratios whose operands come from **different providers** or whose numerator is `null` (THC `operating_margin = 0.18159` beside `operating_income = null`); the balance-sheet identity A = L + E (DQC_0004) is hand-written in one operator, not a clause | **`C10`** |
 | **single definition** | *nobody* | `valuation_withheld` duplicated across two slots; band computed at 3 call sites; catalogue copy vs backend warning | two definitions of one quantity drift with nothing to catch it | **`C11`** |
 | **recency and window closure** | `ttm_period` audits the TTM period only | FY2010 fact; 8-K inside a 30-day window | selection policy is a library default; a merged event list is filtered per source, not per predicate | **`C12`** |
@@ -175,8 +175,11 @@ exact payload paths (verified against stored artifacts, not guessed). IDs `C8+` 
   `outputs.structured.valuation_synthesis.methods[]`.
 - **predicate** for `BUY`: no cross-check whose band contains `current_price`, **or** whose
   `mid > current_price`. For `SELL`: the mirror. A band that **brackets** the price claims no
-  side; one corroborating check pointing the same way vetoes the violation (≥2 checks must agree
-  to contradict). Ignore a cross-check that `C9` has already flagged unusable.
+  side; one corroborating check pointing the same way vetoes the violation. **A single
+  uncorroborated contradicting band is enough** — measured 2026-10-14, every one of the 8 corpus
+  hits carries exactly **one** cross-check entry, so a "≥2 checks must agree" guard would have
+  fired on none of them, instance B included. Ignore a cross-check that `C9` has already flagged
+  unusable.
 - **why it cannot be fooled** it reads the numbers the reader reads, in the same object, after
   the narrative is written.
 - **pinned instance** B (cross-check $70.16–$255.26 vs $271.60 tape, BUY at $541.80) and the 8
@@ -194,7 +197,10 @@ exact payload paths (verified against stored artifacts, not guessed). IDs `C8+` 
   dropped and reported (the payload already carries the field `band_break_caveat`, `null`
   everywhere observed — this clause is what should populate it).
 - **pinned instance** `art_2026-10-14T16:44:09_SKM_equity_research_2e8161`: cross-check
-  **−2.97 … −1.23** against a $34.42 price; `…16:38:42_HMY_…` 1.22 … 3.74 against $16.71.
+  **−2.97 … −1.23** against a $34.42 price, `sample_count` 948. Measured catch list = SKM only:
+  HMY's `1.22 … 3.74` against $16.71 (and NFLX/UTHR/THC's bands) are positive, monotone and
+  fully sampled, so `C9` does not fire on them — they are `C8` instances. `C9` is the *usability*
+  rule; proximity to the tape is `C8`'s business.
 
 ### 4.3 `C10` — conclusion ratios: same-source operands, and a numerator must exist
 - **severity** `H`, **claim scope** (withhold the ratio leaves; promote the `FinancialData`
@@ -355,6 +361,17 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
    whole store *before* the clause is wired into the live gate — a clause that flags 40% of the
    back catalogue is over-broad and gets re-calibrated first. The scanner is read-only by
    construction; use it as the promotion gate.
+
+   **Measured 2026-10-14** (read-only, 97 `equity_research` artifacts; 44 carry `cross_checks`,
+   23 BUY/SELL artifacts carry none at all and are out of `C8`'s scope by construction):
+
+   | Clause | Catch list | Note |
+   |---|---|---|
+   | `C8` | **8** — HMY ×3, NFLX, SKM, THC ×2, UTHR | the exact list §1.1 names; each carries exactly one cross-check entry |
+   | `C8` with a "≥2 must agree" guard | **0** | the guard is why §4.1 keeps the veto-only rule |
+   | `C9` | **1** — SKM (`low ≤ 0`) | HMY's band is positive/monotone/948 samples → `C8`, not `C9` |
+
+   The numbers are the clause's justification and go into its docstring (§7.5).
 2. **Golden fixtures.** The pinned instances (§1.1) plus the GMED pair become fixtures in
    `tests/artifact/`, stored as payloads, not as hand-built objects — so a clause is tested
    against the artifact that produced the defect, including the `99cdca` ordering case.
