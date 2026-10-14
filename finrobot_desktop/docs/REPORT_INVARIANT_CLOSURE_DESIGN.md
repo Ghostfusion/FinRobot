@@ -214,7 +214,9 @@ exact payload paths (verified against stored artifacts, not guessed). IDs `C8+` 
 ### 4.3 `C10` — conclusion ratios: same-source operands, and a numerator must exist
 - **severity** `H`, **claim scope** (withhold the ratio leaves; promote the `FinancialData`
   finding to `blocked_field`). Count-thresholded per §9.2 (`error_if` for a published ratio,
-  `warn_if` for a display-only field). Locked.
+  `warn_if` for a display-only field). Locked. **Staged:** the predicates are staged `S`/annotate
+  until §9.2's count fields exist — the locked shape is the threshold, not a per-artifact veto, and
+  a `C10a` veto armed alone would withhold the target on 69% of the catalogue (§7.1).
 - **reads** `inputs.raw_data.income.{gross_margin, operating_margin, operating_income, revenue, ebitda, net_income, nci_earnings}`,
   the same leaves inside `inputs.raw_data.data_authority.decisions[].{metric, selected_source, status, period_end, comparability}`,
   `inputs.raw_data.balance.noncontrolling_interest`, `inputs.raw_data.valuation.{ev_ebitda, ev_ebitda_reported}`.
@@ -258,7 +260,8 @@ exact payload paths (verified against stored artifacts, not guessed). IDs `C8+` 
 ### 4.5 `C12` — recency and window closure
 - **severity** two-threshold (§9.7, locked): `error_if` when the stale or undated item carried a
   published number, `warn_if` when it only populated a catalogue (remediation: exclude +
-  disclose).
+  disclose). **Staged:** `S`/annotate — the `warn_if` floor — until §9.2's fields exist; the
+  `error_if` half is what withholds, and it is not expressible today (§7.1).
 - **reads** `outputs.structured.historical_metrics.*` against
   `outputs.structured.financial_modeling.inputs.ttm_period_end` and
   `inputs.raw_data.market.quote_as_of`; `outputs.structured.thesis.catalysts[]` and the raw
@@ -279,13 +282,20 @@ exact payload paths (verified against stored artifacts, not guessed). IDs `C8+` 
 - **predicate** `market_cap` must not equal `shares × price` unless labelled as a derived
   fallback; a Monte Carlo whose `centered_on` is the same base case it validates must publish
   `independent: false` (it does — keep it a gate). **Measured:** the tautology holds for
-  **97 of 97** artifacts, so this clause cannot be a per-artifact finding — it is a rule about
+  **104 of 104** artifacts, so this clause cannot be a per-artifact finding — it is a rule about
   the `basis`/`independent` labels, and a `C13a` that flags every artifact is the over-broad case
-  §7.1 exists to catch.
+  §7.1 exists to catch. `C13b` is likewise **preventive**: 48 artifacts declare
+  `independent: false` (compliant) and the 44 that declare neither field are pre-fix, so the
+  strict predicate has never fired. The broader "declares nothing" form measures 42% of the
+  catalogue and is the over-broad case again (§7.1).
 - **pinned instance** instance A: 21,491,326,290 ÷ 266.91 = 80,519,000.6 = the published count.
 
 ### 4.7 `C14` — prose grounding on direction, not just on digits
-- **severity** `H`, claim scope (delete the clause, never rewrite it).
+- **severity** `H`, claim scope (delete the clause, never rewrite it). **Staged:** `S`/annotate —
+  the locked remediation has no implementation in the persist gate. `enforce_artifact_contract`
+  withholds VALUES (`_scrub_headline_slots`) and stamps the narrative; it cannot delete a sentence
+  from `thesis.narrative`. Arming `C14` as `H` today would withhold the TARGET for a prose defect,
+  which is not the locked remediation (§7.1).
 - **reads** `outputs.structured.thesis.{narrative, catalysts[], risks[], price_target_basis}`,
   `outputs.llm_narrative.*`, `outputs.summary_text` against
   `outputs.structured.ownership_governance.{insider_net_flow, insider_buy_value, insider_sell_value}`
@@ -406,16 +416,17 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
    | `C9` | **1** (SKM) | — | HMY's band is positive/monotone/948 samples → `C8`, not `C9` |
    | `C10a` ratio with a null numerator | **72** / 25 tickers | 10-10T21:58 … **10-14T16:44** | **historical**: `yfinance_provider.py:1110` already withholds the margin; every artifact from 19:18 on carries both operands |
    | `C10c` DQC_0004 identity | **73** / 24 tickers | 10-10T21:45 … **10-14T19:59** | `Assets`/`Liabilities`/`StockholdersEquity` present with `_equity_identity` **absent** — the identity is computed on one path only |
-   | `C10d` caliber-divergent accepted | **33** artifacts / 96 decisions / 18 tickers | 10-13T22:53 … **20:37:52** | **live**: decisions accepted while `comparability = "caliber_divergent"`, several whose `basis` text names a provider other than `selected_source` |
+   | `C10d` caliber-divergent accepted | **35** artifacts / 102 decisions / 18 tickers | 10-13T22:53 … **21:12:35** | **live**: decisions accepted while `comparability = "caliber_divergent"`, several whose `basis` text names a provider other than `selected_source`; one finding per artifact, with the row count in the evidence |
    | `C10b` cross-provider operands | **0** | — | one `selected_source` per artifact (34 yfinance, 4 eodhd); no ratio pair crosses sources today |
    | `C11` mirrored slots | **65 / 105** (63 of 98 equity) | all | one writer omits the slot, the other writes `false`; representational, never verdict-changing — but 62% of the store, so it must not be promoted as `H` before the writers are unified (§4.4) |
-   | `C12a` 8-K in the window | **9** / 5 tickers | 10-14T06:21 … **20:37:52** | **live**, and already *disclosed* as a warning string in two shapes; `C12` turns the disclosure into a gate |
-   | `C12b` `news_window.count = 0` | **14** / 8 tickers | 10-14T00:23 … **20:37:52** | **live** — the empty feed is not THC-specific |
-   | `C13a` `market_cap = shares × price` | **97 / 97** | all | universal, so it cannot be a per-artifact finding — only a rule about the `basis` label |
-   | `C13b` self-centred Monte Carlo | **47** / 20 tickers | 10-13T20:18 … **20:37:52** | **live**: `centered_on: "base-case DCF assumptions"` with `independent: false` (44 more leave both null) |
+   | `C12a` 8-K in the window | **10** / 5 tickers | 10-14T06:21 … **21:12:35** | **live**, and already *disclosed* as a warning string in two shapes; `C12` turns the disclosure into a gate |
+   | `C12b` `news_window.count = 0` | **14** / 8 tickers | 10-14T00:23 … **20:37:52** | **live** — the empty feed is not THC-specific; the artifact still publishes `overall_sentiment` and key catalysts over it |
+   | `C12c` stale fact published | **15** / 6 tickers | 10-13T20:18 … **16:31** | **live**: a fact the producer's own guard annotated (`stale: latest reported period is X, this fact is Y`) still ships in the current-fundamentals snapshot (EHC `OperatingIncomeLoss` frozen at 2022-12-31). The clause reads the annotation and holds no year band; the 9 artifacts whose oldest fact reaches back to 2009–2011 carry **no** annotation, which is the discrimination the producer's one-year rule already makes |
+   | `C13a` `market_cap = shares × price` | **104 / 104** | all | universal, so it cannot be a per-artifact finding — only a rule about the `basis` label |
+   | `C13b` self-centred Monte Carlo | **0** (48 declare `independent: false`) | — | the declaration is compliant wherever it exists and the strict predicate has never fired, so this is **preventive**. The 48-vs-44 split is the *declaration rate* — the 44 are pre-fix artifacts, span ending 10-13T18:39, carrying neither field — **not** a catch list. §4.6's "must publish `independent: false`" is what makes it a gate; the broader "declares nothing" form would flag 42% and is the over-broad case |
    | `C13c` `agreement_is_independent: false` | **0** | — | the flag has never been false; `C13`'s corroboration count is what gives it a consumer |
    | `C14` core, direction vs sign | **0** | — | no direction word contradicts its leaf — the shipped fix holds |
-   | `C14` unresolved placeholder | **33** / 19 tickers | 10-12T16:46 … **10-14T19:59** | prose still carries `[target withheld]` (AFRM: *"insiders were net sellers of [target withheld]"*) — the GMED class, still live |
+   | `C14` unresolved placeholder | **10** / 10 tickers | 10-14T00:16 … **19:59** | **live** (AFRM, ALL, AMZN, DVN, FOXA, GMED, NFLX, PGR, THC, UTHR): the prose carries `[target withheld]` where an **insider-flow amount** belongs — the scrubber took a figure the report publishes elsewhere (GMED *"[target withheld] of open-market purchases"* for a `$0` datum). The coarse "token anywhere in §4.7's prose" form measures **27** / 19 tickers and is rejected as over-broad by false positive: it fires on the legitimate withheld-path disclaimer (*"We initiate X at BUY on a directional read, not a point estimate"*), which is the producer's own honest copy |
 
    Two calibration consequences the table forces, beyond §4.1/§4.2:
    `C13a` **cannot** be a per-artifact finding (97/97 — it would flag the whole catalogue, which
@@ -426,6 +437,26 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
    the probe tested `a != b` behind an `is not None` guard, and the whole divergence is
    `null`-vs-`false`. That mistake is the argument for §7.2's "fixtures as payloads": a
    hand-written fixture would have carried the same guard, and a real payload does not.
+
+   **Re-measured 2026-10-14 late, over 105 artifacts, against the clauses as implemented**
+   (`scripts/scan_artifact_contract.py --proposed`): `C6b` 27, `C8` 7, `C9` 1, `C10a` 72,
+   `C10b` 0, `C10c` 73, `C10d` 35 artifacts (102 accepted rows), `C11` 65, `C12a` 10, `C12b` 14,
+   `C12c` 15, `C13b` 0, `C13c` 0, `C14a` 0, `C14b` 10 — **329 flags**. The scanner reproduces every
+   probed number, which is what makes it the promotion instrument rather than a second opinion. Four
+   rows above moved with the re-measurement (the store grew) and two of them changed *reading*:
+   `C13b`'s 47 was a declaration rate, not a catch list, and `C14`'s placeholder had been tabulated
+   in occurrences rather than artifacts (68 over 27, against the 10 the clause reports).
+
+   **Staged severity, and why three families are not armed at §9's locked severity.** `C8`/`C9`/`C11`
+   are staged at the severity §9 locks for them. `C10`/`C12`/`C14` are staged `S`/annotate although
+   §9 locks them `H`, because their locked shape is not a per-artifact veto: `C10` and `C12` are
+   **count-thresholded** (`error_if` when the offending figure was *published*, `warn_if` when it only
+   populated a catalogue or a display field) and `C14`'s locked remediation is "delete the sentence,
+   never rewrite it" — which `enforce_artifact_contract` cannot perform, since it withholds VALUES and
+   stamps the narrative rather than editing prose. Those mechanisms arrive with
+   `ContractClause.warn_if`/`error_if` (§9.2). Arming `H` first would withhold a headline for a defect
+   whose locked remediation is not a withhold — a `C10a` veto would have taken the target off the
+   69% of the catalogue that trips it, and `C13b`'s broader form would have taken it off 42%.
 
    The corpus also re-confirms §1's table at HEAD: **170** `review` findings, **0**
    `blocked_field`, `withhold_valuation` never true, `withheld_reason` = `contract_C7` ×31 / null
