@@ -63,6 +63,11 @@ from finrobot.engine.models.valuation_thresholds import (
     METHOD_CORROBORATION_SPAN_K,
     SINGLE_METHOD_DIVERGENCE_RATIO_K,
 )
+from finrobot.engine.models.withhold_reason import (
+    WithholdReason,
+    as_withhold_reason,
+    withhold_reason,
+)
 
 if TYPE_CHECKING:
     from finrobot.artifact.models import Artifact
@@ -106,6 +111,11 @@ class ContractClause:
     #: Deliberately terse: the spec is design §4, and a second full copy here would
     #: be a second truth to keep in sync.
     doc: str = ""
+    #: The withhold reason this clause files when it FIRES (design §9.6). Declared here, beside
+    #: the title, so the vocabulary has one home and a code is never spelled at a call site; the
+    #: string must exist in ``WITHHOLD_CODES`` (a test asserts that for every H clause, since only
+    #: H clauses withhold a value). Empty for an annotating clause: it withholds nothing.
+    reason_code: str = ""
     #: Count thresholds (design §9.2, dbt's ``severity: error|warn`` +
     #: ``error_if``/``warn_if`` shape): a clause can be over-broad while it is
     #: calibrated, so it should be able to ANNOTATE up to some number of offending
@@ -1489,6 +1499,7 @@ CONTRACT_CLAUSES: list[ContractClause] = [
         check=_clause_c1_upside_band,
         title="Headline upside band",
         doc="target/entry must sit inside the calibrated divergence band.",
+        reason_code="TARGET_OUT_OF_BAND",
     ),
     ContractClause(
         id="C1b",
@@ -1496,6 +1507,7 @@ CONTRACT_CLAUSES: list[ContractClause] = [
         check=_clause_c1b_method_span,
         title="Method-vs-method corroboration span",
         doc="the method disagreement must sit inside the span C1 is structurally blind to.",
+        reason_code="METHODS_DIVERGENT",
     ),
     ContractClause(
         id="C2",
@@ -1503,6 +1515,7 @@ CONTRACT_CLAUSES: list[ContractClause] = [
         check=_clause_c2_double_decimal,
         title="Double-decimal malformation",
         doc="a $-anchored amount may not carry two decimal points.",
+        reason_code="MALFORMED_AMOUNT",
     ),
     ContractClause(
         id="C3",
@@ -1510,6 +1523,7 @@ CONTRACT_CLAUSES: list[ContractClause] = [
         check=_clause_c3_basis_matches_headline,
         title="Basis conclusion matches the headline",
         doc="a cue-anchored conclusion amount must equal the published headline target.",
+        reason_code="BASIS_CONTRADICTS_HEADLINE",
     ),
     ContractClause(
         id="C4",
@@ -1517,6 +1531,7 @@ CONTRACT_CLAUSES: list[ContractClause] = [
         check=_clause_c4_currency_caliber,
         title="Currency and unit caliber",
         doc="a per-share headline requires a complete currency caliber.",
+        reason_code="CALIBER_MISMATCH",
     ),
     ContractClause(
         id="C6",
@@ -1532,6 +1547,7 @@ CONTRACT_CLAUSES: list[ContractClause] = [
         surface=False,
         title="Withheld target must not resurrect",
         doc="a withheld target may not survive in any fallback slot.",
+        reason_code="HEADLINE_SLOT_RESURRECTED",
     ),
     # ── §4 closure family, promoted 2026-10-14 (§7.1) ────────────────────────
     ContractClause(
@@ -1546,6 +1562,7 @@ CONTRACT_CLAUSES: list[ContractClause] = [
         severity="H",
         check=_clause_c8_verdict_vs_cross_checks,
         title="Verdict vs published cross-checks",
+        reason_code="VERDICT_VS_CROSS_CHECKS",
         doc="a directional verdict may not contradict the report's own published cross-checks.",
     ),
     ContractClause(
@@ -1588,6 +1605,7 @@ CONTRACT_CLAUSES: list[ContractClause] = [
         severity="H",
         check=_clause_c11_mirrored_withheld_slot,
         title="One quantity, one definition",
+        reason_code="SPLIT_WRITER_CONVENTION",
         doc="the two valuation_withheld writers must use ONE convention.",
     ),
     ContractClause(
@@ -1689,6 +1707,23 @@ def _scrub_headline_slots(structured: dict[str, Any]) -> None:
             parent["implied_price"] = None
 
 
+#: C7's code, and the one thing the contract can file that is a CONSEQUENCE rather than a cause:
+#: the scrub nulls a headline slot that survived a withhold. A reason record that names only this
+#: is the lossiness §9.6 measured, so it is never promoted over a real cause (see `_withhold`).
+_SCRUB_REASON_CODE = "HEADLINE_SLOT_RESURRECTED"
+
+
+def _preserve_reason(existing: Any, metadata: dict[str, str]) -> "WithholdReason | None":
+    """The upstream cause, with this gate's act merged into its metadata.
+
+    ``None`` when no producer upstream named a cause (or the stored shape is unreadable, which is
+    a payload problem the gate must not turn into a missing reason)."""
+    record = as_withhold_reason(existing)
+    if record is None:
+        return None
+    return record.model_copy(update={"metadata": {**record.metadata, **metadata}})
+
+
 def _withhold(artifact: "Artifact", violations: list[tuple[ContractClause, Finding]]) -> None:
     """Degrade exactly as the numeric-audit gate does (builders.py): null the
     headline TARGET so it cannot resurrect, set valuation_withheld, and record
@@ -1712,7 +1747,28 @@ def _withhold(artifact: "Artifact", violations: list[tuple[ContractClause, Findi
     synthesis_block = structured.get("valuation_synthesis")
     if isinstance(synthesis_block, dict):
         synthesis_block["valuation_withheld"] = True
-    structured["withheld_reason"] = "contract_" + "+".join(ids)
+
+    # WHY the target is gone, structured (design §9.6). This gate is the LAST writer at the
+    # persist boundary, and writing the reason slot unconditionally is exactly what the store
+    # measured: 38 of its 43 withheld artifacts read `contract_C7` — the no-resurrection SCRUB,
+    # an internal invariant — and named no cause a reader could act on. So an upstream cause (the
+    # dial's, the numeric audit's) STANDS, with this gate's own act recorded beside it; only when
+    # nothing upstream spoke does a firing clause's code become the cause, and it is the first one
+    # in registry order — the registry's order IS the priority.
+    metadata = {"clause_ids": "+".join(ids)}
+    structured["withhold_reason"] = _preserve_reason(
+        structured.get("withhold_reason"), metadata
+    ) or withhold_reason(
+        next(
+            (
+                clause.reason_code
+                for clause, _ in violations
+                if clause.reason_code and clause.reason_code != _SCRUB_REASON_CODE
+            ),
+            _SCRUB_REASON_CODE,
+        ),
+        metadata=metadata,
+    )
 
     # The point-target conclusion is the tagline (a ≤60-char headline call that
     # often quotes the number) — neutralise it since the target is withheld. The

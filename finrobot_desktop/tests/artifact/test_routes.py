@@ -243,6 +243,25 @@ class TestAuditBadge:
         assert data["shipped_withheld"] is True
         assert data["shipped_withheld_reason"] == "contract_C7"
 
+    def test_reports_the_structured_reason_code_of_a_new_payload(
+        self, client: TestClient, store: ArtifactStore
+    ) -> None:
+        """§9.6's shape: the record's own reason is a code, and the badge states it as one. The
+        legacy string (`test_reports_the_records_own_withheld_state_beside_the_reading`) still
+        reads, because the archive keeps its shape."""
+        art = self._stored(
+            store,
+            valuation_withheld=True,
+            withhold_reason={
+                "reason_code": "TARGET_OUT_OF_BAND",
+                "domain": "contract",
+                "metadata": {"clause_ids": "C1"},
+            },
+        )
+        data = client.get(f"/api/artifacts/{art.id}/audit-badge").json()
+        assert data["shipped_withheld"] is True
+        assert data["shipped_withheld_reason"] == "TARGET_OUT_OF_BAND"
+
     def test_404_for_missing_artifact(self, client: TestClient) -> None:
         resp = client.get("/api/artifacts/nonexistent_id/audit-badge")
         assert resp.status_code == 404

@@ -58,6 +58,7 @@ from finrobot.engine.compute.operators.report_drift import (
     redaction_warning,
 )
 from finrobot.engine.models.claim_status import CLAIM_STATUS_DEFINITION_VERSION
+from finrobot.engine.models.withhold_reason import as_withhold_reason, withhold_reason
 from finrobot.engine.models.reconcile_tolerances import (
     NARRATIVE_APPROXIMATION_BAND,
     NARRATIVE_DRIFT_TOLERANCE,
@@ -376,7 +377,7 @@ def _attach_numeric_audit(
             rich_withhold(structured_out)
         elif withhold_keys:
             structured_out["valuation_withheld"] = True
-            structured_out["withheld_reason"] = "numeric_audit_blocked_field"
+            structured_out["withhold_reason"] = withhold_reason("NUMERIC_AUDIT_BLOCKED_FIELD")
             for key in withhold_keys:
                 if key in structured_out:
                     structured_out[key] = None
@@ -477,6 +478,29 @@ def _data_capability_warnings(deps: Any) -> list[str]:
     ]
 
 
+def _withhold_cause(structured: dict[str, Any]) -> tuple[str, str]:
+    """``(domain, clause_ids)`` for a withheld artifact — who took the point target, and why.
+
+    Reads the structured reason (design §9.6) when the payload has one, and the pre-2026-10-14
+    string when it does not: the archive keeps its shape, so a stored artifact written before the
+    vocabulary must still read as the same fact rather than as "no reason". An unrecognised or
+    absent reason returns ``("", "")`` and the caller attributes it to the synthesis, which is
+    where every other withhold comes from.
+    """
+    record = as_withhold_reason(structured.get("withhold_reason"))
+    if record is not None:
+        return record.domain, record.metadata.get("clause_ids", "")
+    legacy = structured.get("withheld_reason")
+    if isinstance(legacy, str):
+        if legacy == "numeric_audit_blocked_field":
+            return "audit", ""
+        if legacy.startswith("contract_"):
+            return "contract", legacy.removeprefix("contract_")
+        if legacy == "valuation_synthesis_dial":
+            return "valuation", ""
+    return "", ""
+
+
 def _withhold_summary_note(structured_out: dict[str, Any], lang: str) -> str:
     """One correctly-ATTRIBUTED sentence for a withheld/fairly-valued summary.
 
@@ -489,7 +513,7 @@ def _withhold_summary_note(structured_out: dict[str, Any], lang: str) -> str:
     keeps the "numeric audit" wording."""
     thesis = structured_out.get("thesis")
     basis = str((thesis or {}).get("price_target_basis") or "") if isinstance(thesis, dict) else ""
-    reason = structured_out.get("withheld_reason")
+    domain, clause_ids = _withhold_cause(structured_out)
     if basis.upper().startswith("FAIRLY VALUED"):
         if lang == "zh":
             return "估值合理：现价落在公允价值区间内,故不钉单一目标价;方向性裁决与区间照常给出。"
@@ -497,12 +521,12 @@ def _withhold_summary_note(structured_out: dict[str, Any], lang: str) -> str:
             "Fairly valued — price sits within the fair-value range, so no single point "
             "target is stamped; the directional verdict and range still ship."
         )
-    if reason == "numeric_audit_blocked_field":
+    if domain == "audit":
         if lang == "zh":
             return "估值已被数字审计闸门隐藏;请查看 numeric_audit 与 warnings。"
         return "Valuation withheld by numeric audit; see numeric_audit and warnings."
-    if isinstance(reason, str) and reason.startswith("contract_"):
-        gate = reason.replace("contract_", "contract ", 1)
+    if domain == "contract":
+        gate = f"contract {clause_ids}" if clause_ids else "the contract gate"
         if lang == "zh":
             return f"点目标价已由 {gate} 估值闸门撤回;方向性裁决与区间照常给出。"
         return (
@@ -1434,7 +1458,7 @@ def build_equity_research_artifact(
         # (绝不编数字). The directional recommendation is PRESERVED — it reads from
         # the market-implied direction, not the corrupt figure. No "REVIEW" verdict.
         structured["valuation_withheld"] = True
-        structured["withheld_reason"] = "numeric_audit_blocked_field"
+        structured["withhold_reason"] = withhold_reason("NUMERIC_AUDIT_BLOCKED_FIELD")
         thesis_out = structured.get("thesis")
         if isinstance(thesis_out, dict):
             thesis_out["price_target"] = None
@@ -1499,7 +1523,9 @@ def build_equity_research_artifact(
         structured_out["valuation_withheld"] = withheld
         vs_struct["valuation_withheld"] = withheld
         if withheld:
-            structured_out.setdefault("withheld_reason", "valuation_synthesis_dial")
+            # setdefault, not assignment: whoever withheld FIRST owns the cause (design §9.6 —
+            # the last writer holding the only slot is what the store measured 38 times).
+            structured_out.setdefault("withhold_reason", withhold_reason("VALUATION_DIAL_WITHHELD"))
 
     # data_collection is ALSO an LLM free-text narrative (the data agent's
     # prose summary) and format_summary() puts it FIRST — the artifact's

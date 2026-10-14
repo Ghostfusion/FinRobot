@@ -42,6 +42,16 @@ UTC = timezone.utc
 CREATED = datetime(2026, 6, 8, tzinfo=UTC)
 
 
+def _withhold_cause(structured: dict) -> tuple[str, str]:
+    """``(reason_code, clause_ids)`` from the structured reason (design §9.6).
+
+    The record is what a withheld artifact now carries; a test that reads a string key would be
+    re-pinning the shape the vocabulary replaced, and would also miss the distinction the whole
+    migration exists for — the CAUSE versus the clauses that also fired."""
+    record = structured["withhold_reason"]
+    return record.reason_code, record.metadata.get("clause_ids", "")
+
+
 def _artifact(
     *,
     raw_data: dict | None = None,
@@ -134,7 +144,7 @@ def test_c1_withholds_single_method_target_out_of_band() -> None:
     # Value-withhold, NOT a refuse-to-rate: the directional verdict is preserved.
     assert structured["thesis"]["recommendation"] == "BUY"
     assert structured["valuation_withheld"] is True
-    assert structured["withheld_reason"] == "contract_C1"
+    assert _withhold_cause(structured) == ("TARGET_OUT_OF_BAND", "C1")
     assert extract_target_price(art) is None  # C7 invariant: truly gone
     assert any(w.startswith("[CONTRACT/C1]") for w in _warnings(art))
 
@@ -228,7 +238,7 @@ def test_c2_catches_double_decimal_in_thesis_prose() -> None:
     )
     out = enforce_artifact_contract(art)
     assert out.outputs.structured["valuation_withheld"] is True
-    assert out.outputs.structured["withheld_reason"] == "contract_C2"
+    assert _withhold_cause(out.outputs.structured) == ("MALFORMED_AMOUNT", "C2")
     assert any(w.startswith("[CONTRACT/C2]") for w in _warnings(out))
     assert "$2172.062.06" in " ".join(_warnings(out))
 
@@ -404,7 +414,7 @@ def test_c7_nulls_resurrected_financial_modeling_implied_price_on_withheld_targe
     out = enforce_artifact_contract(art)
     assert out.outputs.structured["financial_modeling"]["implied_price"] is None
     assert out.outputs.structured["valuation_withheld"] is True
-    assert out.outputs.structured["withheld_reason"] == "contract_C7"
+    assert _withhold_cause(out.outputs.structured) == ("HEADLINE_SLOT_RESURRECTED", "C7")
     # The directional verdict is preserved un-scrubbed.
     assert out.outputs.structured["thesis"]["recommendation"] == "SELL"
     assert any(w.startswith("[CONTRACT/C7/internal]") for w in _warnings(out))
@@ -579,7 +589,7 @@ def test_c1b_withholds_when_methods_span_above_corroboration_limit() -> None:
     assert out.outputs.structured["thesis"]["price_target"] is None
     assert out.outputs.structured["thesis"]["recommendation"] == "SELL"  # verdict kept
     assert out.outputs.structured["valuation_withheld"] is True
-    assert "C1b" in out.outputs.structured["withheld_reason"]
+    assert _withhold_cause(out.outputs.structured) == ("METHODS_DIVERGENT", "C1b")
     assert any(w.startswith("[CONTRACT/C1b]") for w in _warnings(out))
 
 
@@ -1005,6 +1015,79 @@ def test_count_thresholds_are_declared_inert() -> None:
         assert clause.error_if is None
 
 
+def test_every_withholding_clause_declares_a_declared_reason_code() -> None:
+    """§9.6's vocabulary has one home — the clause declarations — and this is the guard that keeps
+    it there. An H clause that withholds without a code would leave the gate nothing to file but
+    the scrub's code, which is precisely the lossiness the migration ends (38 stored artifacts read
+    ``contract_C7`` and named no cause)."""
+    from finrobot.engine.models.withhold_reason import WITHHOLD_CODES
+
+    h_clauses = [c for c in CONTRACT_CLAUSES if c.severity == "H"]
+    assert h_clauses
+    codes: list[str] = []
+    for clause in h_clauses:
+        assert clause.reason_code, f"{clause.id} withholds but declares no reason_code"
+        assert clause.reason_code in WITHHOLD_CODES, clause.reason_code
+        assert WITHHOLD_CODES[clause.reason_code] == "contract"
+        codes.append(clause.reason_code)
+    assert len(set(codes)) == len(codes), "two clauses claim the same cause"
+    # A clause that only annotates withholds no value, so it files no reason.
+    assert all(not c.reason_code for c in CONTRACT_CLAUSES if c.severity == "S")
+
+
+def test_an_upstream_cause_survives_a_contract_withhold() -> None:
+    """THE 38, IN ONE TEST. This gate is the LAST writer at the persist boundary, and writing the
+    reason slot unconditionally is what left 38 stored artifacts reading ``contract_C7`` with no
+    cause a reader could act on. An upstream cause stands, and the gate records its own act —
+    which clauses fired — in the metadata beside it instead of replacing it."""
+    art = _artifact(
+        raw_data={"market": {"current_price": 100.0}},
+        structured={
+            "thesis": {
+                "price_target": 130.0,
+                "recommendation": "BUY",
+                "price_target_basis": "DCF implies $2172.062.06 per share",  # trips C2
+            },
+            # The audit got there first. A stored payload holds this as a dict; a producer holds
+            # the model — this covers the dict, the badge test covers the string.
+            "withhold_reason": {
+                "reason_code": "NUMERIC_AUDIT_BLOCKED_FIELD",
+                "domain": "audit",
+                "metadata": {"refused_source": "yfinance"},
+            },
+        },
+    )
+
+    out = enforce_artifact_contract(art)
+    record = out.outputs.structured["withhold_reason"]
+
+    assert record.reason_code == "NUMERIC_AUDIT_BLOCKED_FIELD"  # the CAUSE is untouched
+    assert record.domain == "audit"
+    assert record.metadata["refused_source"] == "yfinance"  # its own metadata survives
+    assert record.metadata["clause_ids"] == "C2"  # the gate's act, recorded beside it
+
+
+def test_a_clause_cause_is_named_when_nothing_upstream_spoke() -> None:
+    """With no upstream producer, the firing clause's own code IS the cause — and it is the first
+    one in registry order, because the registry's order is the priority."""
+    art = _artifact(
+        raw_data={"market": {"current_price": 100.0}},
+        structured={
+            "thesis": {
+                "price_target": 1300.0,  # 13x the tape: C1 fires
+                "recommendation": "BUY",
+                "price_target_basis": "DCF implies $2172.062.06 per share",  # C2 fires too
+            },
+        },
+    )
+
+    out = enforce_artifact_contract(art)
+    record = out.outputs.structured["withhold_reason"]
+
+    assert record.reason_code == "TARGET_OUT_OF_BAND"  # C1 outranks C2 in the registry
+    assert record.metadata["clause_ids"] == "C1+C2"
+
+
 def test_the_closure_family_runs_in_the_live_registry() -> None:
     """THE PROMOTION PROOF. ``C8``/``C11`` withhold (H) because their locked
     remediation IS a value-withhold; the other thirteen annotate (S) because their
@@ -1044,7 +1127,7 @@ def test_closure_hard_violation_withholds_at_the_persist_boundary() -> None:
     out = enforce_artifact_contract(art)
     structured = out.outputs.structured
     assert structured["valuation_withheld"] is True
-    assert structured["withheld_reason"] == "contract_C11"
+    assert _withhold_cause(structured) == ("SPLIT_WRITER_CONVENTION", "C11")
     assert any(w.startswith("[CONTRACT/C11] ") for w in out.outputs.warnings)
 
 

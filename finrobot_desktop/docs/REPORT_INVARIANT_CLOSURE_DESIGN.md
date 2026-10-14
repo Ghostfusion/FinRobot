@@ -966,7 +966,33 @@ Phase 1 (§7); the archive treatment in §9.3 is the only part that is not a cod
   `valuation_synthesis_dial` once) plus `contract._withhold`; readers are `builders.py`'s own
   reason read, the badge's `shipped_withheld_reason`, and the report parser's `[CONTRACT/Cn]`
   evidence (the cover reads the evidence, not the raw string); ~8 tests pin the string today.
-- **What changes.** `withheld_reason: str` becomes
+- **Shipped 2026-10-14 — the vocabulary, the split, and the overwrite that caused the lossiness.**
+  The structure is in and the measurement above is now a regression test:
+  - `engine/models/withhold_reason.py` holds `WithholdReason` (`reason_code`, `domain`,
+    `metadata`, `help_url`) and **the enumerated vocabulary** — one dict, `WITHHOLD_CODES`, where
+    every code is declared once with its domain. Three rules are tests, not intentions: the code
+    shape §9.6 fixes (`[A-Z][A-Z0-9_]+[A-Z0-9]`, ≤63), one `(reason_code, domain)` pair per cause,
+    and dynamic numbers in `metadata`. `withhold_reason()` is the only constructor and it refuses
+    a code that is not declared — a code spelled at a call site is how one cause gets two names.
+  - **The cause is now preserved rather than overwritten.** Each H clause declares its own code
+    beside its title (`C1` `TARGET_OUT_OF_BAND`, `C1b` `METHODS_DIVERGENT`, `C2` `MALFORMED_AMOUNT`,
+    `C3` `BASIS_CONTRADICTS_HEADLINE`, `C4` `CALIBER_MISMATCH`, `C7`
+    `HEADLINE_SLOT_RESURRECTED`, `C8` `VERDICT_VS_CROSS_CHECKS`, `C11`
+    `SPLIT_WRITER_CONVENTION`), and a test asserts every H clause declares one and that no two
+    claim the same cause. When an upstream producer already named the cause (the dial, the audit),
+    the gate KEEPS it and records its own act — the clause ids — in `metadata`; only when nothing
+    upstream spoke does a firing clause's code become the cause, and it is the first in registry
+    order.
+  - **One reader for both shapes.** A producer writes the model into the in-memory payload, pydantic
+    serialises it on save, and a stored payload therefore reads back as a dict — so
+    `as_withhold_reason()` accepts both. Skipping that is how the lossiness would have returned a
+    second time, through a type instead of an overwrite: the first pass of this change did exactly
+    that, and the audit-gate tests caught it.
+  - The pre-2026-10-14 `withheld_reason` STRING is no longer written; it is still read, because the
+    archive keeps its shape (§9.3). The `domain` set adds `valuation` for the dial: §9.6 names
+    three domains as the grouping rule, and the dial withholds a point target without any clause
+    firing, so filing it under a gate it never ran would be the same lossiness in miniature.
+- **The shape, and what it replaces.** `withheld_reason: str` is
   `{reason_code, domain, metadata, help_url}`. `contract_C7` splits into at least two causes —
   the resurrection scrub and the out-of-band target — because one pair for two logically
   different errors is exactly the lossiness measured in §6, and AIP-193 forbids it. The

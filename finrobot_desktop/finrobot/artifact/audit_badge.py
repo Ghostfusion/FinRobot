@@ -29,11 +29,12 @@ they still gate the record.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
 from finrobot.artifact.contract import CONTRACT_CLAUSES
+from finrobot.engine.models.withhold_reason import as_withhold_reason
 
 if TYPE_CHECKING:
     from finrobot.artifact.models import Artifact
@@ -71,6 +72,20 @@ class AuditBadge(BaseModel):
     )
 
 
+def _shipped_reason(structured: dict[str, Any]) -> str | None:
+    """The record's own reason code (design §9.6), or the pre-2026-10-14 string.
+
+    Two shapes, one fact: the vocabulary shipped with the structured record, and every artifact
+    written before it carries the string — which the archive keeps (§9.3), so a reader must be
+    able to state the old one too rather than reporting "no reason given".
+    """
+    record = as_withhold_reason(structured.get("withhold_reason"))
+    if record is not None:
+        return record.reason_code
+    legacy = structured.get("withheld_reason")
+    return legacy if isinstance(legacy, str) else None
+
+
 def derive_audit_badge(artifact: Artifact) -> AuditBadge:
     """Re-read ``artifact`` under ``CONTRACT_CLAUSES``. Pure; never mutates."""
     would_withhold: list[AuditBadgeEntry] = []
@@ -88,7 +103,7 @@ def derive_audit_badge(artifact: Artifact) -> AuditBadge:
             would_annotate.append(entry)
 
     structured = artifact.outputs.structured
-    reason = structured.get("withheld_reason")
+    reason = _shipped_reason(structured)
     return AuditBadge(
         would_withhold=would_withhold,
         would_annotate=would_annotate,
