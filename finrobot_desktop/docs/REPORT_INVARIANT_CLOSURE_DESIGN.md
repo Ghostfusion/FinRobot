@@ -242,20 +242,36 @@ exact payload paths (verified against stored artifacts, not guessed). IDs `C8+` 
   takes. The duplicate is then removed in favour of a single writer.
 - **pinned instance** the two `shares_outstanding` slots in every THC artifact; the two
   `valuation_withheld` slots; the +174% the frontend computed from a withheld point.
-- **measured catch list** — **65 of 105** artifacts (63 of the 98 equity ones; the scanner covers
-  every type). Always the same shape: `outputs.structured` **omits** `valuation_withheld` while
-  `valuation_synthesis` writes `false`. 32 artifacts agree (both write `true`) and 3 agree
-  (neither writes). Two writers, two conventions for one quantity — the *Duplication* class
-  exactly, and it is why the clause is not preventive. The divergence never changed a verdict
-  (both readings mean "not withheld"), which is precisely what made it invisible.
-  `financial_modeling.assumptions` is `null` in every artifact, so the third slot an earlier
-  draft named does not exist.
-- **promotion order is load-bearing.** 62% of the store carries the shape and the writers are in
-  the running code, so promoting `C11` as `H` **before** the single-writer fix would withhold the
-  headline on *every* future report. Sequence: unify the writers (both emit the flag, or
-  neither), then promote — the catch list drops to 0 and the clause becomes the regression gate
-  that keeps the convention from re-splitting. This is §9.5's expand → migrate → contract applied
-  to a clause whose catch list is the writer, not the reader.
+- **measured catch list** — **63 of 105**. The population makes the mechanism plain. The root
+  writer emits the flag **only on the withheld path**; the synthesis writer **always** emits a
+  bool:
+
+  | `outputs.structured` | `valuation_synthesis` | n | what it is |
+  |---|---|---|---|
+  | absent | `false` | **63** | **every non-withheld artifact** ← the catch list |
+  | `true` | `true` | 32 | every withheld artifact |
+  | absent | absent | 8 | 3 equity + 5 other types |
+  | `true` | absent | 2 | both ddm |
+
+  So the clause is not catching an anomaly — it is flagging the NORMAL case (nothing was
+  withheld), because one of the two writers is conditional on the very outcome it reports. Two
+  writers, two conventions for one quantity: the *Duplication* class exactly, and it is why the
+  clause is not preventive. The divergence never changed a verdict (both readings mean "not
+  withheld"), which is precisely what made it invisible. Scope: an artifact with no synthesis
+  block (a plain ddm/dcf dump, the 2 `true`/absent rows) has no pair to mirror, so it is out of
+  scope — an earlier revision counted those and read 65. `financial_modeling.assumptions` is
+  `null` in every artifact, so the third slot an earlier draft named does not exist.
+- **promotion order is load-bearing, and the promotion criterion is a SPAN, not a zero.**
+  Promoting `C11` as `H` **before** the single-writer fix would withhold the headline on every
+  non-withheld report — that is, on every ordinary one. Sequence: unify the writers (the root
+  emits on both paths, or the duplicate is retired in favour of one writer), then promote. But
+  after the unification the **stored** corpus still reads 63: §9.3 annotates the archive on read
+  and never rewrites it, so the promotion criterion cannot be "the scanner reports 0" — it is
+  "the catch list's span has closed: no instance after the writer fix". That is the general rule
+  for any clause whose defect class a shipped fix already closed (`C10a` at 16:44, `C10c` at
+  19:59, `C6`/`C6b` at 20:27). What remains for `C11` after unification is regression protection:
+  catching a second writer re-introduced. This is §9.5's expand → migrate → contract applied to a
+  clause whose catch list is the writer, not the reader.
 
 ### 4.5 `C12` — recency and window closure
 - **severity** two-threshold (§9.7, locked): `error_if` when the stale or undated item carried a
@@ -418,7 +434,7 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
    | `C10c` DQC_0004 identity | **73** / 24 tickers | 10-10T21:45 … **10-14T19:59** | `Assets`/`Liabilities`/`StockholdersEquity` present with `_equity_identity` **absent** — the identity is computed on one path only |
    | `C10d` caliber-divergent accepted | **35** artifacts / 102 decisions / 18 tickers | 10-13T22:53 … **21:12:35** | **live**: decisions accepted while `comparability = "caliber_divergent"`, several whose `basis` text names a provider other than `selected_source`; one finding per artifact, with the row count in the evidence |
    | `C10b` cross-provider operands | **0** | — | one `selected_source` per artifact (34 yfinance, 4 eodhd); no ratio pair crosses sources today |
-   | `C11` mirrored slots | **65 / 105** (63 of 98 equity) | all | one writer omits the slot, the other writes `false`; representational, never verdict-changing — but 62% of the store, so it must not be promoted as `H` before the writers are unified (§4.4) |
+   | `C11` mirrored slots | **63 / 105** | all | the catch list IS the non-withheld population: the root writer emits the flag only when it withholds while the synthesis always writes a bool. Representational, never verdict-changing — and 60% of the store, so it must not be promoted as `H` before the writers are unified, and its promotion criterion is a closed span, not a zero count (§4.4) |
    | `C12a` 8-K in the window | **10** / 5 tickers | 10-14T06:21 … **21:12:35** | **live**, and already *disclosed* as a warning string in two shapes; `C12` turns the disclosure into a gate |
    | `C12b` `news_window.count = 0` | **14** / 8 tickers | 10-14T00:23 … **20:37:52** | **live** — the empty feed is not THC-specific; the artifact still publishes `overall_sentiment` and key catalysts over it |
    | `C12c` stale fact published | **15** / 6 tickers | 10-13T20:18 … **16:31** | **live**: a fact the producer's own guard annotated (`stale: latest reported period is X, this fact is Y`) still ships in the current-fundamentals snapshot (EHC `OperatingIncomeLoss` frozen at 2022-12-31). The clause reads the annotation and holds no year band; the 9 artifacts whose oldest fact reaches back to 2009–2011 carry **no** annotation, which is the discrimination the producer's one-year rule already makes |
@@ -440,8 +456,8 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
 
    **Re-measured 2026-10-14 late, over 105 artifacts, against the clauses as implemented**
    (`scripts/scan_artifact_contract.py --proposed`): `C6b` 27, `C8` 7, `C9` 1, `C10a` 72,
-   `C10b` 0, `C10c` 73, `C10d` 35 artifacts (102 accepted rows), `C11` 65, `C12a` 10, `C12b` 14,
-   `C12c` 15, `C13b` 0, `C13c` 0, `C14a` 0, `C14b` 10 — **329 flags**. The scanner reproduces every
+   `C10b` 0, `C10c` 73, `C10d` 35 artifacts (102 accepted rows), `C11` 63, `C12a` 10, `C12b` 14,
+   `C12c` 15, `C13b` 0, `C13c` 0, `C14a` 0, `C14b` 10 — **327 flags**. The scanner reproduces every
    probed number, which is what makes it the promotion instrument rather than a second opinion. Four
    rows above moved with the re-measurement (the store grew) and two of them changed *reading*:
    `C13b`'s 47 was a declaration rate, not a catch list, and `C14`'s placeholder had been tabulated
@@ -457,6 +473,13 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
    `ContractClause.warn_if`/`error_if` (§9.2). Arming `H` first would withhold a headline for a defect
    whose locked remediation is not a withhold — a `C10a` veto would have taken the target off the
    69% of the catalogue that trips it, and `C13b`'s broader form would have taken it off 42%.
+
+   **The promotion criterion is a CLOSED SPAN, not a zero count, wherever a shipped fix already
+   closed the defect class** — `C10a` (16:44), `C10c` (19:59), `C6b` (20:27), and `C11` once its
+   writers are unified. §9.3 annotates the archive on read and never rewrites it, so the stored
+   catch list for those clauses can never reach 0; what has to reach 0 is the count of instances
+   produced AFTER the fix. That is what the span column is for, and it is why the scanner (which
+   sweeps history) is a promotion instrument rather than the promotion test.
 
    The corpus also re-confirms §1's table at HEAD: **170** `review` findings, **0**
    `blocked_field`, `withhold_valuation` never true, `withheld_reason` = `contract_C7` ×31 / null

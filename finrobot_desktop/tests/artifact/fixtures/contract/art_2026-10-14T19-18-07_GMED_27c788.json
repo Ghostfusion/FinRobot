@@ -1,0 +1,1177 @@
+{
+  "artifact_id": "art_2026-10-14T19:18:07_GMED_equity_research_27c788",
+  "extracted_at": "2026-10-14",
+  "inputs_raw_data": {
+    "balance": {
+      "noncontrolling_interest": null,
+      "preferred_stock": null,
+      "total_cash": 595142016.0,
+      "total_debt": 111912000.0
+    },
+    "data_authority": {
+      "clock": "2026-10-14T19:13:39.173340Z",
+      "decisions": [
+        {
+          "agreement_is_independent": true,
+          "basis": "operating-caliber EBITDA = EBIT + D&A, trailing twelve months",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 953677000.0
+            }
+          ],
+          "comparability": "caliber_divergent",
+          "currency": "USD",
+          "definition_version": "ebitda_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "ebitda",
+          "period_basis": "ttm",
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T19:13:39.173340Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.15,
+          "unit": "USD",
+          "value": 953677000.0
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "gross_profit / revenue on FMP's TTM income-statement caliber",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 0.6854798860643816
+            }
+          ],
+          "comparability": "caliber_divergent",
+          "currency": "USD",
+          "definition_version": "gross_margin_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "gross_margin",
+          "period_basis": "ttm",
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T19:13:39.173340Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.1,
+          "unit": "ratio",
+          "value": 0.6854798860643816
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "live profile quote-currency market cap at the snapshot instant",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 10220017664.0
+            }
+          ],
+          "comparability": "exact",
+          "currency": "USD",
+          "definition_version": "market_cap_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "market_cap",
+          "period_basis": null,
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T19:13:39.173340Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.05,
+          "unit": "USD",
+          "value": 10220017664.0
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "as-reported income statement, trailing twelve months",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 535431008.0
+            }
+          ],
+          "comparability": "as_reported_period",
+          "currency": "USD",
+          "definition_version": "net_income_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "net_income",
+          "period_basis": "ttm",
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T19:13:39.173340Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.15,
+          "unit": "USD",
+          "value": 535431008.0
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "as-reported income statement, trailing twelve months",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 3144933888.0
+            }
+          ],
+          "comparability": "as_reported_period",
+          "currency": "USD",
+          "definition_version": "revenue_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "revenue",
+          "period_basis": "ttm",
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T19:13:39.173340Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.15,
+          "unit": "USD",
+          "value": 3144933888.0
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "as-reported share count, latest period (FMP may rederive as marketCap/price)",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 111831817.0
+            }
+          ],
+          "comparability": "balance_period",
+          "currency": null,
+          "definition_version": "shares_outstanding_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "shares_outstanding",
+          "period_basis": null,
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T19:13:39.173340Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.05,
+          "unit": "shares",
+          "value": 111831817.0
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "as-reported balance sheet, cash + short-term investments, latest period",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 595142016.0
+            }
+          ],
+          "comparability": "balance_period",
+          "currency": "USD",
+          "definition_version": "total_cash_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "total_cash",
+          "period_basis": "ttm",
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T19:13:39.173340Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.1,
+          "unit": "USD",
+          "value": 595142016.0
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "as-reported balance sheet total debt (bonds + finance leases), latest period",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 111912000.0
+            }
+          ],
+          "comparability": "caliber_divergent",
+          "currency": "USD",
+          "definition_version": "total_debt_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "total_debt",
+          "period_basis": "ttm",
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T19:13:39.173340Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.2,
+          "unit": "USD",
+          "value": 111912000.0
+        }
+      ],
+      "policy_version": "metric_authority_v1",
+      "run_as_of": "2026-10-14T19:13:36.642256Z"
+    },
+    "income": {
+      "capital_expenditure": 164543000.0,
+      "depreciation_amortization": 279913000.0,
+      "ebitda": 953677000.0,
+      "gross_margin": 0.6854798860643816,
+      "income_tax_expense": 124687000.0,
+      "interest_expense": null,
+      "net_income": 535431008.0,
+      "operating_income": 673764000.0,
+      "operating_margin": 0.2142378822576245,
+      "rd_expense": 147061000.0,
+      "revenue": 3144933888.0,
+      "sga_expense": 1216675000.0
+    },
+    "market": {
+      "beta": 0.959,
+      "country": "United States",
+      "current_price": 76.32,
+      "industry": "Medical Devices",
+      "is_adr": null,
+      "market_cap": 10220017664.0,
+      "pe_basis": "market cap ÷ TTM net income (one net-income authority); supersedes the provider's trailingPE 19.52×, which rides a different denominator",
+      "pe_ratio": 19.087459469661496,
+      "price_52w_high": 101.3975,
+      "price_52w_low": 56.66,
+      "quote_as_of": "2026-10-13T00:00:00Z",
+      "quote_is_live": false,
+      "sector": "Healthcare",
+      "shares_outstanding": 133910084.69601679,
+      "trailing_1y_return_pct": 32.75352235171333
+    },
+    "valuation": {
+      "book_value_per_share": 29.663681782124634,
+      "ebitda_operating": 953677000.0,
+      "ebitda_reported": null,
+      "enterprise_value": 9736787648.0,
+      "ev_ebitda": 10.20973311509033,
+      "ev_ebitda_reported": null,
+      "ev_revenue": 3.096022999132756
+    }
+  },
+  "notes": "GMED — the second half of the pair: a single-method note denying the cross-check it prints, and the root writer omitting valuation_withheld",
+  "outputs_structured": {
+    "catalyst_analysis": {
+      "category_breakdown": {
+        "market": 1
+      },
+      "events": [
+        {
+          "category": "market",
+          "headline": "Globus Medical (GMED) Stock Sees Modest Fair Value Cut As Analysts Split On Outlook",
+          "impact_score": 3,
+          "published": "2026-10-08T07:09:13Z",
+          "reasoning": "Analysts trimmed Globus Medical's fair value estimate and remain split on the outlook, a modest negative analyst-side revision.",
+          "sentiment": "negative",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/globus-medical-gmed-stock-sees-070913612.html"
+        },
+        {
+          "category": "management",
+          "headline": "SEC 8-K: Executive / director change",
+          "impact_score": 3,
+          "published": "2026-06-04T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1237831/000162828026040784/0001628280-26-040784-index.html"
+        },
+        {
+          "category": "management",
+          "headline": "SEC 8-K: Executive / director change",
+          "impact_score": 3,
+          "published": "2026-03-23T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1237831/000162828026020612/0001628280-26-020612-index.html"
+        },
+        {
+          "category": "management",
+          "headline": "SEC 8-K: Executive / director change",
+          "impact_score": 3,
+          "published": "2025-07-21T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1237831/000156276225000166/0001562762-25-000166-index.html"
+        },
+        {
+          "category": "management",
+          "headline": "SEC 8-K: Executive / director change",
+          "impact_score": 3,
+          "published": "2025-06-05T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1237831/000156276225000158/0001562762-25-000158-index.html"
+        }
+      ],
+      "key_catalysts": [],
+      "net_sentiment": -0.42,
+      "news_window": {
+        "count": 50,
+        "earliest": "2026-09-29T14:08:02+00:00",
+        "latest": "2026-10-14T16:36:00+00:00",
+        "provider": null,
+        "sources": []
+      },
+      "overall_sentiment": "neutral",
+      "sec_8k_category_breakdown": {
+        "management": 4
+      },
+      "sec_8k_staleness_warning": "SEC 8-K index is stale relative to the news window: newest 8-K filed 2026-08-06, older than the news feed's earliest item (2026-09-29); filings in that gap are invisible to this run.",
+      "sec_8k_window": {
+        "count": 10,
+        "newest": "2026-08-06",
+        "oldest": "2025-06-05",
+        "provider": "SEC EDGAR"
+      },
+      "top_negative": [
+        {
+          "category": "market",
+          "headline": "Globus Medical (GMED) Stock Sees Modest Fair Value Cut As Analysts Split On Outlook",
+          "impact_score": 3,
+          "published": "2026-10-08T07:09:13Z",
+          "reasoning": "Analysts trimmed Globus Medical's fair value estimate and remain split on the outlook, a modest negative analyst-side revision.",
+          "sentiment": "negative",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/globus-medical-gmed-stock-sees-070913612.html"
+        }
+      ],
+      "top_positive": []
+    },
+    "currency": {
+      "quote_currency": "USD",
+      "reporting_currency": "USD"
+    },
+    "numeric_audit": {
+      "artifact_status": "caveated",
+      "findings": [
+        {
+          "check": "ev_bridge_unverified",
+          "evidence": "GMED: preferred stock not reported by the provider — when the provider reports no preferred stock, BOTH the multiples EV and the DCF equity bridge assume 0 for it. If the issuer carries preferred stock, this EV (and EV/EBITDA, EV/Revenue) is understated, and the DCF equity value is overstated, by that amount. Metric authority: producer of record 'fmp.balance_sheet.preferred_stock' supplied no value, so no wired source states this number and the assumed 0 cannot be confirmed.",
+          "field_key": "enterprise_value",
+          "severity": "review"
+        },
+        {
+          "check": "ev_bridge_unverified",
+          "evidence": "GMED: noncontrolling interest not reported by the provider — when the provider reports no noncontrolling interest, BOTH the multiples EV and the DCF equity bridge assume 0 for it. If the issuer carries noncontrolling interest, this EV (and EV/EBITDA, EV/Revenue) is understated, and the DCF equity value is overstated, by that amount. Metric authority: producer of record 'fmp.balance_sheet.minority_interest' supplied no value, so no wired source states this number and the assumed 0 cannot be confirmed.",
+          "field_key": "enterprise_value",
+          "severity": "review"
+        },
+        {
+          "check": "target_multiple_outside_band",
+          "evidence": "GMED: the $90.61 target implies 12.2x TTM EBITDA vs the issuer's own 5-year p25 of 15.9x — the target sits below its own historical multiple range",
+          "field_key": "thesis.price_target",
+          "severity": "review"
+        },
+        {
+          "check": "insider_flow_amount_corrected",
+          "evidence": "the narrative stated $90.61 as the largest single sale figure; the published text was corrected to the computed value $2,237,502 (the printed amount belonged to another metric)",
+          "field_key": "ownership_governance.insider_largest_sale",
+          "severity": "review"
+        }
+      ],
+      "withhold_valuation": false
+    },
+    "ownership_governance": {
+      "insider_buy_value": 0.0,
+      "insider_largest_sale": {
+        "name": "James R Tobin",
+        "position": "Director",
+        "value": 2237502.0
+      },
+      "insider_net_flow": -4413467.0,
+      "insider_sell_value": 4413467.0,
+      "insider_window_days": 90,
+      "warnings": [
+        "6 Schedule 13D/13G filing(s) are stale (older than 400 days; a 13G annual amendment is due within 45 days of year-end): JANUS HENDERSON GROUP PLC (699d, filed 2024-11-14), Paul David C (973d, filed 2024-02-14), VANGUARD GROUP INC (974d, filed 2024-02-13), BlackRock Inc. (994d, filed 2024-01-24), KAYNE ANDERSON RUDNICK INVESTMENT MANAGEMENT LLC (1338d, filed 2023-02-14), WELLINGTON MANAGEMENT GROUP LLP (1713d, filed 2022-02-04). The reported holdings may no longer reflect the filer's current position — verify against a newer filing before relying on them.",
+        "13F index incomplete for period 2026-06-30: the 20 holder row(s) on file account for only 2.0% of shares outstanding (2,650,004 shares) — holder concentration cannot be asserted from a partial index; refresh the 13F cache (scripts/refresh_sec_holdings.py) for full coverage."
+      ]
+    },
+    "technical_analysis": {
+      "historical_bands": {
+        "classification": "cheap",
+        "classification_caveat": null,
+        "current": 10.20973311509033,
+        "median": 21.221295399613478,
+        "metric": "ev_ebitda",
+        "p25": 15.85833407024496,
+        "p75": 25.223333757669845,
+        "p90": 27.90528362035441,
+        "sample_count": 948,
+        "structural_break": null,
+        "timeline": [
+          [
+            "2023-01-03",
+            31.698888997351713
+          ],
+          [
+            "2023-01-12",
+            31.89238606393643
+          ],
+          [
+            "2023-01-25",
+            32.085883130521154
+          ],
+          [
+            "2023-02-06",
+            33.343614063321844
+          ],
+          [
+            "2023-02-16",
+            26.131450672436774
+          ],
+          [
+            "2023-03-01",
+            24.979263594136846
+          ],
+          [
+            "2023-03-13",
+            22.94314673439307
+          ],
+          [
+            "2023-03-23",
+            22.525368976994244
+          ],
+          [
+            "2023-04-04",
+            24.8429361154067
+          ],
+          [
+            "2023-04-17",
+            25.48499456361964
+          ],
+          [
+            "2023-04-27",
+            24.82534547298991
+          ],
+          [
+            "2023-05-09",
+            24.438351339820464
+          ],
+          [
+            "2023-05-19",
+            24.22286597021475
+          ],
+          [
+            "2023-06-01",
+            23.717135000731957
+          ],
+          [
+            "2023-06-13",
+            24.302023861090323
+          ],
+          [
+            "2023-06-26",
+            24.94408230930326
+          ],
+          [
+            "2023-07-07",
+            25.06281914561661
+          ],
+          [
+            "2023-07-19",
+            26.505251823793625
+          ],
+          [
+            "2023-07-31",
+            26.030304478540216
+          ],
+          [
+            "2023-08-10",
+            24.319614503507115
+          ],
+          [
+            "2023-08-22",
+            23.316947885749922
+          ],
+          [
+            "2023-09-01",
+            23.374117473604496
+          ],
+          [
+            "2023-09-14",
+            21.219263777547376
+          ],
+          [
+            "2023-09-26",
+            21.294024007818745
+          ],
+          [
+            "2023-10-05",
+            22.33626957101372
+          ],
+          [
+            "2023-10-17",
+            23.774304588586535
+          ],
+          [
+            "2023-10-27",
+            19.60532233580663
+          ],
+          [
+            "2023-11-08",
+            19.69767320849479
+          ],
+          [
+            "2023-11-20",
+            19.482187838889082
+          ],
+          [
+            "2023-12-01",
+            19.759240456953567
+          ],
+          [
+            "2023-12-13",
+            21.254445062380956
+          ],
+          [
+            "2023-12-26",
+            23.312550225145724
+          ],
+          [
+            "2024-01-08",
+            20.84893365865309
+          ],
+          [
+            "2024-01-19",
+            21.968254022340535
+          ],
+          [
+            "2024-01-31",
+            20.528576451114958
+          ],
+          [
+            "2024-02-12",
+            20.339449906905703
+          ],
+          [
+            "2024-02-23",
+            21.87948033832394
+          ],
+          [
+            "2024-03-06",
+            21.184729767759322
+          ],
+          [
+            "2024-03-18",
+            20.088567756424034
+          ],
+          [
+            "2024-03-28",
+            20.85665310943714
+          ],
+          [
+            "2024-04-10",
+            20.65208766365978
+          ],
+          [
+            "2024-04-22",
+            19.934178740743008
+          ],
+          [
+            "2024-05-02",
+            19.636979885557032
+          ],
+          [
+            "2024-05-14",
+            24.407600470100753
+          ],
+          [
+            "2024-05-24",
+            25.557798636924396
+          ],
+          [
+            "2024-06-06",
+            25.696748751037326
+          ],
+          [
+            "2024-06-18",
+            26.02096568396748
+          ],
+          [
+            "2024-07-01",
+            26.36834096924979
+          ],
+          [
+            "2024-07-11",
+            27.460643255193048
+          ],
+          [
+            "2024-07-23",
+            28.4757510332958
+          ],
+          [
+            "2024-08-02",
+            26.823788565508814
+          ],
+          [
+            "2024-08-14",
+            26.044124036319634
+          ],
+          [
+            "2024-08-26",
+            27.89679222449195
+          ],
+          [
+            "2024-09-06",
+            27.1673041253991
+          ],
+          [
+            "2024-09-18",
+            27.01291510971808
+          ],
+          [
+            "2024-09-30",
+            27.765561561163082
+          ],
+          [
+            "2024-10-10",
+            27.090109617558593
+          ],
+          [
+            "2024-10-22",
+            28.456452406335675
+          ],
+          [
+            "2024-11-01",
+            29.05470984209965
+          ],
+          [
+            "2024-11-13",
+            32.01125949239131
+          ],
+          [
+            "2024-11-25",
+            32.76390594383631
+          ],
+          [
+            "2024-12-06",
+            32.31231807296931
+          ],
+          [
+            "2024-12-18",
+            31.717920362597358
+          ],
+          [
+            "2024-12-31",
+            22.903982235154807
+          ],
+          [
+            "2025-01-14",
+            24.453316726091767
+          ],
+          [
+            "2025-01-27",
+            25.529636847766437
+          ],
+          [
+            "2025-02-06",
+            24.38817103451672
+          ],
+          [
+            "2025-02-19",
+            23.294856384605083
+          ],
+          [
+            "2025-03-03",
+            21.92396444015629
+          ],
+          [
+            "2025-03-13",
+            19.21333718635982
+          ],
+          [
+            "2025-03-25",
+            21.18187004047533
+          ],
+          [
+            "2025-04-04",
+            18.97258136966943
+          ],
+          [
+            "2025-04-15",
+            19.969593692904912
+          ],
+          [
+            "2025-04-28",
+            20.046069069971278
+          ],
+          [
+            "2025-05-08",
+            20.000750328006024
+          ],
+          [
+            "2025-05-20",
+            16.92474071711473
+          ],
+          [
+            "2025-06-02",
+            16.17698147468812
+          ],
+          [
+            "2025-06-12",
+            16.5282017249188
+          ],
+          [
+            "2025-06-25",
+            15.958885028980356
+          ],
+          [
+            "2025-07-08",
+            15.50853003070069
+          ],
+          [
+            "2025-07-18",
+            15.434887075007163
+          ],
+          [
+            "2025-07-30",
+            14.61631729825985
+          ],
+          [
+            "2025-08-11",
+            16.310105279211037
+          ],
+          [
+            "2025-08-21",
+            16.613174366103642
+          ],
+          [
+            "2025-09-03",
+            16.13166273272287
+          ],
+          [
+            "2025-09-15",
+            15.973047135844498
+          ],
+          [
+            "2025-09-25",
+            15.083666824776481
+          ],
+          [
+            "2025-10-07",
+            16.2761162227371
+          ],
+          [
+            "2025-10-17",
+            16.352591599803457
+          ],
+          [
+            "2025-10-29",
+            16.89075166064079
+          ],
+          [
+            "2025-11-10",
+            23.937816036237052
+          ],
+          [
+            "2025-11-20",
+            22.782188116123198
+          ],
+          [
+            "2025-12-03",
+            24.33152260706016
+          ],
+          [
+            "2025-12-15",
+            23.977469935456647
+          ],
+          [
+            "2025-12-26",
+            24.51846241766681
+          ],
+          [
+            "2026-01-08",
+            15.06458855345804
+          ],
+          [
+            "2026-01-20",
+            14.78987015574892
+          ],
+          [
+            "2026-01-30",
+            14.416450537305986
+          ],
+          [
+            "2026-02-11",
+            14.018355613679596
+          ],
+          [
+            "2026-02-24",
+            14.613852978773615
+          ],
+          [
+            "2026-03-06",
+            13.827533253594218
+          ],
+          [
+            "2026-03-18",
+            13.74199219562491
+          ],
+          [
+            "2026-03-30",
+            13.23697094953689
+          ],
+          [
+            "2026-04-10",
+            14.373680008321331
+          ],
+          [
+            "2026-04-22",
+            15.127099326589457
+          ],
+          [
+            "2026-05-04",
+            14.403290374541474
+          ],
+          [
+            "2026-05-14",
+            12.200608131831824
+          ],
+          [
+            "2026-05-27",
+            13.077403976017221
+          ],
+          [
+            "2026-06-08",
+            12.379915349498257
+          ],
+          [
+            "2026-06-18",
+            12.532902241635671
+          ],
+          [
+            "2026-07-01",
+            11.994980588636375
+          ],
+          [
+            "2026-07-14",
+            11.971950303798486
+          ],
+          [
+            "2026-07-24",
+            12.082166666951245
+          ],
+          [
+            "2026-08-05",
+            12.748399906904503
+          ],
+          [
+            "2026-08-17",
+            13.501819225172627
+          ],
+          [
+            "2026-08-27",
+            13.077403976017221
+          ],
+          [
+            "2026-09-09",
+            11.758097658875219
+          ],
+          [
+            "2026-09-21",
+            11.720262190927256
+          ],
+          [
+            "2026-10-01",
+            11.740002435074018
+          ],
+          [
+            "2026-10-13",
+            10.20973311509033
+          ]
+        ],
+        "warnings": [
+          "54 price point(s) predate the earliest fiscal year — skipped",
+          "current point uses TTM EBITDA (consistent with the comps caliber); historical quantiles use each annual-report year's EBITDA, so the two carry a caliber basis difference (no quarterly data, so a rolling TTM cannot be reconstructed point by point).",
+          "per-year share counts are unavailable from the serving providers, so the historical band is computed on the run's own share count (133,910,085); a buyback or issuance history makes the earlier multiples approximate."
+        ],
+        "window_years": 5
+      },
+      "monte_carlo": {
+        "assumptions_used": {
+          "centered_on": "base-case DCF assumptions",
+          "ebitda_margin_std": 0.02,
+          "independent": false,
+          "mid_year_convention": false,
+          "n_simulations": 10000,
+          "revenue_growth_std": 0.02,
+          "seed": 1730167537,
+          "terminal_growth_std": 0.005,
+          "valid_simulations": 9952,
+          "variance_reduction": "antithetic_variates",
+          "wacc_std": 0.01
+        },
+        "current_price_percentile": 25.3,
+        "mean": 95.35,
+        "n_valid": 9952,
+        "percentiles": {
+          "10": 65.75,
+          "25": 76.16,
+          "5": 60.38,
+          "50": 90.79,
+          "75": 109.56,
+          "90": 130.94,
+          "95": 146.93
+        },
+        "std": 26.75
+      }
+    },
+    "thesis": {
+      "catalysts": [
+        "Valuation gap as the core re-rating path: the DCF mid of $90.61 sits 18.7% above the authoritative $76.32 market price, and the method's own high case of $108.73 marks where the sensitivity ceiling sits.",
+        "The market is not paying for the model's growth schedule: at $76.32 the reverse-DCF solves to 7.94%/yr revenue growth held flat for 10 years, below the model's own front-loaded 16.7% FY1 rate fading to 3.0% by FY10 (9.8% average) — delivery on the near-term end of that fade would validate more of the $90.61 fair value.",
+        "A margin cushion is already embedded in the target: the DCF assumes a 22.1% EBITDA margin against a 30.3% FY2025 actual, so holding current profitability reprices roughly 800bps of unused margin into the $90.61 mid.",
+        "Unlevered balance sheet funds optionality without WACC creep: a 1.1% debt ratio and $483m of net cash give capacity to fund buybacks or bolt-on IP internally rather than at the 8.31% cost of equity.",
+        "Positioning is not stretched: the shares sit at the 44th percentile of the 52-week range, 24.7% below the 52-week high, despite a +32.8% one-year return — leaving headroom for a move toward the $90.61 target without an extended entry point."
+      ],
+      "company_overview": "Globus Medical, Inc. (GMED) is a U.S. medical-device manufacturer that designs, manufactures and commercializes implantable musculoskeletal solutions — principally spinal hardware and instrumentation — alongside enabling technologies such as surgical robotics, navigation and intraoperative monitoring services. Revenue is generated through direct and distributor sales into hospitals and ambulatory surgery centers, and the P&L profile is that of a differentiated implant franchise: $3.14bn of TTM revenue (period ended 2026-06-30) converts at a 68.5% TTM gross margin and a 21.4% TTM operating margin, producing $953.7m of TTM EBITDA.\n\nSegment reporting is not disaggregated in the data supplied for this run. The SEC XBRL business-segment extraction for the fiscal year ending 2025-12-31 returns a single reportable segment with revenue and revenue share both unavailable, so a business-line revenue mix is unavailable and we do not estimate one. Geographic revenue is likewise unavailable — no SEC XBRL geographic split was injected — so no U.S. versus international mix is asserted here.\n\nThe durable moat rests on switching costs and installed-base economics rather than scale alone. A 68.5% TTM gross margin is consistent with a patent-protected implant portfolio, and once a surgeon or hospital standardizes on an implant set and its associated robotics/navigation platform, re-tooling carries clinical, training and inventory costs. That stickiness is reinforced by the capital structure: a 1.1% debt ratio and $483m of net cash fund R&D and bolt-on IP without leverage. The principal structural pressure is that spine remains a competitive, procedure-volume-levered market where hospital capital budgets and GPO pricing discipline both bite.",
+      "competitor_analysis": "No peer multiple set was produced for GMED this cycle — the peer-screen data fetch returned no usable comps — so relative positioning is argued from GMED's own evidence rather than from a peer table. Spine and orthopedics is a differentiated-IP, procedure-volume-driven device market where the moat is the implant-plus-robotics ecosystem and the switching cost of surgeon standardization; GMED's 68.5% TTM gross margin and 21.4% TTM operating margin are the quantitative expression of that positioning versus larger orthopedic platforms and smaller single-modality entrants. On its own history the equity has de-rated hard: the current 10.2x EV/EBITDA sits against a 21.2x five-year median, meaning the market capitalizes $953.7m of TTM EBITDA at roughly half its historical band. We do not assert a peer-relative premium or discount, since no subject or peer comparable multiple was supplied; the valuation conclusion rests on the DCF's $90.61 versus the $76.32 price.",
+      "key_takeaways": [
+        "The DCF-anchored target of $90.61 sits 18.7% above the $76.32 market price, but the target is a single-method output with no cross-validation — that asymmetry, not the gap itself, is why the call is HOLD rather than BUY.",
+        "The model underwrites a fade schedule — 16.7% FY1 revenue growth declining to 3.0% by FY10, a 9.8% average — while the $76.32 price implies 7.94%/yr growth held flat for 10 years at the model's WACC; a flat rate and a fade schedule are different constructs, and the flat rate is not obviously unreachable against 16.7% FY2025 actual revenue growth.",
+        "Margin conservatism sits inside the target: the DCF uses a 22.1% EBITDA margin versus a 30.3% FY2025 actual, so it is not reliant on margin expansion to reach $90.61.",
+        "The balance sheet is effectively unlevered — a 1.1% debt ratio and $483m of net cash against $953.7m of TTM EBITDA — which keeps the equity story about operations and valuation rather than solvency.",
+        "Ownership flows are a negative tell: 90-day insider net flow of -$4,413,467 with $0 of open-market purchases, and only 2.0% of shares outstanding covered by the 13F rows on file for 2026-06-30."
+      ],
+      "momentum_divergence_note": null,
+      "narrative": "GMED is a HOLD against an authoritative $90.61 target — 18.7% above the $76.32 market price — because the upside is genuine but rests on a single, uncross-checked method. The DCF is the only live valuation this cycle (the peer/comps fetch returned no usable comp set), so $90.61 carries a data-quality weight of 0.85 with no blend, an own range of $72.49–$108.73, and a low end that sits about 5% below the current price. Momentum is equally two-sided: a +32.8% one-year return still leaves the shares at only the 44th percentile of their 52-week range, 24.7% below the 52-week high.\n\nThe debate is about the discount rate and the shape of growth, not about cash generation. The model applies an 8.31% WACC and a fade schedule running from 16.7% FY1 revenue growth to 3.0% by FY10 (9.8% average), with a 3.0% perpetuity rate thereafter; at $76.32 the reverse-DCF solves to a 9.28% WACC holding that fade fixed, or 7.94%/yr revenue growth held flat for 10 years at the model's WACC. A flat 7.94% and a fading schedule averaging 9.8% are different constructs — the market's flat rate is not obviously unreachable for a franchise that grew 16.7% in FY2025, which makes the gap credible without being compelling enough to underwrite a BUY.\n\nTwo offsets keep us on the sidelines. The model already grants margin relief — it assumes a 22.1% EBITDA margin against a 30.3% FY2025 actual — and the balance sheet is effectively unlevered at a 1.1% debt ratio with $483m of net cash against $953.7m of TTM EBITDA. But the ownership tape is unfavorable: insiders were net sellers of $90.61 over the last 90 days with $0 of open-market purchases (largest single sale $2,237,502), and only 2.0% of shares are covered by the 13F rows on file. With the 2026-10-08 analyst fair-value cut (impact score 3) pointing consensus the other way, $90.61 remains an estimate-driven target the tape does not yet corroborate.",
+      "news_summary": "Coverage over the last 30 days (50 items, 2026-09-29 to 2026-10-14) reads neutral-to-soft, with an aggregated net sentiment of -0.42 and no positive catalyst items flagged. The single classified market catalyst is negative: a 2026-10-08 report of a modest fair-value estimate cut with analysts split on the outlook (impact score 3, single source) — reported, early-stage analyst commentary rather than a fundamental operating data point. The SEC 8-K tape is entirely management/director-change coded (four filings across the tracked set), with the newest dated 2026-08-06 and therefore stale relative to the news window; nothing in it alters the earnings or cash-flow picture. On balance the news flow neither confirms nor refutes the DCF gap — the $90.61 fair value versus the $76.32 price remains an estimate-driven, not a news-driven, call.",
+      "price_target": 90.61,
+      "price_target_basis": "Confidence=medium; the single computed method (no second method ran against it, so there is no blend; wt = the method's data-quality weight, NOT prediction accuracy): DCF $90.61 (own range $72.49–$108.73, wt 0.85) → $90.61. Published target band $67.96–$113.26 (±25% single-method confidence dial). single method dcf with no cross-validation — band widened, confidence medium.",
+      "recommendation": "HOLD",
+      "risks": [
+        "Single-method target risk: the DCF is the only valuation run this cycle, with an own range of $72.49–$108.73 and a published band of $67.96–$113.26; the DCF low of $72.49 is roughly 5% below the $76.32 market price, so at the low end of the method's own range the call is a loss.",
+        "Discount-rate risk carries the whole gap: holding the model's growth fade fixed, the $76.32 market price implies a 9.28% WACC versus the model's 8.31% — about 100bp of discount-rate compression would erase most of the +18.7% implied upside to $90.61.",
+        "Insiders are distributing into the discount: 90-day net insider flow was -$4,413,467 with $0 of open-market purchases (largest single sale $2,237,502 by a director on 2026-09-16) — no insider is buying the 18.7% gap between price and target.",
+        "Consensus fair value is drifting the wrong way: the 2026-10-08 market item (impact score 3, single source) reports a modest fair-value cut with analysts split on the outlook — reported, early-stage analyst commentary that points toward the $76.32 market price rather than toward $90.61.",
+        "Ownership visibility is thin: only 2.0% of shares outstanding are covered by the 13F rows on file for 2026-06-30 and six Schedule 13G filings are stale (older than 400 days), so holder concentration and its stability cannot be verified as support for the thesis."
+      ],
+      "tagline": "GMED · $90.61 fair value vs $76.32; Hold on data gaps",
+      "valuation_overview": "Only one method ran this cycle, so there is no blend and no cross-validation to arbitrate. A 10-year explicit DCF (first forecast year 2027, base = $3.14bn TTM revenue) discounts FCF at an 8.31% WACC and a 3.0% terminal growth rate to a $90.61 mid, with an own band of $72.49–$108.73. The peer/comps screen returned no usable comp set and no DDM was produced, so $90.61 carries a data-quality weight of 0.85 — a measure of input quality, not a probability of accuracy — and the published band widens to $67.96–$113.26 (±25%) to reflect single-method confidence.\n\nThe divergence between the DCF and the $76.32 market price is a discount-rate and growth-form debate rather than a cash-flow one. Holding the model's fade fixed, $76.32 implies a 9.28% WACC; holding the 8.31% WACC fixed, it implies 7.94%/yr revenue growth held flat across the 10-year horizon. The model instead front-loads 16.7% in FY1 and fades to 3.0% by FY10 — a 9.8% average, a different construct from a flat rate. The model also underwrites a 22.1% EBITDA margin versus a 30.3% FY2025 actual, which is where its conservatism sits."
+    },
+    "valuation_synthesis": {
+      "anchor_method": null,
+      "confidence": "medium",
+      "cross_checks": [
+        {
+          "band_break_caveat": null,
+          "basis": "Own 5-year EV/EBITDA band (p25 15.86x · median 21.22x · p75 25.22x, 948 samples) applied to this run's TTM EBITDA (income.ebitda $953,677,000) through the EV→equity bridge (− net debt $-483,230,016 − preferred $0 − NCI $0) ÷ 133,910,085 shares outstanding.",
+          "high": 183.24343039373198,
+          "label": "Own 5-year EV/EBITDA",
+          "low": 116.54804425325882,
+          "mid": 154.7418284131184,
+          "name": "ev_ebitda_band",
+          "note": "Mean-reversion cross-check only — excluded from the published target blend, which keeps its existing method weighting."
+        }
+      ],
+      "current_price": 76.32,
+      "degradation_note": "single method dcf with no cross-validation — band widened, confidence medium.",
+      "financial_sector": false,
+      "methods": [
+        {
+          "assumptions": "WACC 8.3% · 10yr growth 17%→3.0% · β0.96",
+          "confidence": 0.85,
+          "high": 108.73220958078393,
+          "low": 72.48813972052262,
+          "mid": 90.61017465065328,
+          "name": "dcf",
+          "rerating_ratio": null,
+          "source": "implied_price ± 20% (placeholder band, not a real distribution)"
+        }
+      ],
+      "mna_transition": false,
+      "outlier_methods": [],
+      "target_high": 113.2627183133166,
+      "target_low": 67.95763098798996,
+      "upside_downside": null,
+      "valuation_withheld": false,
+      "warnings": [],
+      "weighted_price": null
+    },
+    "xbrl_facts_snapshot": {
+      "us-gaap:Assets": [
+        {
+          "concept": "us-gaap:Assets",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 5488258000.0
+        }
+      ],
+      "us-gaap:GrossProfit": [
+        {
+          "concept": "us-gaap:GrossProfit",
+          "period_end": "2023-12-31",
+          "units": "USD",
+          "value": 1020302000.0
+        }
+      ],
+      "us-gaap:Liabilities": [
+        {
+          "concept": "us-gaap:Liabilities",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 719655000.0
+        }
+      ],
+      "us-gaap:NetIncomeLoss:annual": [
+        {
+          "concept": "us-gaap:NetIncomeLoss:annual",
+          "matched_concept": "us-gaap:NetIncomeLoss",
+          "period_end": "2025-12-31",
+          "units": "USD",
+          "value": 537868000.0
+        }
+      ],
+      "us-gaap:NetIncomeLoss:ttm": [
+        {
+          "concept": "us-gaap:NetIncomeLoss:ttm",
+          "has_calculated_q4": true,
+          "period_end": "2026-06-30",
+          "periods": [
+            "Q3 2025",
+            "Q4 2025",
+            "Q1 2026",
+            "Q2 2026"
+          ],
+          "value": 535431000.0,
+          "warning": "Some quarters were derived from YTD or annual facts. These are calculated values, not directly reported quarterly data."
+        }
+      ],
+      "us-gaap:OperatingIncomeLoss": [
+        {
+          "concept": "us-gaap:OperatingIncomeLoss",
+          "period_end": "2025-12-31",
+          "units": "USD",
+          "value": 479816000.0
+        }
+      ],
+      "us-gaap:Revenues": [
+        {
+          "concept": "us-gaap:Revenues",
+          "has_calculated_q4": true,
+          "period_end": "2026-06-30",
+          "periods": [
+            "Q3 2025",
+            "Q4 2025",
+            "Q1 2026",
+            "Q2 2026"
+          ],
+          "value": 3144934000.0,
+          "warning": "Some quarters were derived from YTD or annual facts. These are calculated values, not directly reported quarterly data."
+        },
+        {
+          "concept": "us-gaap:Revenues",
+          "period_end": "2025-12-31",
+          "units": "USD",
+          "value": 2938931000.0
+        }
+      ],
+      "us-gaap:StockholdersEquity": [
+        {
+          "concept": "us-gaap:StockholdersEquity",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 4768603000.0
+        }
+      ]
+    }
+  },
+  "pinned_for": [
+    "C6b",
+    "C11"
+  ],
+  "source": "~/.finrobot/artifacts.db",
+  "ticker": "GMED",
+  "type": "equity_research",
+  "verdicts": {
+    "C1": false,
+    "C10a": false,
+    "C10b": false,
+    "C10c": true,
+    "C10d": true,
+    "C11": true,
+    "C12a": true,
+    "C12b": false,
+    "C12c": false,
+    "C13b": false,
+    "C13c": false,
+    "C14a": false,
+    "C14b": false,
+    "C1b": false,
+    "C2": false,
+    "C3": false,
+    "C4": false,
+    "C6": false,
+    "C6b": true,
+    "C7": false,
+    "C8": false,
+    "C9": false
+  }
+}

@@ -1,0 +1,331 @@
+{
+  "artifact_id": "art_2026-10-12T21:39:32_AMZN_equity_research_1749e7",
+  "extracted_at": "2026-10-14",
+  "inputs_raw_data": {
+    "balance": {
+      "noncontrolling_interest": null,
+      "preferred_stock": 0.0,
+      "total_cash": 122988003328.0,
+      "total_debt": 251635007488.0
+    },
+    "income": {
+      "capital_expenditure": 158183869696.0,
+      "depreciation_amortization": null,
+      "ebitda": 168911994880.0,
+      "gross_margin": 0.5077,
+      "income_tax_expense": null,
+      "interest_expense": null,
+      "net_income": 135281000448.0,
+      "operating_income": null,
+      "operating_margin": 0.13689,
+      "rd_expense": null,
+      "revenue": 775680032768.0,
+      "sga_expense": null
+    },
+    "market": {
+      "beta": null,
+      "country": "United States",
+      "current_price": 259.53,
+      "industry": "Internet Retail",
+      "is_adr": null,
+      "market_cap": 2799371961341.1597,
+      "pe_ratio": 20.879325107428,
+      "price_52w_high": 287.2,
+      "price_52w_low": 196.0,
+      "sector": "Consumer Cyclical",
+      "shares_outstanding": 10786313572.0,
+      "trailing_1y_return_pct": 17.93065842686417
+    },
+    "valuation": {
+      "book_value_per_share": 51.156,
+      "ebitda_operating": 168911994880.0,
+      "ebitda_reported": null,
+      "enterprise_value": 2928018965501.1597,
+      "ev_ebitda": 17.334582825697545,
+      "ev_ebitda_reported": null,
+      "ev_revenue": 3.7747767659463625
+    }
+  },
+  "notes": "AMZN — the DISCRIMINATION case for C12c: its oldest fact reaches 2009-12-31 and the producer annotates nothing, because a long history is not a stale fact. Pinned for no clause firing on it",
+  "outputs_structured": {
+    "catalyst_analysis": {
+      "category_breakdown": {
+        "acquisition": 2,
+        "market": 1
+      },
+      "events": [
+        {
+          "category": "acquisition",
+          "headline": "Amazon Reportedly In Talks To Acquire AI Startup Decart For $7 Billion",
+          "impact_score": 4,
+          "published": "2026-10-12T13:29:56Z",
+          "reasoning": "Amazon is reportedly in talks to acquire AI startup Decart for about $7 billion, a large AI talent/technology deal. [Sources report differing figures: $7; $7 Billion]",
+          "sentiment": "positive",
+          "source_count": 5,
+          "url": "https://finance.yahoo.com/m/1acb51f4-94bc-30ee-b579-4ab0bac596bb/amazon-reportedly-in-talks-to.html"
+        },
+        {
+          "category": "market",
+          "headline": "SA analyst upgrades/downgrades: MU, AMD, AMZN, RIVN",
+          "impact_score": 3,
+          "published": "2026-10-12T14:47:00Z",
+          "reasoning": "Seeking Alpha roundup of analyst upgrades/downgrades, including one on AMZN.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://seekingalpha.com/news/4652116-sa-analyst-upgradesdowngrades-mu-amd-amzn-rivn?utm_source=feed_news_all&amp;utm_medium=referral&amp;feed_item_type=news"
+        },
+        {
+          "category": "acquisition",
+          "headline": "Who is Decart? From AI startup to $7B acquisition target",
+          "impact_score": 3,
+          "published": "2026-10-12T04:53:38Z",
+          "reasoning": "Explainer on who Decart is, the AI startup reportedly a $7 billion Amazon acquisition target.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://seekingalpha.com/news/4651961-who-is-decart-from-ai-startup-to-7b-acquisition-target?utm_source=feed_news_all&amp;utm_medium=referral&amp;feed_item_type=news"
+        }
+      ],
+      "key_catalysts": [
+        "Amazon Reportedly In Talks To Acquire AI Startup Decart For $7 Billion"
+      ],
+      "net_sentiment": 0.93,
+      "overall_sentiment": "bullish",
+      "top_negative": [],
+      "top_positive": [
+        {
+          "category": "acquisition",
+          "headline": "Amazon Reportedly In Talks To Acquire AI Startup Decart For $7 Billion",
+          "impact_score": 4,
+          "published": "2026-10-12T13:29:56Z",
+          "reasoning": "Amazon is reportedly in talks to acquire AI startup Decart for about $7 billion, a large AI talent/technology deal. [Sources report differing figures: $7; $7 Billion]",
+          "sentiment": "positive",
+          "source_count": 5,
+          "url": "https://finance.yahoo.com/m/1acb51f4-94bc-30ee-b579-4ab0bac596bb/amazon-reportedly-in-talks-to.html"
+        }
+      ]
+    },
+    "currency": {
+      "quote_currency": "USD",
+      "reporting_currency": "USD"
+    },
+    "numeric_audit": {
+      "artifact_status": "caveated",
+      "findings": [
+        {
+          "check": "ev_bridge_unverified",
+          "evidence": "AMZN: noncontrolling interest not reported by the provider — EV assumes 0 for it. If the issuer carries noncontrolling interest, this EV (and EV/EBITDA, EV/Revenue) is understated by that amount.",
+          "field_key": "enterprise_value",
+          "severity": "review"
+        }
+      ],
+      "withhold_valuation": false
+    },
+    "ownership_governance": {
+      "warnings": []
+    },
+    "technical_analysis": {
+      "historical_bands": null,
+      "monte_carlo": {
+        "assumptions_used": {
+          "ebitda_margin_std": 0.02,
+          "mid_year_convention": false,
+          "n_simulations": 10000,
+          "revenue_growth_std": 0.02,
+          "seed": 3589908664,
+          "terminal_growth_std": 0.005,
+          "valid_simulations": 9940,
+          "variance_reduction": "antithetic_variates",
+          "wacc_std": 0.01
+        },
+        "current_price_percentile": 94.0,
+        "mean": 141.74,
+        "n_valid": 9940,
+        "percentiles": {
+          "10": 68.13,
+          "25": 95.12,
+          "5": 52.93,
+          "50": 130.83,
+          "75": 176.6,
+          "90": 231.85,
+          "95": 267.98
+        },
+        "std": 66.41
+      }
+    },
+    "thesis": {
+      "catalysts": [
+        "AI M&A optionality: press reports put Amazon in talks to acquire AI startup Decart for approximately $7B, an impact-4 acquisition-class event and the sole positive item in the catalyst feed — proof that management is willing to deploy balance-sheet capacity (cash $123.0B vs total debt $251.6B) into AI talent and technology.",
+        "DCF bull-case band high of $156.94 — the upper edge of the ±20% band around the $130.79 anchor — which assumes the 10-year fade to a 3.0% terminal growth rate is too conservative and that the current revenue trajectory (TTM revenue $775.68B vs FY2025 revenue $716.92B) extends further than modeled.",
+        "The Monte Carlo upper tail: across 9,940 simulations the mean implied price is $141.74 and the 95th percentile is $267.98, i.e. the model's own upper decile sits above the $259.53 market price — a genuine bull path if margins expand instead of converging.",
+        "Momentum continuation: the shares have returned +17.9% over one year, sit at 70% of their 52-week range, and are only -9.6% off the 52-week high, so the tape is not yet broken and a continued AI-infrastructure narrative could carry the price further before fair-value gravity asserts itself.",
+        "The market's own solution requires 14.79% annual revenue growth over 10 years at an implied WACC of 5.61%; if that growth is actually delivered or the cost of capital stays at 5.61%, the DCF's 7.40% WACC becomes too punitive and the anchor re-rates upward within the $104.63–$156.94 band."
+      ],
+      "company_overview": "Amazon.com, Inc. (AMZN) is a scaled multi-vertical platform spanning first-party and third-party e-commerce, cloud infrastructure, advertising, and subscription services, sold to consumers, merchants, enterprises, and developers globally. The company generated $775.68B of trailing-twelve-month revenue (period ended 2026-06-30) and $135.28B of trailing net income, supported by $1,095.69B of total assets against $551.62B of stockholders' equity, with $251.6B of total debt against $123.0B of cash.\n\nThe reportable segment mix (SEC XBRL, FY ending 2025-12-31) is North America at $426.31B, or 59.5% of segment revenue; International at $161.89B, or 22.6%; and AWS at $128.72B, or 18.0%. Those percentages are each segment's share of the segment total shown, not of consolidated revenue — corporate and eliminations items are not broken out — and a geographic revenue split was not available in the supplied data and is therefore not estimated here. Critically, the profit pool is inverted relative to the revenue mix: AWS contributes $45.61B of segment operating income versus $29.62B for North America and $4.75B for International, making the 18.0%-of-segment-revenue cloud unit the principal earnings engine and the single largest swing factor in any discounted cash flow.\n\nThe durable moat rests on three reinforcing assets: fulfillment and logistics density in North America, which underpins retail cost-to-serve; Prime subscription switching costs that convert retail into a recurring relationship; and AWS's enterprise switching costs and scale economics in compute, reinforced by a growing AI infrastructure footprint. These are structurally durable but capital-intensive, and the model treats the resulting cash conversion as the binding constraint on intrinsic value.",
+      "competitor_analysis": "No peer multiples were supplied in this dataset, so relative valuation against direct e-commerce or hyperscale cloud comparables cannot be asserted; the competitive read here is therefore structural, and no premium/discount conclusion versus peers is drawn because the subject's own comparable multiple was not provided. On the supplied segment data, AWS at 18.0% of segment revenue ($128.72B) generates $45.61B of segment operating income — the largest profit pool of the three reportable segments — which locates the competitive question less in retail share and more in the durability of cloud pricing and AI-driven demand. North America remains the volume anchor at $426.31B, or 59.5% of segment revenue, but its $29.62B of segment operating income is roughly two-thirds of AWS's on more than three times the revenue, evidence of a structurally lower-margin retail economics model. International is the thinnest contributor at $161.89B (22.6%) and just $4.75B of operating income, suggesting scale economics there remain the least settled. Because direct peer multiples and the subject's own trading multiple were not injected, the valuation conclusion rests on the DCF anchor of $130.79 and the -49.6% gap to the $259.53 market price rather than on relative peer positioning.",
+      "key_takeaways": [
+        "Verdict is Sell on a single-method DCF anchor of $130.79 versus a market price of $259.53 — a -49.6% gap that even the DCF bull case of $130.79 fails to close.",
+        "The franchise quality is not in question: trailing revenue of $775.68B, trailing net income of $135.28B, and a Merton/KMV distance to default of 7.86 with default probability below 0.01% and market leverage of 8.2%.",
+        "The market's price requires 14.79% annual revenue growth over 10 years at an implied WACC of 5.61%; the DCF credits only a 3.0% terminal growth rate at a 7.40% WACC — the entire thesis turns on that divergence.",
+        "The AWS profit engine is the swing factor: at 18.0% of segment revenue it generates $45.61B of segment operating income versus $29.62B for North America (59.5% of segment revenue) and $4.75B for International (22.6%).",
+        "Positioning is crowded relative to value — the stock is +17.9% over one year at 70% of its 52-week range with a shallow -9.6% drawdown, while the Monte Carlo mean implied price of $130.79 puts the $259.53 quote at the 94th percentile of 9,940 simulations."
+      ],
+      "momentum_divergence_note": null,
+      "narrative": "Amazon.com, Inc. (AMZN) is a fundamentally strong business trading at a price its own discounted cash flow will not support. The DCF — the only valuation method run — discounts a 10-year revenue path fading to a 3.0% terminal growth rate at a 7.40% WACC and lands at an implied value of $130.79 per share, with a widened band of $130.79–$130.79 given the absence of any corroborating comps or DDM work. Against the current market price of $259.53, that anchor implies -49.6% upside/downside. The recommendation is therefore Sell, not because the franchise is impaired — trailing revenue of $775.68B and trailing net income of $135.28B are real — but because the equity has been priced for an outcome the model cannot reproduce.\n\nThe reconciliation is entirely about the two inputs the market is implicitly using. Backing out the current $259.53 price requires roughly 14.79% annual revenue growth over 10 years at an implied WACC of 5.61%, versus the DCF's 3.0% terminal growth at a 7.40% WACC. That is a demanding bar from a $775.68B revenue base, and the simulation work agrees: across 9,940 Monte Carlo runs the mean implied price is $130.79 and the current price sits at the 94th percentile of the distribution, with a 5th percentile of $130.79. Momentum is the counterweight — a +17.9% one-year return with the stock at 70% of its 52-week range and only -9.6% below the 52-week high — but strong tape is a reason the gap can persist, not evidence that it is not a gap.\n\nImportantly, this is a valuation call, not a solvency call. The Merton/KMV work shows a distance to default of 7.86, a one-year default probability below 0.01%, market leverage of just 8.2%, and a model-implied credit spread of approximately zero. That cushion is why the AI optionality matters — reports of talks to acquire Decart for approximately $7B, the sole positive item in the catalyst feed, show the company can fund strategic AI investment from a $123.0B cash position. But a deal of that size is immaterial against a $775.68B revenue base, and none of it changes the discount-rate and growth arithmetic that produce the $130.79 target.",
+      "news_summary": "The trailing-month news flow is bullish in tone: the catalyst pipeline carries a net sentiment reading of +0.93, and the dominant item is a report that Amazon is in talks to acquire AI startup Decart for approximately $7B — an impact-4, acquisition-class catalyst that was the only positive event surfaced. That headline supports the market's willingness to underwrite continued AI investment, and the tape corroborates the enthusiasm with a +17.9% one-year return, a 70% position in the 52-week range, and a modest -9.6% drawdown from the 52-week high. The flow is directionally supportive of the story but immaterial to the arithmetic: a ~$7B transaction is small against a $775.68B revenue base and does nothing to close the gap between the $259.53 market price and the $130.79 DCF anchor. Sentiment therefore validates momentum rather than value, and the absence of any negative catalysts in the feed means the bear case rests entirely on the discount-rate and growth inputs embedded in the market's implied solution of 14.79% growth at a 5.61% implied WACC. Net: constructive news, unchanged valuation conclusion.",
+      "price_target": 130.79,
+      "price_target_basis": "Confidence=medium; method-weighted blend of 1 corroborating method(s) (wt = data-quality weight, NOT prediction accuracy): DCF $130.79 (wt 0.85) → $130.79. Range [$98.09, $163.48]. single method dcf with no cross-validation — band widened, confidence medium.",
+      "recommendation": "SELL",
+      "risks": [
+        "Fair-value gap is the core risk: the DCF anchor of $130.79 sits -49.6% below the $259.53 market price, so normalization toward intrinsic value implies substantial capital loss even before any deterioration in fundamentals.",
+        "Growth plausibility check cuts against the market-implied case: the current price embeds 14.79% annual revenue growth over 10 years at an implied WACC of 5.61%, while the DCF requires just a 3.0% terminal growth rate at a 7.40% WACC — closing that gap requires either a decade of accelerating growth from a $775.68B revenue base or a durable drop in the discount rate.",
+        "Statistical stretch in the price distribution: the Monte Carlo set (9,940 valid simulations) carries a mean implied price of $141.74 with a 5th percentile of $52.93, and the current $259.53 price sits at the 94th percentile — i.e. the market is trading near the top of the modeled outcome distribution, leaving asymmetric downside if the simulation median of $130.83 reasserts.",
+        "Even the bull end of the DCF band ($156.94) remains roughly 40% below the current $259.53 price, meaning there is no defensible scenario within the method that supports today's quote — the entire gap rests on re-rating assumptions the model does not credit.",
+        "Momentum risk is two-sided: with the stock +17.9% over one year and at 70% of its 52-week range, the -9.6% drawdown from the 52-week high is shallow, so sentiment-driven positioning is crowded relative to a fair value of $130.79 and any disappointment in the AI capex or cloud narrative would unwind against a high entry basis."
+      ],
+      "tagline": "AMZN · DCF fair value $130.79 vs $259.53 — 49.6% downside",
+      "valuation_overview": "Valuation rests on a single discounted-cash-flow method — only the DCF was run, so there is no comps or DDM cross-check to triangulate against, and no peer multiple is available to frame a relative-value argument. The DCF discounts a 10-year revenue path at a 7.40% WACC and a 3.0% terminal growth rate, producing an implied price of $130.79; the ±20% placeholder band spans $130.79 to $130.79, and the carried target band was widened to $98.09–$163.48 precisely because a single uncorroborated method cannot validate itself.\n\nThe weighted target of $130.79 is that DCF anchor (data-quality weight 0.85) carried to the contract — no averaging across non-existent methods was possible, and the wt= figure is a data-quality weight, not a prediction probability. The divergence between method and market is the substantive finding: at the current price of $259.53, the implied solution is 14.79% annual revenue growth over 10 years at an implied WACC of 5.61%. The DCF instead credits growth converging to 3.0% at a 7.40% WACC. Reconciling those requires either a decade of growth acceleration from a $775.68B revenue base or a structurally lower cost of capital than 7.40%. Because neither is embedded in the model, the implied price sits -49.6% below the market quote, and confidence in the target is medium rather than high."
+    },
+    "valuation_synthesis": {
+      "anchor_method": null,
+      "confidence": "medium",
+      "current_price": 259.53,
+      "degradation_note": "single method dcf with no cross-validation — band widened, confidence medium.",
+      "financial_sector": false,
+      "methods": [
+        {
+          "assumptions": "WACC 7.4% · 10yr growth 12%→3.0% · β0.81",
+          "confidence": 0.85,
+          "high": 156.94218405104348,
+          "low": 104.62812270069567,
+          "mid": 130.78515337586958,
+          "name": "dcf",
+          "rerating_ratio": null,
+          "source": "implied_price ± 20% (placeholder band, not a real distribution)"
+        }
+      ],
+      "mna_transition": false,
+      "outlier_methods": [],
+      "target_high": 163.481441719837,
+      "target_low": 98.08886503190219,
+      "upside_downside": null,
+      "valuation_withheld": false,
+      "warnings": [],
+      "weighted_price": null
+    },
+    "xbrl_facts_snapshot": {
+      "us-gaap:Assets": [
+        {
+          "concept": "us-gaap:Assets",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 1095689000000.0
+        }
+      ],
+      "us-gaap:GrossProfit": [
+        {
+          "concept": "us-gaap:GrossProfit",
+          "period_end": "2009-12-31",
+          "units": "USD",
+          "value": 5531000000.0
+        }
+      ],
+      "us-gaap:LiabilitiesAndStockholdersEquity": [
+        {
+          "concept": "us-gaap:LiabilitiesAndStockholdersEquity",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 1095689000000.0
+        }
+      ],
+      "us-gaap:NetIncomeLoss:annual": [
+        {
+          "concept": "us-gaap:NetIncomeLoss:annual",
+          "matched_concept": "us-gaap:NetIncomeLoss",
+          "period_end": "2025-12-31",
+          "units": "USD",
+          "value": 77670000000.0
+        }
+      ],
+      "us-gaap:NetIncomeLoss:ttm": [
+        {
+          "concept": "us-gaap:NetIncomeLoss:ttm",
+          "has_calculated_q4": true,
+          "period_end": "2026-06-30",
+          "periods": [
+            "Q3 2025",
+            "Q4 2025",
+            "Q1 2026",
+            "Q2 2026"
+          ],
+          "value": 135281000000.0,
+          "warning": "Some quarters were derived from YTD or annual facts. These are calculated values, not directly reported quarterly data."
+        }
+      ],
+      "us-gaap:OperatingIncomeLoss": [
+        {
+          "concept": "us-gaap:OperatingIncomeLoss",
+          "period_end": "2025-12-31",
+          "units": "USD",
+          "value": 79975000000.0
+        }
+      ],
+      "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax": [
+        {
+          "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+          "has_calculated_q4": true,
+          "period_end": "2026-06-30",
+          "periods": [
+            "Q3 2025",
+            "Q4 2025",
+            "Q1 2026",
+            "Q2 2026"
+          ],
+          "value": 775680000000.0,
+          "warning": "Some quarters were derived from YTD or annual facts. These are calculated values, not directly reported quarterly data."
+        },
+        {
+          "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+          "period_end": "2025-12-31",
+          "units": "USD",
+          "value": 716924000000.0
+        }
+      ],
+      "us-gaap:StockholdersEquity": [
+        {
+          "concept": "us-gaap:StockholdersEquity",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 551620000000.0
+        }
+      ]
+    }
+  },
+  "pinned_for": [],
+  "source": "~/.finrobot/artifacts.db",
+  "ticker": "AMZN",
+  "type": "equity_research",
+  "verdicts": {
+    "C1": false,
+    "C10a": true,
+    "C10b": false,
+    "C10c": false,
+    "C10d": false,
+    "C11": true,
+    "C12a": false,
+    "C12b": false,
+    "C12c": false,
+    "C13b": false,
+    "C13c": false,
+    "C14a": false,
+    "C14b": false,
+    "C1b": false,
+    "C2": false,
+    "C3": false,
+    "C4": false,
+    "C6": false,
+    "C6b": false,
+    "C7": false,
+    "C8": false,
+    "C9": false
+  }
+}

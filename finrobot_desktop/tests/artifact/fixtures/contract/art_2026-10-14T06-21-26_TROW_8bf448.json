@@ -1,0 +1,1251 @@
+{
+  "artifact_id": "art_2026-10-14T06:21:26_TROW_equity_research_8bf448",
+  "extracted_at": "2026-10-14",
+  "inputs_raw_data": {
+    "balance": {
+      "noncontrolling_interest": 1170300000.0,
+      "preferred_stock": 0.0,
+      "total_cash": 3234299904.0,
+      "total_debt": 450600000.0
+    },
+    "data_authority": {
+      "clock": "2026-10-14T06:18:53.075580Z",
+      "decisions": [
+        {
+          "agreement_is_independent": true,
+          "basis": "operating-caliber EBITDA = EBIT + D&A, trailing twelve months",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 3177000000.0
+            }
+          ],
+          "comparability": "caliber_divergent",
+          "currency": "USD",
+          "definition_version": "ebitda_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "ebitda",
+          "period_basis": "ttm",
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T06:18:53.075580Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.15,
+          "unit": "USD",
+          "value": 3177000000.0
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "gross_profit / revenue on FMP's TTM income-statement caliber",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 0.51614
+            }
+          ],
+          "comparability": "caliber_divergent",
+          "currency": "USD",
+          "definition_version": "gross_margin_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "gross_margin",
+          "period_basis": "ttm",
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T06:18:53.075580Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.1,
+          "unit": "ratio",
+          "value": 0.51614
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "live profile quote-currency market cap at the snapshot instant",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 21628094464.0
+            }
+          ],
+          "comparability": "exact",
+          "currency": "USD",
+          "definition_version": "market_cap_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "market_cap",
+          "period_basis": null,
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T06:18:53.075580Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.05,
+          "unit": "USD",
+          "value": 21628094464.0
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "as-reported income statement, trailing twelve months",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 2167300096.0
+            }
+          ],
+          "comparability": "as_reported_period",
+          "currency": "USD",
+          "definition_version": "net_income_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "net_income",
+          "period_basis": "ttm",
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T06:18:53.075580Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.15,
+          "unit": "USD",
+          "value": 2167300096.0
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "as-reported income statement, trailing twelve months",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 7592000000.0
+            }
+          ],
+          "comparability": "as_reported_period",
+          "currency": "USD",
+          "definition_version": "revenue_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "revenue",
+          "period_basis": "ttm",
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T06:18:53.075580Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.15,
+          "unit": "USD",
+          "value": 7592000000.0
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "as-reported share count, latest period (FMP may rederive as marketCap/price)",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 213315850.0
+            }
+          ],
+          "comparability": "balance_period",
+          "currency": null,
+          "definition_version": "shares_outstanding_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "shares_outstanding",
+          "period_basis": null,
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T06:18:53.075580Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.05,
+          "unit": "shares",
+          "value": 213315850.0
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "as-reported balance sheet, cash + short-term investments, latest period",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 3234299904.0
+            }
+          ],
+          "comparability": "balance_period",
+          "currency": "USD",
+          "definition_version": "total_cash_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "total_cash",
+          "period_basis": "ttm",
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T06:18:53.075580Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.1,
+          "unit": "USD",
+          "value": 3234299904.0
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "as-reported balance sheet total debt (bonds + finance leases), latest period",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 450600000.0
+            }
+          ],
+          "comparability": "caliber_divergent",
+          "currency": "USD",
+          "definition_version": "total_debt_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "total_debt",
+          "period_basis": "ttm",
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T06:18:53.075580Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.2,
+          "unit": "USD",
+          "value": 450600000.0
+        }
+      ],
+      "policy_version": "metric_authority_v1",
+      "run_as_of": null
+    },
+    "income": {
+      "capital_expenditure": 258400000.0,
+      "depreciation_amortization": 561900000.0,
+      "ebitda": 3177000000.0,
+      "gross_margin": 0.51614,
+      "income_tax_expense": 709900000.0,
+      "interest_expense": null,
+      "net_income": 2167300096.0,
+      "operating_income": 2615100000.0,
+      "operating_margin": 0.28688,
+      "rd_expense": null,
+      "revenue": 7592000000.0,
+      "sga_expense": 1269300000.0
+    },
+    "market": {
+      "beta": 1.471,
+      "country": "United States",
+      "current_price": 101.39,
+      "industry": "Asset Management",
+      "is_adr": null,
+      "market_cap": 21628094031.5,
+      "pe_basis": "market cap ÷ TTM net income (one net-income authority); supersedes the provider's trailingPE 10.18×, which rides a different denominator",
+      "pe_ratio": 9.9792797829046,
+      "price_52w_high": 120.5009681130835,
+      "price_52w_low": 83.17487819932707,
+      "quote_as_of": "2026-10-13T00:00:00Z",
+      "quote_is_live": false,
+      "sector": "Financial Services",
+      "shares_outstanding": 213315850.0,
+      "trailing_1y_return_pct": 1.2929613430333777
+    },
+    "valuation": {
+      "book_value_per_share": 51.579,
+      "ebitda_operating": 3177000000.0,
+      "ebitda_reported": null,
+      "enterprise_value": 20014694127.5,
+      "ev_ebitda": 6.299872246616305,
+      "ev_ebitda_reported": null,
+      "ev_revenue": 2.6362874245916754
+    }
+  },
+  "notes": "TROW — the artifact discloses that its 8-K index is stale relative to the news window and ships the catalyst read anyway",
+  "outputs_structured": {
+    "catalyst_analysis": {
+      "category_breakdown": {
+        "earnings": 2,
+        "product_launch": 3,
+        "regulatory": 1
+      },
+      "events": [
+        {
+          "category": "regulatory",
+          "headline": "T. Rowe Price Group (TROW) Won Approval For New ETFs And Fund Changes",
+          "impact_score": 3,
+          "published": "2026-10-09T19:11:15Z",
+          "reasoning": "T. Rowe Price received regulatory approval for new ETFs and fund changes, expanding its product shelf.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/t-rowe-price-group-trow-191115221.html"
+        },
+        {
+          "category": "product_launch",
+          "headline": "T. ROWE PRICE LAUNCHES DYNAMIC EMERGING MARKETS BOND EXCHANGE TRADED FUND",
+          "impact_score": 3,
+          "published": "2026-10-01T14:20:00Z",
+          "reasoning": "T. Rowe Price launched a new Dynamic Emerging Markets Bond exchange-traded fund, expanding its active ETF lineup.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/t-rowe-price-launches-dynamic-142000230.html"
+        },
+        {
+          "category": "product_launch",
+          "headline": "T. Rowe Price’s New Active Biotech and Small-Cap ETFs Might Change The Case For Investing In TROW",
+          "impact_score": 3,
+          "published": "2026-09-27T03:16:03Z",
+          "reasoning": "T. Rowe Price's new active biotech and small-cap ETFs are highlighted as potentially changing the investment case for TROW.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/t-rowe-price-active-biotech-031603356.html"
+        },
+        {
+          "category": "product_launch",
+          "headline": "T. ROWE PRICE DEBUTS BIOTECH, SMALL-CAP, AND MID-CAP EXCHANGE TRADED FUNDS",
+          "impact_score": 3,
+          "published": "2026-09-17T13:58:00Z",
+          "reasoning": "T. Rowe Price debuted new biotech, small-cap and mid-cap exchange-traded funds, broadening its active ETF offering.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/t-rowe-price-debuts-biotech-135800245.html"
+        },
+        {
+          "category": "earnings",
+          "headline": "TROW's August AUM Hits $1.90T: Can Diversification Sustain Growth?",
+          "impact_score": 3,
+          "published": "2026-09-14T16:54:00Z",
+          "reasoning": "T. Rowe Price's August AUM reached $1.90T, a monthly operational datapoint with discussion of whether diversification can sustain growth.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/trows-august-aum-hits-1-165400194.html"
+        },
+        {
+          "category": "earnings",
+          "headline": "T. ROWE PRICE GROUP REPORTS MONTH-END ASSETS UNDER MANAGEMENT FOR SEPTEMBER 2026",
+          "impact_score": 3,
+          "published": "2026-10-12T12:30:00Z",
+          "reasoning": "T. Rowe Price disclosed month-end assets under management for September 2026, a routine monthly operational datapoint.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/t-rowe-price-group-reports-123000453.html"
+        },
+        {
+          "category": "management",
+          "headline": "SEC 8-K: Executive / director change",
+          "impact_score": 3,
+          "published": "2026-05-18T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1113169/000162828026035912/0001628280-26-035912-index.html"
+        },
+        {
+          "category": "management",
+          "headline": "SEC 8-K: Executive / director change",
+          "impact_score": 3,
+          "published": "2026-04-22T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1113169/000162828026026397/0001628280-26-026397-index.html"
+        },
+        {
+          "category": "management",
+          "headline": "SEC 8-K: Executive / director change",
+          "impact_score": 3,
+          "published": "2025-11-03T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1113169/000162828025047944/0001628280-25-047944-index.html"
+        },
+        {
+          "category": "management",
+          "headline": "SEC 8-K: Executive / director change",
+          "impact_score": 3,
+          "published": "2025-10-16T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1113169/000162828025045161/0001628280-25-045161-index.html"
+        },
+        {
+          "category": "other",
+          "headline": "SEC 8-K: Other events",
+          "impact_score": 3,
+          "published": "2025-09-04T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1113169/000111316925000028/0001113169-25-000028-index.html"
+        }
+      ],
+      "key_catalysts": [
+        "T. Rowe Price Group (TROW) Won Approval For New ETFs And Fund Changes",
+        "T. ROWE PRICE LAUNCHES DYNAMIC EMERGING MARKETS BOND EXCHANGE TRADED FUND",
+        "T. Rowe Price’s New Active Biotech and Small-Cap ETFs Might Change The Case For Investing In TROW"
+      ],
+      "net_sentiment": 0.95,
+      "news_window": {
+        "count": 50,
+        "earliest": "2026-09-10T11:00:02+00:00",
+        "latest": "2026-10-12T15:12:00+00:00",
+        "provider": null,
+        "sources": []
+      },
+      "overall_sentiment": "bullish",
+      "sec_8k_category_breakdown": {
+        "management": 4,
+        "other": 1
+      },
+      "sec_8k_staleness_warning": "SEC 8-K index is stale relative to the news window: newest 8-K filed 2026-07-31, older than the news feed's earliest item (2026-09-10); filings in that gap are invisible to this run.",
+      "sec_8k_window": {
+        "count": 10,
+        "newest": "2026-07-31",
+        "oldest": "2025-09-04",
+        "provider": "SEC EDGAR"
+      },
+      "top_negative": [],
+      "top_positive": [
+        {
+          "category": "regulatory",
+          "headline": "T. Rowe Price Group (TROW) Won Approval For New ETFs And Fund Changes",
+          "impact_score": 3,
+          "published": "2026-10-09T19:11:15Z",
+          "reasoning": "T. Rowe Price received regulatory approval for new ETFs and fund changes, expanding its product shelf.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/t-rowe-price-group-trow-191115221.html"
+        },
+        {
+          "category": "product_launch",
+          "headline": "T. ROWE PRICE LAUNCHES DYNAMIC EMERGING MARKETS BOND EXCHANGE TRADED FUND",
+          "impact_score": 3,
+          "published": "2026-10-01T14:20:00Z",
+          "reasoning": "T. Rowe Price launched a new Dynamic Emerging Markets Bond exchange-traded fund, expanding its active ETF lineup.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/t-rowe-price-launches-dynamic-142000230.html"
+        },
+        {
+          "category": "product_launch",
+          "headline": "T. Rowe Price’s New Active Biotech and Small-Cap ETFs Might Change The Case For Investing In TROW",
+          "impact_score": 3,
+          "published": "2026-09-27T03:16:03Z",
+          "reasoning": "T. Rowe Price's new active biotech and small-cap ETFs are highlighted as potentially changing the investment case for TROW.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/t-rowe-price-active-biotech-031603356.html"
+        }
+      ]
+    },
+    "currency": {
+      "quote_currency": "USD",
+      "reporting_currency": "USD"
+    },
+    "numeric_audit": {
+      "artifact_status": "caveated",
+      "findings": [
+        {
+          "check": "target_multiple_outside_band",
+          "evidence": "TROW: the $164.20 target implies 10.5x TTM EBITDA vs the issuer's own 5-year p90 of 8.0x — the target sits above its own historical multiple range",
+          "field_key": "thesis.price_target",
+          "severity": "review"
+        },
+        {
+          "check": "insider_flow_amount_corrected",
+          "evidence": "the narrative stated $164.20 as the purchases figure; the published text was corrected to the computed value $0 (the printed amount belonged to another metric)",
+          "field_key": "ownership_governance.insider_buy_value",
+          "severity": "review"
+        }
+      ],
+      "withhold_valuation": false
+    },
+    "ownership_governance": {
+      "insider_buy_value": 0.0,
+      "insider_largest_sale": {
+        "name": "Joshua B Nelson",
+        "position": "Vice President",
+        "value": 1118203.0
+      },
+      "insider_net_flow": -1118203.0,
+      "insider_sell_value": 1118203.0,
+      "insider_window_days": 90,
+      "warnings": [
+        "3 Schedule 13D/13G filing(s) are stale (older than 400 days; a 13G annual amendment is due within 45 days of year-end): VANGUARD GROUP INC (974d, filed 2024-02-13), STATE STREET CORP (989d, filed 2024-01-29), BlackRock Inc. (993d, filed 2024-01-25). The reported holdings may no longer reflect the filer's current position — verify against a newer filing before relying on them.",
+        "13F index for period 2026-06-30 is a PARTIAL refresh (no completion marker — the refresh was interrupted or capped): the 20 cached holder row(s) are a subset of the quarter's filers, so the coverage percentage and any top-5 concentration are computed over a partial index."
+      ]
+    },
+    "technical_analysis": {
+      "historical_bands": {
+        "classification": "fair",
+        "classification_caveat": null,
+        "current": 6.299872246616305,
+        "median": 6.245015475303302,
+        "metric": "ev_ebitda",
+        "p25": 5.790641466717725,
+        "p75": 7.1919397513510415,
+        "p90": 7.986412233774012,
+        "sample_count": 948,
+        "structural_break": null,
+        "timeline": [
+          [
+            "2023-01-03",
+            5.736971326502323
+          ],
+          [
+            "2023-01-12",
+            6.327986184066458
+          ],
+          [
+            "2023-01-25",
+            6.161796991232733
+          ],
+          [
+            "2023-02-06",
+            6.495872778469349
+          ],
+          [
+            "2023-02-16",
+            6.300189535969826
+          ],
+          [
+            "2023-03-01",
+            5.849278203924502
+          ],
+          [
+            "2023-03-13",
+            5.594606862093386
+          ],
+          [
+            "2023-03-23",
+            5.79140360002228
+          ],
+          [
+            "2023-04-04",
+            5.891815087247757
+          ],
+          [
+            "2023-04-17",
+            6.075412830574829
+          ],
+          [
+            "2023-04-27",
+            5.9050072922433
+          ],
+          [
+            "2023-05-09",
+            5.579690097103572
+          ],
+          [
+            "2023-05-19",
+            5.662883142811447
+          ],
+          [
+            "2023-06-01",
+            5.764442073497676
+          ],
+          [
+            "2023-06-13",
+            5.962956581814565
+          ],
+          [
+            "2023-06-26",
+            5.754128661563434
+          ],
+          [
+            "2023-07-07",
+            5.940333613700745
+          ],
+          [
+            "2023-07-19",
+            6.580742856927557
+          ],
+          [
+            "2023-07-31",
+            6.696179742843274
+          ],
+          [
+            "2023-08-10",
+            6.143940326725125
+          ],
+          [
+            "2023-08-22",
+            5.776751629677254
+          ],
+          [
+            "2023-09-01",
+            6.095218112083838
+          ],
+          [
+            "2023-09-14",
+            6.002112241212044
+          ],
+          [
+            "2023-09-26",
+            5.606128823944872
+          ],
+          [
+            "2023-10-05",
+            5.52634416058788
+          ],
+          [
+            "2023-10-17",
+            5.456540218457572
+          ],
+          [
+            "2023-10-27",
+            4.731451005748298
+          ],
+          [
+            "2023-11-08",
+            5.1110035758259595
+          ],
+          [
+            "2023-11-20",
+            5.3439006503278375
+          ],
+          [
+            "2023-12-01",
+            5.556265955449106
+          ],
+          [
+            "2023-12-13",
+            5.600853299867911
+          ],
+          [
+            "2023-12-26",
+            5.9986020147670125
+          ],
+          [
+            "2024-01-08",
+            7.2178266583703765
+          ],
+          [
+            "2024-01-19",
+            7.408071953867678
+          ],
+          [
+            "2024-01-31",
+            7.330351700533815
+          ],
+          [
+            "2024-02-12",
+            7.444349871682014
+          ],
+          [
+            "2024-02-23",
+            7.518378836295444
+          ],
+          [
+            "2024-03-06",
+            7.963272255951342
+          ],
+          [
+            "2024-03-18",
+            7.908182311676456
+          ],
+          [
+            "2024-03-28",
+            8.423658928722814
+          ],
+          [
+            "2024-04-10",
+            8.024144654804333
+          ],
+          [
+            "2024-04-22",
+            7.6440858429949206
+          ],
+          [
+            "2024-05-02",
+            7.618653202361485
+          ],
+          [
+            "2024-05-14",
+            7.8580535949019685
+          ],
+          [
+            "2024-05-24",
+            8.145347611964201
+          ],
+          [
+            "2024-06-06",
+            7.997958517161455
+          ],
+          [
+            "2024-06-18",
+            8.192784058525163
+          ],
+          [
+            "2024-07-01",
+            7.911484152504364
+          ],
+          [
+            "2024-07-11",
+            8.162534116786397
+          ],
+          [
+            "2024-07-23",
+            8.150435833342593
+          ],
+          [
+            "2024-08-02",
+            7.353413788777981
+          ],
+          [
+            "2024-08-14",
+            7.312572557614304
+          ],
+          [
+            "2024-08-26",
+            7.565899945441736
+          ],
+          [
+            "2024-09-06",
+            6.991946880707255
+          ],
+          [
+            "2024-09-18",
+            7.576779087656772
+          ],
+          [
+            "2024-09-30",
+            7.6379986031096205
+          ],
+          [
+            "2024-10-10",
+            7.566831233880377
+          ],
+          [
+            "2024-10-22",
+            7.9433257508473565
+          ],
+          [
+            "2024-11-01",
+            7.877517523269567
+          ],
+          [
+            "2024-11-13",
+            8.369568002954834
+          ],
+          [
+            "2024-11-25",
+            8.712392209735674
+          ],
+          [
+            "2024-12-06",
+            8.778208903571995
+          ],
+          [
+            "2024-12-18",
+            8.025871771545086
+          ],
+          [
+            "2024-12-31",
+            6.595419920281468
+          ],
+          [
+            "2025-01-14",
+            6.531377933511138
+          ],
+          [
+            "2025-01-27",
+            6.63724866233897
+          ],
+          [
+            "2025-02-06",
+            6.487588357352053
+          ],
+          [
+            "2025-02-19",
+            6.286295139799718
+          ],
+          [
+            "2025-03-03",
+            5.993515414383722
+          ],
+          [
+            "2025-03-13",
+            5.219723046128556
+          ],
+          [
+            "2025-03-25",
+            5.53118078981146
+          ],
+          [
+            "2025-04-04",
+            4.678310987897545
+          ],
+          [
+            "2025-04-15",
+            5.008325092257112
+          ],
+          [
+            "2025-04-28",
+            5.0845328380518655
+          ],
+          [
+            "2025-05-08",
+            5.344965957120571
+          ],
+          [
+            "2025-05-20",
+            5.6385400350375745
+          ],
+          [
+            "2025-06-02",
+            5.311173772348028
+          ],
+          [
+            "2025-06-12",
+            5.47220548385836
+          ],
+          [
+            "2025-06-25",
+            5.582362853660091
+          ],
+          [
+            "2025-07-08",
+            5.90411139821189
+          ],
+          [
+            "2025-07-18",
+            6.30914529777912
+          ],
+          [
+            "2025-07-30",
+            6.183537414016372
+          ],
+          [
+            "2025-08-11",
+            6.275560646542875
+          ],
+          [
+            "2025-08-21",
+            6.225852786434849
+          ],
+          [
+            "2025-09-03",
+            6.282280439321658
+          ],
+          [
+            "2025-09-15",
+            6.2868247081337225
+          ],
+          [
+            "2025-09-25",
+            6.221558989132112
+          ],
+          [
+            "2025-10-07",
+            6.396280757709339
+          ],
+          [
+            "2025-10-17",
+            6.254871699872517
+          ],
+          [
+            "2025-10-29",
+            6.241954526320115
+          ],
+          [
+            "2025-11-10",
+            6.2072749567716725
+          ],
+          [
+            "2025-11-20",
+            5.820425288781535
+          ],
+          [
+            "2025-12-03",
+            6.346651617218532
+          ],
+          [
+            "2025-12-15",
+            6.335766841056092
+          ],
+          [
+            "2025-12-26",
+            6.413534666537506
+          ],
+          [
+            "2026-01-08",
+            6.273703733684193
+          ],
+          [
+            "2026-01-20",
+            5.948315587390121
+          ],
+          [
+            "2026-01-30",
+            6.0814018716971034
+          ],
+          [
+            "2026-02-11",
+            5.290218649652924
+          ],
+          [
+            "2026-02-24",
+            5.357426046942813
+          ],
+          [
+            "2026-03-06",
+            5.064641756926919
+          ],
+          [
+            "2026-03-18",
+            4.9590597868613955
+          ],
+          [
+            "2026-03-30",
+            5.06170796340783
+          ],
+          [
+            "2026-04-10",
+            5.227840940750592
+          ],
+          [
+            "2026-04-22",
+            5.818751239170911
+          ],
+          [
+            "2026-05-04",
+            6.010541071157028
+          ],
+          [
+            "2026-05-14",
+            5.965295609314281
+          ],
+          [
+            "2026-05-27",
+            6.1064359871500855
+          ],
+          [
+            "2026-06-08",
+            6.17059196240715
+          ],
+          [
+            "2026-06-18",
+            6.406402535828278
+          ],
+          [
+            "2026-07-01",
+            6.984581277467644
+          ],
+          [
+            "2026-07-14",
+            6.981848144354341
+          ],
+          [
+            "2026-07-24",
+            7.0112345148155955
+          ],
+          [
+            "2026-08-05",
+            6.907354698537091
+          ],
+          [
+            "2026-08-17",
+            6.598441463490544
+          ],
+          [
+            "2026-08-27",
+            6.728296423331927
+          ],
+          [
+            "2026-09-09",
+            6.412553815164293
+          ],
+          [
+            "2026-09-21",
+            6.288960843848325
+          ],
+          [
+            "2026-10-01",
+            6.371992735898018
+          ],
+          [
+            "2026-10-13",
+            6.299872246616305
+          ]
+        ],
+        "warnings": [
+          "54 price point(s) predate the earliest fiscal year — skipped",
+          "current point uses TTM EBITDA (consistent with the comps caliber); historical quantiles use each annual-report year's EBITDA, so the two carry a caliber basis difference (no quarterly data, so a rolling TTM cannot be reconstructed point by point).",
+          "per-year share counts are unavailable from the serving providers, so the historical band is computed on the run's own share count (213,315,850); a buyback or issuance history makes the earlier multiples approximate."
+        ],
+        "window_years": 5
+      },
+      "monte_carlo": {
+        "assumptions_used": {
+          "centered_on": "base-case DCF assumptions",
+          "ebitda_margin_std": 0.02,
+          "independent": false,
+          "mid_year_convention": false,
+          "n_simulations": 10000,
+          "revenue_growth_std": 0.02,
+          "seed": 1136682615,
+          "terminal_growth_std": 0.005,
+          "valid_simulations": 9959,
+          "variance_reduction": "antithetic_variates",
+          "wacc_std": 0.01
+        },
+        "current_price_percentile": 0.1,
+        "mean": 170.39,
+        "n_valid": 9959,
+        "percentiles": {
+          "10": 131.43,
+          "25": 145.64,
+          "5": 124.13,
+          "50": 164.44,
+          "75": 188.35,
+          "90": 217.41,
+          "95": 238.46
+        },
+        "std": 35.1
+      }
+    },
+    "thesis": {
+      "catalysts": [
+        "Regulatory approval for new ETFs and fund changes (reported 2026-10-09) broadens the product shelf — the distribution scaffold the DCF needs to sustain 4.1%/yr forecast year-1 revenue growth fading to 3.0% terminal and still arrive at the $164.20 target.",
+        "The launch of a Dynamic Emerging Markets Bond active ETF (reported 2026-10-01) extends the active-ETF lineup; with the model's low-band value of $131.36 still 29.6% above the $101.39 market price, even partial success in narrowing the flow gap is upside optionality rather than a requirement.",
+        "New active biotech and small-cap ETFs (reported 2026-09-27) materially matter to the margin assumption: the DCF holds a 42.0% EBITDA margin on TTM-caliber economics, which requires defending the fee pool as the 9.73% WACC discounts the cash flows to a $164.20 implied value.",
+        "The market-implied reverse-DCF is itself the deepest support — holding the 9.73% WACC fixed, $101.39 prices -3.83%/yr revenue growth held flat for 10 years against the model's 4.1%-to-3.0% fade (3.5%/yr average), so any normalisation of that gap closes part of the 62.0% implied upside.",
+        "Positioning is not stretched: the stock's +1.3% one-year return and 49% 52-week range position mean ETF-launch catalysts land into a non-extended tape, leaving room for the $164.20 anchor to be re-rated toward rather than chasing a crowded position."
+      ],
+      "company_overview": "T. Rowe Price Group, Inc. is a financial services holding company that provides global investment advisory services through its subsidiaries to individual and institutional investors. The firm's revenue and net income are derived overwhelmingly from investment advisory fees tied to assets under management, supplemented by administrative, distribution and other service fees — a fee-on-AUM model that gears results to market levels and net flows rather than unit volumes and gives the platform high incremental margins at scale. On a trailing-twelve-month basis the firm generated $7,592M of revenue at a 41.8% EBITDA margin and a 28.7% operating margin, with capex of only 3.4% of revenue and D&A of 7.5%, confirming the capital-light economics of an advisory franchise. A segment revenue breakdown was not available for this issuer; see the latest annual report for business-line detail. A geographic revenue breakdown was also not available and is not estimated here. The durable moat rests on the firm's long-tenured active-management franchise and investment process, its distribution reach across retail intermediary, retirement and institutional channels, and the switching costs embedded in retirement-plan and recordkeeping relationships. The market currently prices that moat at 6.30x EV/EBITDA and 9.98x earnings — the profile of a mature asset manager, not a growth franchise. Balance-sheet risk is negligible: total debt of $0.45B against $3.23B of cash, 2.0% market leverage, a 16.92 distance to default and a sub-0.01% one-year default probability.",
+      "competitor_analysis": "Asset management economics are flow-cyclical and fee-rate-driven, with commoditisation concentrated in passive/index vehicles and differentiated IP in active strategies — precisely the axis TROW is defending with its active-ETF shelf build-out. The peer-screen and peer-financials fetch returned no usable comp set for this ticker in this run, so a like-for-like market-share, growth and multiple comparison against named peers cannot be made; that is a data-coverage gap for this run, not a valuation input. On the evidence that is available, the subject's own trading multiple — EV/EBITDA of 6.30x versus its own 5-year median of 6.25x (P25 5.79x, P75 7.19x, P90 7.99x), classified 'fair' — sits mid-band, i.e. the market is not paying a growth premium for the franchise today. Because the subject trades inside its own historical band rather than at an extreme, the 62.0% gap to the $164.20 DCF target is a cash-flow and terminal-durability argument, not a peer-relative re-rating argument.",
+      "key_takeaways": [
+        "Valuation is the call, not sentiment: the $164.20 DCF anchor sits 62.0% above the $101.39 market price, with the published band at $123.15–$205.26 and the model's own range at $131.36–$197.05.",
+        "The fee stream is highly profitable on a TTM basis: $7,592M of revenue at a 41.8% EBITDA margin and 28.7% operating margin, with capex of only 3.4% of revenue and a 24.7% effective tax rate.",
+        "The market's reverse-DCF is a contraction case: holding the 9.73% WACC fixed, $101.39 implies -3.83%/yr revenue growth held flat for 10 years, versus the model's 4.1%-to-3.0% fade averaging 3.5%/yr.",
+        "Multiples carry no cushion but no bubble either — EV/EBITDA of 6.30x is within 0.9% of the stock's own 5-year median of 6.25x (P25 5.79x, P75 7.19x), a 'fair' classification, so the return depends on cash flow rather than rerating.",
+        "Balance sheet is a non-issue: $0.45B of debt against $3.23B of cash, 2.0% market leverage, a 16.92 distance to default and a sub-0.01% one-year default probability under the Merton/KMV model."
+      ],
+      "momentum_divergence_note": null,
+      "narrative": "We initiate T. Rowe Price at Buy with a $164.20 target, 62.0% above the $101.39 market price. The call is a single-method argument and we are explicit about that: only the DCF was run, weighting at 0.85 on data quality, with a mid of $164.20 against its own $131.36–$197.05 placeholder band. With nothing to blend against, the synthesis widened the published range to $123.15–$205.26 and capped confidence at medium. Notably, even the bear end of the model band — the $131.36 DCF low — sits 29.6% above the current price.\n\nThe business supports the cash-flow case. On a TTM basis, $7,592M of revenue converts at a 41.8% EBITDA margin and 28.7% operating margin, with capex at just 3.4% of revenue and D&A at 7.5% — a capital-light fee stream. The DCF discounts that at a 9.73% WACC with revenue growth fading from 4.1%/yr in forecast year 1 to 3.0%/yr in year 10 (3.5%/yr average), held at a 42.0% EBITDA margin and a 24.7% effective tax rate, producing $33.4B of enterprise value and $164.20 per share.\n\nWhat matters is how far the market's own solve diverges from the model. Holding the 9.73% WACC fixed, $101.39 implies -3.83%/yr revenue growth held flat for 10 years — a structurally shrinking franchise — while holding the growth fade fixed it implies a 14.93% discount rate. The model's 3.5% average forecast (a declining fade, not a flat rate) is closer to the 3.0% terminal growth assumption than to the market's implied -3.83%. The stock has returned +1.3% over one year, sits at the 49th percentile of its 52-week range and -15.9% below its high, and trades at 9.98x earnings and 6.30x EV/EBITDA versus a 6.25x five-year median — so the gap to fair value is a cash-flow argument, not a multiple call.",
+      "news_summary": "Sentiment over the trailing 30 days is constructively one-sided: the catalyst feed carries a net sentiment of +0.95, with zero top-negative items and a category mix of 3 product launches, 1 regulatory approval and 2 earnings datapoints. The substantive positives are the regulatory approval for new ETFs and fund changes (2026-10-09), the launch of a Dynamic Emerging Markets Bond ETF (2026-10-01), and the new active biotech and small-cap ETFs flagged as potentially changing the investment case (2026-09-27) — a coherent push to defend the active franchise as the market-implied reverse-DCF prices -3.83%/yr revenue growth held flat for 10 years. Routine monthly AUM disclosures keep the operating narrative current, and retail sentiment averages 0.9402 with a bullish share of 97.0. The tape disagrees with the news flow: the shares sit -15.9% below the 52-week high with a +1.3% one-year return and a 49% 52-week range position, so the 30-day news is more constructive than price action. Insider activity is the counterpoint — $164.20 of 90-day net selling with $0 of open-market purchases — meaning the ETF-driven narrative is being told by the company, not bought by its officers at the current $101.39.",
+      "price_target": 164.2,
+      "price_target_basis": "Confidence=medium; the single computed method (no second method ran against it, so there is no blend; wt = the method's data-quality weight, NOT prediction accuracy): DCF $164.20 (own range $131.36–$197.05, wt 0.85) → $164.20. Published target band $123.15–$205.26 (±25% single-method confidence dial). single method dcf with no cross-validation — band widened, confidence medium.",
+      "recommendation": "BUY",
+      "risks": [
+        "Single-method concentration risk: with no cross-validation, the entire $164.20 anchor rests on one DCF using a 9.73% WACC and a 3.0% perpetuity growth rate — if the market's 14.93% implied discount rate is closer to right than the model's, fair value converges toward the $101.39 market price and the 62.0% implied upside evaporates.",
+        "Structural flow/fee-pool risk: the market-implied solve holds -3.83%/yr revenue growth flat for 10 years, a trajectory consistent with continued active-to-passive share loss; the model's 3.5%/yr average forecast growth (4.1% fading to 3.0%) requires the recent ETF and fund approvals to offset that pressure, which is unproven.",
+        "No insider corroboration of the discount: trailing 90-day insider net flow is -$1,118,203 with $0 of open-market purchases and a single $1,118,203 sale by VP Joshua B Nelson — insiders were net sellers into a price sitting 38% below the DCF mid-point.",
+        "No multiple cushion if flows disappoint: the stock trades at EV/EBITDA of 6.30x against its own 5-year median of 6.25x (P75 7.19x), a 'fair' reading that offers little re-rating support — the return case depends entirely on cash flow holding its 42.0% EBITDA margin physics.",
+        "The tape has not confirmed the thesis: the shares sit -15.9% below the 52-week high at only the 49th percentile of the 52-week range on a +1.3% one-year return, so a value dislocation this wide can persist through further de-rating pressure before the $123.15–$205.26 target band is approached."
+      ],
+      "tagline": "TROW · 9.98x P/E manager trading 38% below DCF value",
+      "valuation_overview": "DCF is the only method that ran, and it carries the entire call. A 10-year explicit forecast holds revenue growth fading from 4.1%/yr in forecast year 1 to 3.0%/yr in year 10 (3.5%/yr average), a 42.0% EBITDA margin near the trailing three-year annual median, a 24.7% effective tax rate, capex at 3.4% of revenue, and a 9.73% WACC, discounting to $33.4B of enterprise value and roughly $35.0B of equity value — $164.20 per share. With no second method to blend against, the synthesis applies the method's 0.85 data-quality weight as a solitary anchor and widens the published band to $123.15–$205.26 (±25%), which is why confidence is medium rather than high; the DCF's own placeholder band spans $131.36–$197.05. The divergence from the $101.39 market price is not a modelling artefact: holding the growth fade fixed, the market implies a 14.93% discount rate, and holding the 9.73% WACC fixed it implies -3.83%/yr revenue growth held flat for the full 10-year window — a structurally shrinking franchise versus the model's 4.1%-to-3.0% (3.5% average) fade. The +62.0% implied upside therefore quantifies a disagreement about terminal franchise durability, not a disagreement about near-term earnings."
+    },
+    "valuation_synthesis": {
+      "anchor_method": null,
+      "confidence": "medium",
+      "cross_checks": [
+        {
+          "band_break_caveat": null,
+          "basis": "Own 5-year EV/EBITDA band (p25 5.79x · median 6.25x · p75 7.19x, 948 samples) applied to this run's TTM EBITDA (income.ebitda $3,177,000,000) through the EV→equity bridge (− net debt $-2,783,699,904 − preferred $0 − NCI $1,170,300,000) ÷ 213,315,850 shares outstanding.",
+          "high": 114.67592536626913,
+          "label": "Own 5-year EV/EBITDA",
+          "low": 93.80581819757984,
+          "mid": 100.57299571990825,
+          "name": "ev_ebitda_band",
+          "note": "Mean-reversion cross-check only — excluded from the published target blend, which keeps its existing method weighting."
+        }
+      ],
+      "current_price": 101.39,
+      "degradation_note": "single method dcf with no cross-validation — band widened, confidence medium.",
+      "financial_sector": false,
+      "methods": [
+        {
+          "assumptions": "WACC 9.7% · 10yr growth 4%→3.0% · β1.31",
+          "confidence": 0.85,
+          "high": 197.04516433960035,
+          "low": 131.3634428930669,
+          "mid": 164.20430361633362,
+          "name": "dcf",
+          "rerating_ratio": null,
+          "source": "implied_price ± 20% (placeholder band, not a real distribution)"
+        }
+      ],
+      "mna_transition": false,
+      "outlier_methods": [],
+      "target_high": 205.25537952041702,
+      "target_low": 123.15322771225021,
+      "upside_downside": null,
+      "valuation_withheld": false,
+      "warnings": [],
+      "weighted_price": null
+    },
+    "xbrl_facts_snapshot": {
+      "us-gaap:Assets": [
+        {
+          "concept": "us-gaap:Assets",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 15357200000.0
+        }
+      ],
+      "us-gaap:GrossProfit": [
+        {
+          "concept": "us-gaap:GrossProfit",
+          "period_end": "2011-12-31",
+          "units": "USD",
+          "value": 2747100000.0
+        }
+      ],
+      "us-gaap:Liabilities": [
+        {
+          "concept": "us-gaap:Liabilities",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 3184400000.0
+        }
+      ],
+      "us-gaap:NetIncomeLoss:annual": [
+        {
+          "concept": "us-gaap:NetIncomeLoss:annual",
+          "matched_concept": "us-gaap:NetIncomeLoss",
+          "period_end": "2025-12-31",
+          "units": "USD",
+          "value": 2087100000.0
+        }
+      ],
+      "us-gaap:NetIncomeLoss:ttm": [
+        {
+          "concept": "us-gaap:NetIncomeLoss:ttm",
+          "has_calculated_q4": true,
+          "period_end": "2026-06-30",
+          "periods": [
+            "Q3 2025",
+            "Q4 2025",
+            "Q1 2026",
+            "Q2 2026"
+          ],
+          "value": 2221600000.0,
+          "warning": "Some quarters were derived from YTD or annual facts. These are calculated values, not directly reported quarterly data."
+        }
+      ],
+      "us-gaap:OperatingIncomeLoss": [
+        {
+          "concept": "us-gaap:OperatingIncomeLoss",
+          "period_end": "2025-12-31",
+          "units": "USD",
+          "value": 2188800000.0
+        }
+      ],
+      "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax": [
+        {
+          "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+          "has_calculated_q4": true,
+          "period_end": "2026-06-30",
+          "periods": [
+            "Q3 2025",
+            "Q4 2025",
+            "Q1 2026",
+            "Q2 2026"
+          ],
+          "value": 7592000000.0,
+          "warning": "Some quarters were derived from YTD or annual facts. These are calculated values, not directly reported quarterly data."
+        },
+        {
+          "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+          "period_end": "2025-12-31",
+          "units": "USD",
+          "value": 7314800000.0
+        }
+      ],
+      "us-gaap:StockholdersEquity": [
+        {
+          "concept": "us-gaap:StockholdersEquity",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 11002500000.0
+        }
+      ]
+    }
+  },
+  "pinned_for": [
+    "C12a"
+  ],
+  "source": "~/.finrobot/artifacts.db",
+  "ticker": "TROW",
+  "type": "equity_research",
+  "verdicts": {
+    "C1": false,
+    "C10a": false,
+    "C10b": false,
+    "C10c": true,
+    "C10d": true,
+    "C11": true,
+    "C12a": true,
+    "C12b": false,
+    "C12c": false,
+    "C13b": false,
+    "C13c": false,
+    "C14a": false,
+    "C14b": false,
+    "C1b": false,
+    "C2": false,
+    "C3": false,
+    "C4": false,
+    "C6": false,
+    "C6b": true,
+    "C7": false,
+    "C8": false,
+    "C9": false
+  }
+}

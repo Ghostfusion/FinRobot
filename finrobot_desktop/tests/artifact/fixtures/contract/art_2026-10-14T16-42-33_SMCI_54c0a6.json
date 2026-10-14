@@ -1,0 +1,967 @@
+{
+  "artifact_id": "art_2026-10-14T16:42:33_SMCI_equity_research_54c0a6",
+  "extracted_at": "2026-10-14",
+  "inputs_raw_data": {
+    "balance": {
+      "noncontrolling_interest": 164000.0,
+      "preferred_stock": 4226258000.0,
+      "total_cash": 7544584192.0,
+      "total_debt": 9259886592.0
+    },
+    "data_authority": null,
+    "income": {
+      "capital_expenditure": 1438897664.0,
+      "depreciation_amortization": null,
+      "ebitda": 2824158976.0,
+      "gross_margin": 0.108219996,
+      "income_tax_expense": null,
+      "interest_expense": null,
+      "net_income": 2195842048.0,
+      "operating_income": null,
+      "operating_margin": 0.13382,
+      "rd_expense": null,
+      "revenue": 39063072768.0,
+      "sga_expense": null
+    },
+    "market": {
+      "beta": null,
+      "country": "United States",
+      "current_price": 39.07,
+      "industry": "Computer Hardware",
+      "is_adr": null,
+      "market_cap": 25667637552.88,
+      "pe_basis": "market cap ÷ TTM net income (one net-income authority); supersedes the provider's trailingPE 12.02×, which rides a different denominator",
+      "pe_ratio": 11.689200312134655,
+      "price_52w_high": 56.6,
+      "price_52w_low": 19.48,
+      "quote_as_of": "2026-10-13T00:00:00Z",
+      "quote_is_live": false,
+      "sector": "Technology",
+      "shares_outstanding": 656965384.0,
+      "trailing_1y_return_pct": -28.639269406392692
+    },
+    "valuation": {
+      "book_value_per_share": 15.609,
+      "ebitda_operating": 2824158976.0,
+      "ebitda_reported": null,
+      "enterprise_value": 31609361952.880005,
+      "ev_ebitda": 11.19248676207667,
+      "ev_ebitda_reported": null,
+      "ev_revenue": 0.8091878009856412
+    }
+  },
+  "notes": "SMCI — the NEGATIVE case for C14b: the withheld path prints '[target withheld]' in its own honest disclaimer ('a directional read, not a point estimate'), with no insider-flow quantity in the sentence. Pinned for C14b staying QUIET: the coarse token scan flagged this class 27 times",
+  "outputs_structured": {
+    "catalyst_analysis": {
+      "category_breakdown": {
+        "acquisition": 1,
+        "management": 1,
+        "market": 1,
+        "product_launch": 1
+      },
+      "events": [
+        {
+          "category": "product_launch",
+          "headline": "Supermicro Expands Integrated Open Compute Project Portfolio to Accelerate Rack-Scale AI Data Center Deployments",
+          "impact_score": 4,
+          "published": "2026-10-13T13:05:00Z",
+          "reasoning": "Supermicro expanded its integrated Open Compute Project portfolio to speed rack-scale AI data center deployments.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/technology/ai/articles/supermicro-expands-integrated-open-compute-130500608.html"
+        },
+        {
+          "category": "market",
+          "headline": "Super Micro (SMCI) Upgraded to Strong Buy: Here's What You Should Know",
+          "impact_score": 3,
+          "published": "2026-10-12T15:00:04Z",
+          "reasoning": "SMCI upgraded to Strong Buy by a sell-side rating action.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/super-micro-smci-upgraded-strong-150004541.html"
+        },
+        {
+          "category": "management",
+          "headline": "Super Micro Computer (SMCI) Appoints 35 Year Intel Veteran To Its Board",
+          "impact_score": 3,
+          "published": "2026-10-09T18:11:39Z",
+          "reasoning": "SMCI appointed a 35-year Intel veteran to its board of directors.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/super-micro-computer-smci-appoints-181139313.html"
+        },
+        {
+          "category": "acquisition",
+          "headline": "Is Supermicro’s NetApp AI Factory Alliance Quietly Redefining SMCI’s Full-Stack Data Center Ambitions?",
+          "impact_score": 3,
+          "published": "2026-10-06T10:07:02Z",
+          "reasoning": "Analysis of the Supermicro-NetApp AI Factory alliance and its implications for SMCI's full-stack data center ambitions.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/technology/ai/articles/supermicro-netapp-ai-factory-alliance-100702691.html"
+        },
+        {
+          "category": "management",
+          "headline": "SEC 8-K: Executive / director change",
+          "impact_score": 3,
+          "published": "2026-10-08T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1375365/000137536526000023/0001375365-26-000023-index.html"
+        },
+        {
+          "category": "other",
+          "headline": "SEC 8-K: Other events",
+          "impact_score": 3,
+          "published": "2026-08-05T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1375365/000137536526000020/0001375365-26-000020-index.html"
+        },
+        {
+          "category": "other",
+          "headline": "SEC 8-K: Material agreement entered; Securityholder rights modified; Charter / bylaw amendment",
+          "impact_score": 3,
+          "published": "2026-06-15T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1375365/000119312526270430/0001193125-26-270430-index.html"
+        },
+        {
+          "category": "other",
+          "headline": "SEC 8-K: Material agreement entered",
+          "impact_score": 3,
+          "published": "2026-06-12T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1375365/000119312526269703/0001193125-26-269703-index.html"
+        },
+        {
+          "category": "other",
+          "headline": "SEC 8-K: Other events",
+          "impact_score": 3,
+          "published": "2026-06-09T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1375365/000119312526263942/0001193125-26-263942-index.html"
+        }
+      ],
+      "key_catalysts": [
+        "Supermicro Expands Integrated Open Compute Project Portfolio to Accelerate Rack-Scale AI Data Center Deployments",
+        "Super Micro (SMCI) Upgraded to Strong Buy: Here's What You Should Know",
+        "Super Micro Computer (SMCI) Appoints 35 Year Intel Veteran To Its Board"
+      ],
+      "net_sentiment": 1.01,
+      "news_window": {
+        "count": 50,
+        "earliest": "2026-09-30T16:14:38+00:00",
+        "latest": "2026-10-13T21:10:15+00:00",
+        "provider": null,
+        "sources": []
+      },
+      "overall_sentiment": "bullish",
+      "sec_8k_category_breakdown": {
+        "management": 1,
+        "other": 4
+      },
+      "sec_8k_staleness_warning": null,
+      "sec_8k_window": {
+        "count": 10,
+        "newest": "2026-10-08",
+        "oldest": "2026-04-20",
+        "provider": "SEC EDGAR"
+      },
+      "top_negative": [],
+      "top_positive": [
+        {
+          "category": "product_launch",
+          "headline": "Supermicro Expands Integrated Open Compute Project Portfolio to Accelerate Rack-Scale AI Data Center Deployments",
+          "impact_score": 4,
+          "published": "2026-10-13T13:05:00Z",
+          "reasoning": "Supermicro expanded its integrated Open Compute Project portfolio to speed rack-scale AI data center deployments.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/technology/ai/articles/supermicro-expands-integrated-open-compute-130500608.html"
+        },
+        {
+          "category": "market",
+          "headline": "Super Micro (SMCI) Upgraded to Strong Buy: Here's What You Should Know",
+          "impact_score": 3,
+          "published": "2026-10-12T15:00:04Z",
+          "reasoning": "SMCI upgraded to Strong Buy by a sell-side rating action.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/super-micro-smci-upgraded-strong-150004541.html"
+        },
+        {
+          "category": "management",
+          "headline": "Super Micro Computer (SMCI) Appoints 35 Year Intel Veteran To Its Board",
+          "impact_score": 3,
+          "published": "2026-10-09T18:11:39Z",
+          "reasoning": "SMCI appointed a 35-year Intel veteran to its board of directors.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/super-micro-computer-smci-appoints-181139313.html"
+        }
+      ]
+    },
+    "currency": {
+      "quote_currency": "USD",
+      "reporting_currency": "USD"
+    },
+    "numeric_audit": {
+      "artifact_status": "caveated",
+      "findings": [
+        {
+          "check": "target_multiple_outside_band",
+          "evidence": "SMCI: the $51.73 target implies 14.1x TTM EBITDA vs the issuer's own 5-year p25 of 15.8x — the target sits below its own historical multiple range",
+          "field_key": "thesis.price_target",
+          "severity": "review"
+        },
+        {
+          "check": "insider_flow_amount_corrected",
+          "evidence": "the narrative stated $51.73 as the purchases figure; the published text was corrected to the computed value $0 (the printed amount belonged to another metric)",
+          "field_key": "ownership_governance.insider_buy_value",
+          "severity": "review"
+        }
+      ],
+      "withhold_valuation": false
+    },
+    "ownership_governance": {
+      "insider_buy_value": 0.0,
+      "insider_largest_sale": {
+        "name": "Liang Chiu-Chu Sara Liu",
+        "position": "Director, 10% Owner",
+        "value": 4502000.0
+      },
+      "insider_net_flow": -24441167.4,
+      "insider_sell_value": 24441167.4,
+      "insider_window_days": 90,
+      "warnings": [
+        "8 Schedule 13D/13G filing(s) are stale (older than 400 days; a 13G annual amendment is due within 45 days of year-end): SUSQUEHANNA SECURITIES, LLC (699d, filed 2024-11-14), BlackRock, Inc. (719d, filed 2024-10-25), VANGUARD GROUP INC (917d, filed 2024-04-10), BlackRock Inc. (994d, filed 2024-01-24), Empyrean Capital Partners, LP (1338d, filed 2023-02-14), OAKTREE CAPITAL MANAGEMENT LP (1945d, filed 2021-06-17), Liang Charles (2071d, filed 2021-02-11), INTEGRATED CORE STRATEGIES (US) LLC (2303d, filed 2020-06-24). The reported holdings may no longer reflect the filer's current position — verify against a newer filing before relying on them."
+      ]
+    },
+    "technical_analysis": {
+      "historical_bands": {
+        "classification": "cheap",
+        "classification_caveat": null,
+        "current": 11.192486762076669,
+        "median": 21.64874176829767,
+        "metric": "ev_ebitda",
+        "p25": 15.751727226140424,
+        "p75": 25.642026976319585,
+        "p90": 63.61565222020879,
+        "sample_count": 825,
+        "structural_break": null,
+        "timeline": [
+          [
+            "2023-06-30",
+            20.288692641917137
+          ],
+          [
+            "2023-07-11",
+            22.071397587421156
+          ],
+          [
+            "2023-07-20",
+            24.70027123977732
+          ],
+          [
+            "2023-07-31",
+            26.944672120476383
+          ],
+          [
+            "2023-08-09",
+            21.67542349353501
+          ],
+          [
+            "2023-08-18",
+            19.820424522591196
+          ],
+          [
+            "2023-08-29",
+            21.305738136172426
+          ],
+          [
+            "2023-09-08",
+            22.869096436307977
+          ],
+          [
+            "2023-09-19",
+            20.164642666446582
+          ],
+          [
+            "2023-09-28",
+            21.94241847385243
+          ],
+          [
+            "2023-10-09",
+            23.636398933589433
+          ],
+          [
+            "2023-10-18",
+            23.228101994457866
+          ],
+          [
+            "2023-10-27",
+            19.643797074073518
+          ],
+          [
+            "2023-11-07",
+            20.710133949310485
+          ],
+          [
+            "2023-11-15",
+            23.454020823957222
+          ],
+          [
+            "2023-11-27",
+            23.6667952851948
+          ],
+          [
+            "2023-12-06",
+            20.631267739739798
+          ],
+          [
+            "2023-12-15",
+            24.466958703130704
+          ],
+          [
+            "2023-12-27",
+            24.04716044177008
+          ],
+          [
+            "2024-01-08",
+            26.123970627131445
+          ],
+          [
+            "2024-01-18",
+            25.397744280668054
+          ],
+          [
+            "2024-01-29",
+            40.53266281109227
+          ],
+          [
+            "2024-02-07",
+            55.97154485757016
+          ],
+          [
+            "2024-02-16",
+            65.80681840944763
+          ],
+          [
+            "2024-02-28",
+            66.89287183707727
+          ],
+          [
+            "2024-03-08",
+            93.46667684731622
+          ],
+          [
+            "2024-03-19",
+            74.65051368057702
+          ],
+          [
+            "2024-03-27",
+            83.87786020034713
+          ],
+          [
+            "2024-04-08",
+            76.09064352825837
+          ],
+          [
+            "2024-04-17",
+            78.68501321392736
+          ],
+          [
+            "2024-04-26",
+            70.25290097399498
+          ],
+          [
+            "2024-05-07",
+            67.11879066657663
+          ],
+          [
+            "2024-05-16",
+            74.11077305882765
+          ],
+          [
+            "2024-05-28",
+            71.67249274626731
+          ],
+          [
+            "2024-06-06",
+            63.72014994788994
+          ],
+          [
+            "2024-06-17",
+            72.7150054540298
+          ],
+          [
+            "2024-06-27",
+            72.95735474385638
+          ],
+          [
+            "2024-07-09",
+            46.65371027809185
+          ],
+          [
+            "2024-07-18",
+            41.799479593222365
+          ],
+          [
+            "2024-07-29",
+            36.435038278921915
+          ],
+          [
+            "2024-08-06",
+            32.2629819275325
+          ],
+          [
+            "2024-08-15",
+            32.766479259207784
+          ],
+          [
+            "2024-08-26",
+            29.452175797985195
+          ],
+          [
+            "2024-09-05",
+            21.813992174591096
+          ],
+          [
+            "2024-09-16",
+            23.59559811744213
+          ],
+          [
+            "2024-09-25",
+            24.062946922740736
+          ],
+          [
+            "2024-10-04",
+            21.695218445067695
+          ],
+          [
+            "2024-10-15",
+            25.067359548492984
+          ],
+          [
+            "2024-10-24",
+            24.277256043402527
+          ],
+          [
+            "2024-11-04",
+            13.845824146129805
+          ],
+          [
+            "2024-11-13",
+            10.902301284028097
+          ],
+          [
+            "2024-11-22",
+            17.522645686158604
+          ],
+          [
+            "2024-12-04",
+            21.994734806474536
+          ],
+          [
+            "2024-12-12",
+            19.991073630166703
+          ],
+          [
+            "2024-12-23",
+            17.13534004640838
+          ],
+          [
+            "2025-01-03",
+            17.615599039698658
+          ],
+          [
+            "2025-01-15",
+            16.40720544367796
+          ],
+          [
+            "2025-01-27",
+            15.415703005917385
+          ],
+          [
+            "2025-02-05",
+            16.66540920351144
+          ],
+          [
+            "2025-02-14",
+            25.14482067644303
+          ],
+          [
+            "2025-02-26",
+            26.79732473937732
+          ],
+          [
+            "2025-03-07",
+            20.151159961263463
+          ],
+          [
+            "2025-03-18",
+            19.975581404576694
+          ],
+          [
+            "2025-03-27",
+            18.333405492035745
+          ],
+          [
+            "2025-04-07",
+            17.44518455820856
+          ],
+          [
+            "2025-04-16",
+            16.871972211378228
+          ],
+          [
+            "2025-04-28",
+            19.65024466718651
+          ],
+          [
+            "2025-05-06",
+            17.41420010702854
+          ],
+          [
+            "2025-05-15",
+            23.105010973758514
+          ],
+          [
+            "2025-05-27",
+            21.870797001754465
+          ],
+          [
+            "2025-06-05",
+            21.45767098602089
+          ],
+          [
+            "2025-06-16",
+            22.96558094344843
+          ],
+          [
+            "2025-06-26",
+            25.847134903190106
+          ],
+          [
+            "2025-07-08",
+            23.967295899740794
+          ],
+          [
+            "2025-07-17",
+            25.765532217955187
+          ],
+          [
+            "2025-07-28",
+            29.371885273714817
+          ],
+          [
+            "2025-08-06",
+            22.82116725736239
+          ],
+          [
+            "2025-08-15",
+            22.11965748487216
+          ],
+          [
+            "2025-08-26",
+            21.620696308664318
+          ],
+          [
+            "2025-09-05",
+            19.66931349082178
+          ],
+          [
+            "2025-09-15",
+            22.124597694537588
+          ],
+          [
+            "2025-09-24",
+            22.52969488710237
+          ],
+          [
+            "2025-10-03",
+            25.375255654386677
+          ],
+          [
+            "2025-10-14",
+            25.943379765910453
+          ],
+          [
+            "2025-10-23",
+            23.37941094955532
+          ],
+          [
+            "2025-11-03",
+            24.777490284870357
+          ],
+          [
+            "2025-11-12",
+            18.43426107446574
+          ],
+          [
+            "2025-11-21",
+            15.608461145843124
+          ],
+          [
+            "2025-12-03",
+            16.344552385991324
+          ],
+          [
+            "2025-12-12",
+            15.677624081159061
+          ],
+          [
+            "2025-12-23",
+            14.90201116368747
+          ],
+          [
+            "2026-01-05",
+            14.561136696773204
+          ],
+          [
+            "2026-01-14",
+            13.671898956996856
+          ],
+          [
+            "2026-01-23",
+            15.366390872237341
+          ],
+          [
+            "2026-02-03",
+            14.363528310156239
+          ],
+          [
+            "2026-02-12",
+            14.738984244728472
+          ],
+          [
+            "2026-02-24",
+            15.084798921308163
+          ],
+          [
+            "2026-03-05",
+            15.633162194170245
+          ],
+          [
+            "2026-03-16",
+            15.445434226884126
+          ],
+          [
+            "2026-03-25",
+            11.587130478187863
+          ],
+          [
+            "2026-04-06",
+            10.599088545103033
+          ],
+          [
+            "2026-04-15",
+            13.187758409785289
+          ],
+          [
+            "2026-04-24",
+            14.072055939896211
+          ],
+          [
+            "2026-05-05",
+            13.45452973171819
+          ],
+          [
+            "2026-05-14",
+            16.023438757738752
+          ],
+          [
+            "2026-05-26",
+            18.034104091566387
+          ],
+          [
+            "2026-06-03",
+            23.132400466284114
+          ],
+          [
+            "2026-06-12",
+            14.753804873724745
+          ],
+          [
+            "2026-06-24",
+            15.736906597144156
+          ],
+          [
+            "2026-07-06",
+            6.213947731440533
+          ],
+          [
+            "2026-07-15",
+            6.149834887149269
+          ],
+          [
+            "2026-07-24",
+            6.835842321065806
+          ],
+          [
+            "2026-08-04",
+            7.175640395809512
+          ],
+          [
+            "2026-08-13",
+            8.772050218662017
+          ],
+          [
+            "2026-08-24",
+            7.91934938958819
+          ],
+          [
+            "2026-09-02",
+            8.310437739764907
+          ],
+          [
+            "2026-09-14",
+            8.254873274712477
+          ],
+          [
+            "2026-09-23",
+            9.259307835275633
+          ],
+          [
+            "2026-10-02",
+            9.740154167460123
+          ],
+          [
+            "2026-10-13",
+            11.192486762076669
+          ]
+        ],
+        "warnings": [
+          "429 price point(s) predate the earliest fiscal year — skipped",
+          "current point uses TTM EBITDA (consistent with the comps caliber); historical quantiles use each annual-report year's EBITDA, so the two carry a caliber basis difference (no quarterly data, so a rolling TTM cannot be reconstructed point by point).",
+          "per-year share counts are unavailable from the serving providers, so the historical band is computed on the run's own share count (656,965,384); a buyback or issuance history makes the earlier multiples approximate."
+        ],
+        "window_years": 5
+      },
+      "monte_carlo": {
+        "assumptions_used": {
+          "centered_on": "base-case DCF assumptions",
+          "ebitda_margin_std": 0.02,
+          "independent": false,
+          "mid_year_convention": false,
+          "n_simulations": 10000,
+          "revenue_growth_std": 0.02,
+          "seed": 2540988142,
+          "terminal_growth_std": 0.005,
+          "valid_simulations": 7519,
+          "variance_reduction": "antithetic_variates",
+          "wacc_std": 0.01
+        },
+        "current_price_percentile": 25.6,
+        "mean": 94.94,
+        "n_valid": 7519,
+        "percentiles": {
+          "10": 15.99,
+          "25": 38.23,
+          "5": 8.4,
+          "50": 78.64,
+          "75": 131.78,
+          "90": 195.13,
+          "95": 244.61
+        },
+        "std": 74.21
+      }
+    },
+    "thesis": {
+      "catalysts": [
+        "Portfolio expansion announced 2026-10-13 (impact score 4): Supermicro widened its integrated Open Compute Project portfolio to accelerate rack-scale AI data-center deployments — the demand signal that underpins the DCF's 40.0% FY1 revenue growth fading to 3.0% FY10.",
+        "Sell-side upgrade to Strong Buy dated 2026-10-12 (impact score 3) — a re-rating action aimed precisely at the gap between the $39.07 market price and the $51.73 DCF midpoint.",
+        "Board appointment of a 35-year Intel veteran announced 2026-10-09 (impact score 3), adding platform and technical depth to a franchise that converts $39.06bn TTM revenue into $2.77bn TTM operating income.",
+        "Valuation asymmetry: DCF low $41.38 / mid $51.73 / high $62.07 against a $39.07 quote — the low end alone clears the market price, so convergence to the midpoint is the +32.4% implied upside.",
+        "The market-implied reverse-DCF is undemanding — a flat 16.1%/yr over 10 years at an 8.82% implied WACC versus the model's 21.5%/yr average fade — leaving room for sentiment to normalize toward the $51.73 midpoint if that schedule is delivered."
+      ],
+      "company_overview": "Super Micro Computer (SMCI) is an assemble-to-order server and storage systems vendor. It sells building blocks — motherboards, chassis, power and thermal subsystems — as well as fully integrated rack-scale clusters for AI and general-purpose data-center workloads, to hyperscalers, neocloud operators and enterprises. Revenue is hardware-led: TTM revenue of $39.06bn converts into $4.23bn of gross profit (10.8% TTM gross margin) and $2.77bn of operating income (7.1% TTM operating margin), with $2.23bn of TTM net income — the profile of a high-velocity integration business rather than a licensed-IP franchise.\n\nA segment revenue breakdown was not available for this issuer; see the latest annual report for business-line detail. Geographic revenue breakdown was also unavailable from the sources used in this run, so no country-level revenue split should be assumed.\n\nThe balance sheet shows $29.95bn of total assets against $15.47bn of total liabilities, leaving $14.48bn of stockholders' equity on the latest annual XBRL facts — capacity consistent with funding working-capital-intensive rack builds, the central constraint in this model.\n\nThe durable competitive advantage is engineering-to-order speed and platform-transition execution: early integration and validation of new accelerator platforms, rack-level and liquid-cooling design, and supply-chain scale. That moat is real but narrower than a software or IP peer's — a 10.8% TTM gross margin leaves little pricing cushion — which is precisely why the DCF's 40.0% FY1 growth fading to 3.0% FY10 schedule, rather than terminal-margin expansion, is what carries the $51.73 of value.",
+      "competitor_analysis": "A peer-screen was not produced for this ticker in this run — the peer-data fetch returned no usable comp set — so this section is limited to SMCI's own operating economics and its structural position in the value chain rather than a multiple comparison. On a TTM basis the company converts $39.06bn of revenue into $4.23bn of gross profit (10.8% TTM gross margin) and $2.77bn of operating income (7.1% TTM operating margin), a margin structure consistent with assemble-to-order server integration rather than proprietary silicon or software IP. That shapes where the franchise can defend share: speed to new accelerator platforms, rack-scale and liquid-cooling integration, and supply-chain financing are advantages that better-capitalized integrators can replicate, whereas the model's 21.5%/yr average forecast growth (40.0% FY1 fading to 3.0% FY10) requires continued wins on each platform transition rather than a differentiated price umbrella. Absent a comp set, no peer-relative premium or discount can be asserted; the $51.73 DCF midpoint and its $41.38–$62.07 band are the valuation evidence this report stands on.",
+      "key_takeaways": [
+        "The DCF midpoint of $51.73 stands 32.4% above the $39.07 market price, and the method's own $41.38–$62.07 range brackets the quote at its low end — the Buy is an asymmetry call, not a momentum call.",
+        "The market's own reverse-DCF is the corroborating evidence: $39.07 solves to an 8.82% implied WACC and a flat 16.1%/yr growth rate held constant over 10 years, both less demanding than the model's 8.47% WACC and 21.5%/yr average fade (40.0% FY1 → 3.0% FY10).",
+        "Operating scale is real but low-margin: $39.06bn TTM revenue yields $4.23bn TTM gross profit (10.8% margin), $2.77bn TTM operating income (7.1%) and $2.23bn TTM net income — a hardware integration profile that limits multiple expansion.",
+        "Balance-sheet capacity is adequate for a working-capital-intensive model: $29.95bn total assets against $15.47bn total liabilities and $14.48bn stockholders' equity on the latest annual XBRL facts.",
+        "Conviction is medium rather than high: the DCF is the only method run, and the tape has not corroborated the value case — -28.6% trailing-1-year return, 53% 52-week range position, -31.0% drawdown, and -$24.44m of net 90-day insider selling against $0 of purchases."
+      ],
+      "momentum_divergence_note": "The -28.6% trailing-1-year return, 53% 52-week range position and -31.0% drawdown from the 52-week high say the market is pricing SMCI as a decelerating hardware assembler: the reverse-DCF at $39.07 embeds a flat 16.1%/yr growth rate over 10 years at an 8.82% discount rate, i.e., a franchise that stops compounding well short of the model's 40.0% FY1 print. We differ because that implied path already sits below the model's own fade for the same 10-year window (40.0% FY1 falling to 3.0% FY10, 21.5%/yr average), so the discount — not an optimistic forecast — is what carries the $51.73 DCF midpoint and the +32.4% implied upside. The risk to that view is that a stock at the 53rd percentile of its range, with -$24.44m of net 90-day insider selling against $51.73 of purchases, can keep de-rating faster than fundamentals converge.",
+      "narrative": "We initiate on Super Micro Computer (SMCI) with a Buy and a $51.73 price target, 32.4% above the $39.07 market price. The single computed method in this run — a 10-year DCF discounted at an 8.47% WACC with a 3.0% perpetuity terminal growth rate applied after FY10 — produces a $51.73 midpoint inside a $41.38–$62.07 band, and the low end of that band alone still sits above the current quote. The value is built on a revenue schedule that compounds 40.0% in forecast FY1 and fades linearly to 3.0% in FY10, averaging 21.5%/yr, off a TTM revenue base of $39.06bn that carried $2.23bn of TTM net income.\n\nThe reverse-DCF is the more informative read. Holding the model's growth fade fixed, the $39.07 price solves to an 8.82% discount rate, 35bps above the 8.47% WACC we apply; holding the 8.47% WACC fixed, it solves to a flat 16.1%/yr growth rate held constant for 10 years. That flat 16.1% is a different construct from the model's fade — a single unchanging rate versus a declining schedule that averages 21.5%/yr — but the comparison is favourable: a constant 16.1% implies materially less cumulative revenue over the window than the 40.0%→3.0% fade does, so the market is capitalizing a less demanding path than our base case. On that evidence, the +32.4% gap is a multiple discount, not a stretched target.\n\nWhat tempers the call is momentum and insider behaviour, not the model. SMCI has returned -28.6% over the trailing year, sits at the 53rd percentile of its 52-week range, and is -31.0% below its 52-week high. Insiders were net sellers over the last 90 days — -$24.44m of open-market flow against $0 of purchases, the largest single sale $4.50m. The de-rating has therefore been accompanied by distribution rather than accumulation, and with the DCF's $41.38 low only ~6% above the $39.07 quote, the margin of safety depends on the growth fade holding.",
+      "news_summary": "Coverage over the last 30 days (50 news items spanning 2026-09-30 to 2026-10-13) is uniformly constructive: the catalyst pipeline scores net sentiment +1.01, bullish, with no negative-catalyst items in the window. The highest-impact item (score 4) is the 2026-10-13 expansion of the integrated Open Compute Project portfolio aimed at accelerating rack-scale AI data-center deployments, which speaks directly to the demand path underlying the DCF's 40.0% FY1 growth assumption. A sell-side upgrade to Strong Buy on 2026-10-12 (impact 3) and the 2026-10-09 board appointment of a 35-year Intel veteran (impact 3) round out the positive set, alongside reported single-source analysis of a Supermicro–NetApp AI Factory alliance (impact 3) that is at most an early-stage item, not a completed transaction. That sentiment supports the demand side of the thesis but does little to explain the -28.6% trailing-1-year return — the disconnect is a multiple and positioning issue, not a news-flow one. With no negative catalysts supplied, the bear case here is valuation sensitivity and the -$24.44m of net 90-day insider selling rather than reported fundamental deterioration.",
+      "price_target": 51.73,
+      "price_target_basis": "Confidence=medium; the single computed method (no second method ran against it, so there is no blend; wt = the method's data-quality weight, NOT prediction accuracy): DCF $51.73 (own range $41.38–$62.07, wt 0.85) → $51.73. Published target band $38.80–$64.66 (±25% single-method confidence dial). single method dcf with no cross-validation — band widened, confidence medium.",
+      "recommendation": "BUY",
+      "risks": [
+        "Single-method valuation risk: the DCF is the only method computed, and its $41.38 low sits just ~6% above the $39.07 market price — a modest miss on the 8.47% WACC or the 3.0% terminal growth rate compresses the +32.4% implied upside to near zero.",
+        "Growth-schedule execution: the model requires 40.0% FY1 growth fading to 3.0% FY10 (21.5% average), while the market's reverse-DCF already pays only for a flat 16.1%/yr over 10 years; deceleration below that flat 16.1% removes the reason to own the equity.",
+        "Insider distribution: -$24.44m of net 90-day open-market insider flow, with $0 of open-market purchases and a $4.50m largest single sale by a Director/10% owner, offers no insider corroboration for the discount to intrinsic value.",
+        "Persistent de-rating: -28.6% trailing-1-year return, a 53% 52-week range position and a -31.0% drawdown from the 52-week high show multiple compression that can continue independently of TTM fundamentals ($39.06bn revenue, $2.23bn net income).",
+        "Ownership visibility gap: only 23.2% of shares outstanding are covered by the 13F rows on file for this run, so the identity and direction of the remaining holder base is unobservable — a blind spot if institutional holders are reducing."
+      ],
+      "tagline": "SMCI: $51.73 DCF target, +32.4% from $39.07",
+      "valuation_overview": "DCF is the sole computed method in this run and therefore carries the entire evidence base; no second approach was available to cross-validate it, which is why confidence is medium and the published band is wide. The model discounts a 10-year explicit forecast at an 8.47% WACC with a 3.0% perpetuity terminal growth rate applied after the forecast window, yielding $51.73 per share. The divergence from the $39.07 market price is driven almost entirely by the growth schedule: the model runs 40.0% in FY1 fading to 3.0% in FY10 (21.5% average over the 10 forecast fiscal years), whereas the price-implied solves are a flat 16.1%/yr over 10 years and an 8.82% implied WACC — the market is capitalizing a slower, flatter path than the base case.\n\nBecause only one method ran, there is no blend: the DCF midpoint of $51.73 passes through unchanged as the target, and the ±25% single-method confidence dial sets the published $38.80–$64.66 band. The DCF's own $41.38 low still clears the current quote, which is where the Buy rests — the asymmetry, not the midpoint alone."
+    },
+    "valuation_synthesis": {
+      "anchor_method": null,
+      "confidence": "medium",
+      "cross_checks": [
+        {
+          "band_break_caveat": null,
+          "basis": "Own 5-year EV/EBITDA band (p25 15.75x · median 21.65x · p75 25.64x, 825 samples) applied to this run's TTM EBITDA (income.ebitda $2,824,158,976) through the EV→equity bridge (− net debt $1,715,302,400 − preferred $4,226,258,000 − NCI $164,000) ÷ 656,965,384 shares outstanding.",
+          "high": 101.1855995262105,
+          "label": "Own 5-year EV/EBITDA",
+          "low": 58.66923641932413,
+          "mid": 84.01928827355685,
+          "name": "ev_ebitda_band",
+          "note": "Mean-reversion cross-check only — excluded from the published target blend, which keeps its existing method weighting."
+        }
+      ],
+      "current_price": 39.07,
+      "degradation_note": "single method dcf with no cross-validation — band widened, confidence medium.",
+      "financial_sector": false,
+      "methods": [
+        {
+          "assumptions": "WACC 8.5% · 10yr growth 40%→3.0% · β1.35",
+          "confidence": 0.85,
+          "high": 62.074629332976855,
+          "low": 41.38308622198457,
+          "mid": 51.72885777748071,
+          "name": "dcf",
+          "rerating_ratio": null,
+          "source": "implied_price ± 20% (placeholder band, not a real distribution)"
+        }
+      ],
+      "mna_transition": false,
+      "outlier_methods": [],
+      "target_high": 64.66107222185089,
+      "target_low": 38.79664333311054,
+      "upside_downside": null,
+      "valuation_withheld": false,
+      "warnings": [],
+      "weighted_price": null
+    },
+    "xbrl_facts_snapshot": {
+      "us-gaap:Assets": [
+        {
+          "concept": "us-gaap:Assets",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 29945467000.0
+        }
+      ],
+      "us-gaap:GrossProfit": [
+        {
+          "concept": "us-gaap:GrossProfit",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 4227251000.0
+        }
+      ],
+      "us-gaap:Liabilities": [
+        {
+          "concept": "us-gaap:Liabilities",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 15465851000.0
+        }
+      ],
+      "us-gaap:NetIncomeLoss:annual": [
+        {
+          "concept": "us-gaap:NetIncomeLoss:annual",
+          "matched_concept": "us-gaap:NetIncomeLoss",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 2230453000.0
+        }
+      ],
+      "us-gaap:NetIncomeLoss:ttm": [
+        {
+          "concept": "us-gaap:NetIncomeLoss:ttm",
+          "has_calculated_q4": true,
+          "period_end": "2026-06-30",
+          "periods": [
+            "Q1 2026",
+            "Q2 2026",
+            "Q3 2026",
+            "Q4 2026"
+          ],
+          "value": 2230453000.0,
+          "warning": "Some quarters were derived from YTD or annual facts. These are calculated values, not directly reported quarterly data."
+        }
+      ],
+      "us-gaap:OperatingIncomeLoss": [
+        {
+          "concept": "us-gaap:OperatingIncomeLoss",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 2770486000.0
+        }
+      ],
+      "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax": [
+        {
+          "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+          "has_calculated_q4": true,
+          "period_end": "2026-06-30",
+          "periods": [
+            "Q1 2026",
+            "Q2 2026",
+            "Q3 2026",
+            "Q4 2026"
+          ],
+          "value": 39063072000.0,
+          "warning": "Some quarters were derived from YTD or annual facts. These are calculated values, not directly reported quarterly data."
+        },
+        {
+          "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 39063072000.0
+        }
+      ],
+      "us-gaap:StockholdersEquity": [
+        {
+          "concept": "us-gaap:StockholdersEquity",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 14479452000.0
+        }
+      ]
+    }
+  },
+  "pinned_for": [],
+  "source": "~/.finrobot/artifacts.db",
+  "ticker": "SMCI",
+  "type": "equity_research",
+  "verdicts": {
+    "C1": false,
+    "C10a": true,
+    "C10b": false,
+    "C10c": true,
+    "C10d": false,
+    "C11": true,
+    "C12a": false,
+    "C12b": false,
+    "C12c": false,
+    "C13b": false,
+    "C13c": false,
+    "C14a": false,
+    "C14b": false,
+    "C1b": false,
+    "C2": false,
+    "C3": false,
+    "C4": false,
+    "C6": false,
+    "C6b": true,
+    "C7": false,
+    "C8": false,
+    "C9": false
+  }
+}

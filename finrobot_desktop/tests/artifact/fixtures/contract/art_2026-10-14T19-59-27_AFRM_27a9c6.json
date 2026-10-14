@@ -1,0 +1,1246 @@
+{
+  "artifact_id": "art_2026-10-14T19:59:27_AFRM_equity_research_27a9c6",
+  "extracted_at": "2026-10-14",
+  "inputs_raw_data": {
+    "balance": {
+      "noncontrolling_interest": null,
+      "preferred_stock": null,
+      "total_cash": 1701895040.0,
+      "total_debt": 10022802432.0
+    },
+    "data_authority": {
+      "clock": "2026-10-14T19:57:09.831565Z",
+      "decisions": [
+        {
+          "agreement_is_independent": true,
+          "basis": "operating-caliber EBITDA = EBIT + D&A, trailing twelve months",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 1174327000.0
+            }
+          ],
+          "comparability": "caliber_divergent",
+          "currency": "USD",
+          "definition_version": "ebitda_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "ebitda",
+          "period_basis": "ttm",
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T19:57:09.831565Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.15,
+          "unit": "USD",
+          "value": 1174327000.0
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "gross_profit / revenue on FMP's TTM income-statement caliber",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 0.6806605269129937
+            }
+          ],
+          "comparability": "caliber_divergent",
+          "currency": "USD",
+          "definition_version": "gross_margin_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "gross_margin",
+          "period_basis": "ttm",
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T19:57:09.831565Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.1,
+          "unit": "ratio",
+          "value": 0.6806605269129937
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "live profile quote-currency market cap at the snapshot instant",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 23719026688.0
+            }
+          ],
+          "comparability": "exact",
+          "currency": "USD",
+          "definition_version": "market_cap_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "market_cap",
+          "period_basis": null,
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T19:57:09.831565Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.05,
+          "unit": "USD",
+          "value": 23719026688.0
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "as-reported income statement, trailing twelve months",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 1929793024.0
+            }
+          ],
+          "comparability": "as_reported_period",
+          "currency": "USD",
+          "definition_version": "net_income_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "net_income",
+          "period_basis": "ttm",
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T19:57:09.831565Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.15,
+          "unit": "USD",
+          "value": 1929793024.0
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "as-reported income statement, trailing twelve months",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 4261082112.0
+            }
+          ],
+          "comparability": "as_reported_period",
+          "currency": "USD",
+          "definition_version": "revenue_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "revenue",
+          "period_basis": "ttm",
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T19:57:09.831565Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.15,
+          "unit": "USD",
+          "value": 4261082112.0
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "as-reported share count, latest period (FMP may rederive as marketCap/price)",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 296881962.0
+            }
+          ],
+          "comparability": "balance_period",
+          "currency": null,
+          "definition_version": "shares_outstanding_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "shares_outstanding",
+          "period_basis": null,
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T19:57:09.831565Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.05,
+          "unit": "shares",
+          "value": 296881962.0
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "as-reported balance sheet, cash + short-term investments, latest period",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 1701895040.0
+            }
+          ],
+          "comparability": "balance_period",
+          "currency": "USD",
+          "definition_version": "total_cash_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "total_cash",
+          "period_basis": "ttm",
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T19:57:09.831565Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.1,
+          "unit": "USD",
+          "value": 1701895040.0
+        },
+        {
+          "agreement_is_independent": true,
+          "basis": "as-reported balance sheet total debt (bonds + finance leases), latest period",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "owner_absent_alternative_selected",
+              "source": "yfinance",
+              "value": 10022802432.0
+            }
+          ],
+          "comparability": "caliber_divergent",
+          "currency": "USD",
+          "definition_version": "total_debt_1",
+          "disagreement_pct": null,
+          "is_authoritative": false,
+          "metric": "total_debt",
+          "period_basis": "ttm",
+          "period_end": "2026-06-30",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "owner_absent_alternative_selected",
+          "reconciled_at": "2026-10-14T19:57:09.831565Z",
+          "selected_source": "yfinance",
+          "status": "accepted",
+          "tolerance_abs": null,
+          "tolerance_pct": 0.2,
+          "unit": "USD",
+          "value": 10022802432.0
+        }
+      ],
+      "policy_version": "metric_authority_v1",
+      "run_as_of": null
+    },
+    "income": {
+      "capital_expenditure": 238346000.0,
+      "depreciation_amortization": 303333000.0,
+      "ebitda": 1174327000.0,
+      "gross_margin": 0.6806605269129937,
+      "income_tax_expense": -1437067000.0,
+      "interest_expense": 454016000.0,
+      "net_income": 1929793024.0,
+      "operating_income": 870994000.0,
+      "operating_margin": 0.20440672007562397,
+      "rd_expense": null,
+      "revenue": 4261082112.0,
+      "sga_expense": 920843000.0
+    },
+    "market": {
+      "beta": 3.817,
+      "country": "United States",
+      "current_price": 77.89,
+      "industry": "Credit Services",
+      "is_adr": null,
+      "market_cap": 23124136020.18,
+      "pe_basis": "market cap ÷ TTM net income (one net-income authority); supersedes the provider's trailingPE 12.71×, which rides a different denominator",
+      "pe_ratio": 11.982702669454774,
+      "price_52w_high": 90.44,
+      "price_52w_low": 42.095,
+      "quote_as_of": "2026-10-13T00:00:00Z",
+      "quote_is_live": false,
+      "sector": "Financial Services",
+      "shares_outstanding": 296881962.0,
+      "trailing_1y_return_pct": 6.436184749931666
+    },
+    "valuation": {
+      "book_value_per_share": 16.264,
+      "ebitda_operating": 1174327000.0,
+      "ebitda_reported": 1250075024.0,
+      "enterprise_value": 31445043412.18,
+      "ev_ebitda": 26.777076071809642,
+      "ev_ebitda_reported": 25.154524975278605,
+      "ev_revenue": 7.379591048861721
+    }
+  },
+  "notes": "AFRM — 'insiders were net sellers of [target withheld]' with a computable identity never recorded; the last equity artifact before the 20:27 run",
+  "outputs_structured": {
+    "catalyst_analysis": {
+      "category_breakdown": {
+        "acquisition": 3,
+        "market": 2,
+        "product_launch": 2
+      },
+      "events": [
+        {
+          "category": "acquisition",
+          "headline": "Affirm partners with Ant International's Antom to bring pay-over-time to US customers",
+          "impact_score": 3,
+          "published": "2026-10-06T13:00:00Z",
+          "reasoning": "Affirm partners with Ant International's Antom to extend pay-over-time checkout to US customers.",
+          "sentiment": "positive",
+          "source_count": 2,
+          "url": "https://finance.yahoo.com/small-business/articles/affirm-partners-ant-internationals-antom-130000366.html"
+        },
+        {
+          "category": "acquisition",
+          "headline": "Affirm Holdings (AFRM) Adds Crate And Barrel, Is It Still 30% Below Fair Value?",
+          "impact_score": 3,
+          "published": "2026-09-30T23:11:48Z",
+          "reasoning": "Affirm's new Crate & Barrel merchant relationship framed against the stock's discount to fair value.",
+          "sentiment": "positive",
+          "source_count": 2,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/affirm-holdings-afrm-adds-crate-231148565.html"
+        },
+        {
+          "category": "acquisition",
+          "headline": "Crate &amp; Barrel Holdings partners with Affirm to offer flexible ways to pay",
+          "impact_score": 3,
+          "published": "2026-09-29T13:00:00Z",
+          "reasoning": "Crate & Barrel Holdings selects Affirm to offer flexible pay-over-time options to its shoppers.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/small-business/articles/crate-barrel-holdings-partners-affirm-130000400.html"
+        },
+        {
+          "category": "product_launch",
+          "headline": "Affirm Holdings (AFRM) Brings Transformer Underwriting To Checkout For Thin File Borrowers",
+          "impact_score": 3,
+          "published": "2026-09-23T16:18:25Z",
+          "reasoning": "Affirm extends its transformer underwriting model to checkout to serve thin-file borrowers.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/affirm-holdings-afrm-brings-transformer-161825867.html"
+        },
+        {
+          "category": "market",
+          "headline": "Is Affirm Holdings, Inc. (AFRM) Stock a Buy After Goldman Sachs Raised Its Price Target?",
+          "impact_score": 3,
+          "published": "2026-09-19T08:08:41Z",
+          "reasoning": "Goldman Sachs raises its AFRM price target, prompting a buy-the-stock assessment.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/affirm-holdings-inc-afrm-stock-080841812.html"
+        },
+        {
+          "category": "product_launch",
+          "headline": "Affirm launches transformer-based machine learning model for real-time underwriting",
+          "impact_score": 3,
+          "published": "2026-09-17T10:55:00Z",
+          "reasoning": "Affirm launches a transformer-based machine learning model for real-time underwriting.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/technology/ai/articles/affirm-launches-transformer-based-machine-105500510.html"
+        },
+        {
+          "category": "market",
+          "headline": "Affirm Stock Just Scored an Upgrade. Here's What to Know.",
+          "impact_score": 3,
+          "published": "2026-09-14T19:24:25Z",
+          "reasoning": "AFRM receives an analyst upgrade, described as a notable third-party view change on the stock.",
+          "sentiment": "positive",
+          "source_count": 2,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/affirm-stock-just-scored-upgrade-192425914.html"
+        },
+        {
+          "category": "management",
+          "headline": "SEC 8-K: Executive / director change",
+          "impact_score": 3,
+          "published": "2026-08-27T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1820953/000162828026059271/0001628280-26-059271-index.html"
+        },
+        {
+          "category": "management",
+          "headline": "SEC 8-K: Material agreement entered; Executive / director change",
+          "impact_score": 3,
+          "published": "2026-06-25T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1820953/000162828026045491/0001628280-26-045491-index.html"
+        },
+        {
+          "category": "management",
+          "headline": "SEC 8-K: Executive / director change",
+          "impact_score": 3,
+          "published": "2026-01-16T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1820953/000162828026002442/0001628280-26-002442-index.html"
+        },
+        {
+          "category": "other",
+          "headline": "SEC 8-K: Material agreement entered; 8-K Item 3.02",
+          "impact_score": 3,
+          "published": "2025-11-06T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1820953/000162828025050159/0001628280-25-050159-index.html"
+        },
+        {
+          "category": "management",
+          "headline": "SEC 8-K: Executive / director change",
+          "impact_score": 3,
+          "published": "2025-09-22T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1820953/000162828025042335/0001628280-25-042335-index.html"
+        }
+      ],
+      "key_catalysts": [
+        "Affirm partners with Ant International's Antom to bring pay-over-time to US customers",
+        "Affirm Holdings (AFRM) Adds Crate And Barrel, Is It Still 30% Below Fair Value?",
+        "Crate &amp; Barrel Holdings partners with Affirm to offer flexible ways to pay"
+      ],
+      "net_sentiment": 1.22,
+      "news_window": {
+        "count": 50,
+        "earliest": "2026-09-14T16:08:07+00:00",
+        "latest": "2026-10-14T08:26:47+00:00",
+        "provider": null,
+        "sources": []
+      },
+      "overall_sentiment": "bullish",
+      "sec_8k_category_breakdown": {
+        "management": 4,
+        "other": 1
+      },
+      "sec_8k_staleness_warning": "SEC 8-K index is stale relative to the news window: newest 8-K filed 2026-08-27, older than the news feed's earliest item (2026-09-14); filings in that gap are invisible to this run.",
+      "sec_8k_window": {
+        "count": 10,
+        "newest": "2026-08-27",
+        "oldest": "2025-06-26",
+        "provider": "SEC EDGAR"
+      },
+      "top_negative": [],
+      "top_positive": [
+        {
+          "category": "acquisition",
+          "headline": "Affirm partners with Ant International's Antom to bring pay-over-time to US customers",
+          "impact_score": 3,
+          "published": "2026-10-06T13:00:00Z",
+          "reasoning": "Affirm partners with Ant International's Antom to extend pay-over-time checkout to US customers.",
+          "sentiment": "positive",
+          "source_count": 2,
+          "url": "https://finance.yahoo.com/small-business/articles/affirm-partners-ant-internationals-antom-130000366.html"
+        },
+        {
+          "category": "acquisition",
+          "headline": "Affirm Holdings (AFRM) Adds Crate And Barrel, Is It Still 30% Below Fair Value?",
+          "impact_score": 3,
+          "published": "2026-09-30T23:11:48Z",
+          "reasoning": "Affirm's new Crate & Barrel merchant relationship framed against the stock's discount to fair value.",
+          "sentiment": "positive",
+          "source_count": 2,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/affirm-holdings-afrm-adds-crate-231148565.html"
+        },
+        {
+          "category": "acquisition",
+          "headline": "Crate &amp; Barrel Holdings partners with Affirm to offer flexible ways to pay",
+          "impact_score": 3,
+          "published": "2026-09-29T13:00:00Z",
+          "reasoning": "Crate & Barrel Holdings selects Affirm to offer flexible pay-over-time options to its shoppers.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/small-business/articles/crate-barrel-holdings-partners-affirm-130000400.html"
+        }
+      ]
+    },
+    "currency": {
+      "quote_currency": "USD",
+      "reporting_currency": "USD"
+    },
+    "numeric_audit": {
+      "artifact_status": "caveated",
+      "findings": [
+        {
+          "check": "net_income_exceeds_operating_income",
+          "evidence": "AFRM net income (1,929,793,024) exceeds operating income (870,994,000) — non-operating items (investment gains, disposals, equity-method income) inflate headline earnings, so the headline P/E understates the operating multiple. Judge valuation on the core/NOPAT-based P/E.",
+          "field_key": "pe_ratio",
+          "severity": "review"
+        },
+        {
+          "check": "ev_bridge_unverified",
+          "evidence": "AFRM: preferred stock not reported by the provider — when the provider reports no preferred stock, BOTH the multiples EV and the DCF equity bridge assume 0 for it. If the issuer carries preferred stock, this EV (and EV/EBITDA, EV/Revenue) is understated, and the DCF equity value is overstated, by that amount. Metric authority: producer of record 'fmp.balance_sheet.preferred_stock' supplied no value, so no wired source states this number and the assumed 0 cannot be confirmed.",
+          "field_key": "enterprise_value",
+          "severity": "review"
+        },
+        {
+          "check": "ev_bridge_unverified",
+          "evidence": "AFRM: noncontrolling interest not reported by the provider — when the provider reports no noncontrolling interest, BOTH the multiples EV and the DCF equity bridge assume 0 for it. If the issuer carries noncontrolling interest, this EV (and EV/EBITDA, EV/Revenue) is understated, and the DCF equity value is overstated, by that amount. Metric authority: producer of record 'fmp.balance_sheet.minority_interest' supplied no value, so no wired source states this number and the assumed 0 cannot be confirmed.",
+          "field_key": "enterprise_value",
+          "severity": "review"
+        }
+      ],
+      "withhold_valuation": false
+    },
+    "ownership_governance": {
+      "insider_buy_value": 0.0,
+      "insider_largest_sale": {
+        "name": "Michael Linford",
+        "position": "Chief Operating Officer",
+        "value": 7130502.19
+      },
+      "insider_net_flow": -18693560.03,
+      "insider_sell_value": 18693560.03,
+      "insider_window_days": 90,
+      "warnings": [
+        "8 Schedule 13D/13G filing(s) are stale (older than 400 days; a 13G annual amendment is due within 45 days of year-end): Capital World Investors (700d, filed 2024-11-13), GIC Private Ltd (715d, filed 2024-10-29), BAILLIE GIFFORD & CO (800d, filed 2024-08-05), VANGUARD GROUP INC (974d, filed 2024-02-13), MORGAN STANLEY (975d, filed 2024-02-12), Capital Research Global Investors (978d, filed 2024-02-09), SHOPIFY INC. (1707d, filed 2022-02-10), Levchin Max R (1707d, filed 2022-02-10). The reported holdings may no longer reflect the filer's current position — verify against a newer filing before relying on them."
+      ]
+    },
+    "technical_analysis": {
+      "historical_bands": {
+        "classification": "cheap",
+        "classification_caveat": null,
+        "current": 26.777076071809642,
+        "median": 36.76060318422564,
+        "metric": "ev_ebitda",
+        "p25": 27.91240814574903,
+        "p75": 39.60019829318067,
+        "p90": 41.62919532698026,
+        "sample_count": 325,
+        "structural_break": null,
+        "timeline": [
+          [
+            "2025-06-30",
+            37.957319478308015
+          ],
+          [
+            "2025-07-02",
+            37.6362492530664
+          ],
+          [
+            "2025-07-08",
+            37.36938568922922
+          ],
+          [
+            "2025-07-11",
+            36.114292990557466
+          ],
+          [
+            "2025-07-15",
+            36.710566266006175
+          ],
+          [
+            "2025-07-18",
+            37.85724564186907
+          ],
+          [
+            "2025-07-23",
+            36.49790936357341
+          ],
+          [
+            "2025-07-28",
+            37.27765133916019
+          ],
+          [
+            "2025-07-30",
+            37.24429339368054
+          ],
+          [
+            "2025-08-04",
+            40.313224377808154
+          ],
+          [
+            "2025-08-07",
+            42.05200728593479
+          ],
+          [
+            "2025-08-11",
+            39.55433111814616
+          ],
+          [
+            "2025-08-14",
+            41.24307710805333
+          ],
+          [
+            "2025-08-19",
+            39.92543826160724
+          ],
+          [
+            "2025-08-22",
+            42.27300367473746
+          ],
+          [
+            "2025-08-26",
+            41.63086322425424
+          ],
+          [
+            "2025-08-29",
+            46.01326331164298
+          ],
+          [
+            "2025-09-04",
+            46.5136324938377
+          ],
+          [
+            "2025-09-09",
+            45.99658433890316
+          ],
+          [
+            "2025-09-11",
+            43.07359436624901
+          ],
+          [
+            "2025-09-16",
+            46.63872478938638
+          ],
+          [
+            "2025-09-19",
+            47.564407776446615
+          ],
+          [
+            "2025-09-23",
+            43.624000466663205
+          ],
+          [
+            "2025-09-26",
+            40.83027253274269
+          ],
+          [
+            "2025-10-01",
+            40.158943879964774
+          ],
+          [
+            "2025-10-06",
+            40.759386898598436
+          ],
+          [
+            "2025-10-08",
+            40.505032564316124
+          ],
+          [
+            "2025-10-13",
+            39.64189572503024
+          ],
+          [
+            "2025-10-16",
+            37.92813127601332
+          ],
+          [
+            "2025-10-20",
+            39.18322397468507
+          ],
+          [
+            "2025-10-23",
+            40.62595511667985
+          ],
+          [
+            "2025-10-28",
+            40.784405357708174
+          ],
+          [
+            "2025-10-31",
+            39.09982911098595
+          ],
+          [
+            "2025-11-04",
+            38.90385118129302
+          ],
+          [
+            "2025-11-07",
+            39.825364425168296
+          ],
+          [
+            "2025-11-12",
+            42.04783754274984
+          ],
+          [
+            "2025-11-17",
+            37.55285438936728
+          ],
+          [
+            "2025-11-19",
+            36.37698681120969
+          ],
+          [
+            "2025-11-24",
+            37.019127261692915
+          ],
+          [
+            "2025-11-28",
+            38.71204299478505
+          ],
+          [
+            "2025-12-02",
+            37.07333392309734
+          ],
+          [
+            "2025-12-05",
+            37.47779901203807
+          ],
+          [
+            "2025-12-10",
+            38.67451530612044
+          ],
+          [
+            "2025-12-15",
+            36.506248849943326
+          ],
+          [
+            "2025-12-17",
+            39.16654500194525
+          ],
+          [
+            "2025-12-22",
+            41.889387301721506
+          ],
+          [
+            "2025-12-26",
+            40.73853818267366
+          ],
+          [
+            "2025-12-30",
+            40.755217155413476
+          ],
+          [
+            "2026-01-05",
+            42.81924003196669
+          ],
+          [
+            "2026-01-08",
+            43.15698922994813
+          ],
+          [
+            "2026-01-13",
+            40.80525407363295
+          ],
+          [
+            "2026-01-15",
+            39.07064090869126
+          ],
+          [
+            "2026-01-21",
+            39.04979219276648
+          ],
+          [
+            "2026-01-26",
+            37.7780205213549
+          ],
+          [
+            "2026-01-29",
+            35.313702299045914
+          ],
+          [
+            "2026-02-02",
+            34.97595310106448
+          ],
+          [
+            "2026-02-05",
+            33.904329102530795
+          ],
+          [
+            "2026-02-10",
+            34.00023319578478
+          ],
+          [
+            "2026-02-12",
+            29.876357185863302
+          ],
+          [
+            "2026-02-18",
+            30.68528736374477
+          ],
+          [
+            "2026-02-23",
+            28.779714728219883
+          ],
+          [
+            "2026-02-26",
+            30.151560236070402
+          ],
+          [
+            "2026-03-02",
+            28.587906541711906
+          ],
+          [
+            "2026-03-05",
+            31.018866818541245
+          ],
+          [
+            "2026-03-10",
+            29.880526929048262
+          ],
+          [
+            "2026-03-12",
+            28.466983989348183
+          ],
+          [
+            "2026-03-17",
+            28.959013685172987
+          ],
+          [
+            "2026-03-20",
+            27.39535999081449
+          ],
+          [
+            "2026-03-25",
+            27.91240814574903
+          ],
+          [
+            "2026-03-27",
+            26.861632863140123
+          ],
+          [
+            "2026-04-01",
+            28.116725561811876
+          ],
+          [
+            "2026-04-07",
+            28.89229779421369
+          ],
+          [
+            "2026-04-10",
+            29.36347877411372
+          ],
+          [
+            "2026-04-14",
+            32.40322155594664
+          ],
+          [
+            "2026-04-17",
+            36.022558640488434
+          ],
+          [
+            "2026-04-22",
+            36.88986522295928
+          ],
+          [
+            "2026-04-24",
+            35.69731867206187
+          ],
+          [
+            "2026-04-29",
+            35.59724483562292
+          ],
+          [
+            "2026-05-04",
+            37.098352382207075
+          ],
+          [
+            "2026-05-07",
+            37.215105191385845
+          ],
+          [
+            "2026-05-11",
+            36.83565856155485
+          ],
+          [
+            "2026-05-14",
+            37.30266979826992
+          ],
+          [
+            "2026-05-19",
+            36.35613809528491
+          ],
+          [
+            "2026-05-21",
+            37.140049814056646
+          ],
+          [
+            "2026-05-27",
+            38.49938609235229
+          ],
+          [
+            "2026-06-01",
+            39.52931265903642
+          ],
+          [
+            "2026-06-04",
+            37.77385077816995
+          ],
+          [
+            "2026-06-08",
+            36.422853986244206
+          ],
+          [
+            "2026-06-11",
+            36.85233753429467
+          ],
+          [
+            "2026-06-16",
+            40.271526945958584
+          ],
+          [
+            "2026-06-22",
+            39.233260892904546
+          ],
+          [
+            "2026-06-24",
+            41.50994067189051
+          ],
+          [
+            "2026-06-29",
+            43.232044607277345
+          ],
+          [
+            "2026-07-02",
+            26.800802787958492
+          ],
+          [
+            "2026-07-07",
+            26.57281130302478
+          ],
+          [
+            "2026-07-10",
+            26.52531307699692
+          ],
+          [
+            "2026-07-15",
+            26.119203244458735
+          ],
+          [
+            "2026-07-20",
+            24.601634922868687
+          ],
+          [
+            "2026-07-22",
+            24.267959885022993
+          ],
+          [
+            "2026-07-27",
+            24.062530057452506
+          ],
+          [
+            "2026-07-30",
+            24.110028283480364
+          ],
+          [
+            "2026-08-03",
+            24.675257173211868
+          ],
+          [
+            "2026-08-06",
+            24.90087374684419
+          ],
+          [
+            "2026-08-11",
+            24.930560138111602
+          ],
+          [
+            "2026-08-14",
+            25.321233047190727
+          ],
+          [
+            "2026-08-18",
+            24.183650533823545
+          ],
+          [
+            "2026-08-21",
+            25.007744755406872
+          ],
+          [
+            "2026-08-26",
+            24.872374811227473
+          ],
+          [
+            "2026-08-31",
+            24.39501763964751
+          ],
+          [
+            "2026-09-02",
+            24.309520832797368
+          ],
+          [
+            "2026-09-08",
+            23.832163661217397
+          ],
+          [
+            "2026-09-11",
+            23.680169337928252
+          ],
+          [
+            "2026-09-15",
+            23.83453857251879
+          ],
+          [
+            "2026-09-18",
+            23.625546377996216
+          ],
+          [
+            "2026-09-23",
+            22.884574051961643
+          ],
+          [
+            "2026-09-28",
+            22.675581857439067
+          ],
+          [
+            "2026-09-30",
+            23.15531394032043
+          ],
+          [
+            "2026-10-05",
+            24.466264978689296
+          ],
+          [
+            "2026-10-08",
+            25.03624369102359
+          ],
+          [
+            "2026-10-13",
+            26.777076071809642
+          ]
+        ],
+        "warnings": [
+          "178 price point(s) predate the earliest fiscal year — skipped",
+          "current point uses TTM EBITDA (consistent with the comps caliber); historical quantiles use each annual-report year's EBITDA, so the two carry a caliber basis difference (no quarterly data, so a rolling TTM cannot be reconstructed point by point).",
+          "per-year share counts are unavailable from the serving providers, so the historical band is computed on the run's own share count (296,881,962); a buyback or issuance history makes the earlier multiples approximate."
+        ],
+        "window_years": 5
+      },
+      "monte_carlo": {
+        "assumptions_used": {
+          "centered_on": "base-case DCF assumptions",
+          "ebitda_margin_std": 0.02,
+          "independent": false,
+          "mid_year_convention": false,
+          "n_simulations": 10000,
+          "revenue_growth_std": 0.02,
+          "seed": 1581201405,
+          "terminal_growth_std": 0.005,
+          "valid_simulations": 9977,
+          "variance_reduction": "antithetic_variates",
+          "wacc_std": 0.01
+        },
+        "current_price_percentile": 93.8,
+        "mean": 41.22,
+        "n_valid": 9977,
+        "percentiles": {
+          "10": 18.38,
+          "25": 26.15,
+          "5": 14.56,
+          "50": 37.37,
+          "75": 52.02,
+          "90": 69.36,
+          "95": 82.36
+        },
+        "std": 20.89
+      }
+    },
+    "thesis": {
+      "catalysts": [
+        "Merchant network expansion: the reported Ant International / Antom partnership (2026-10-06, impact 3, 2 sources) extends pay-over-time checkout to US customers, widening acceptance and originations against a $4.26B TTM revenue base that grew 32.2% in FY2026.",
+        "Reported Crate & Barrel Holdings merchant win (2026-09-29, impact 3) plus the 2026-09-30 coverage framing the equity against fair value — two merchant-network additions in the news window versus three acquisition-category items overall, alongside the model's FY1 forecast revenue growth of 39.0%.",
+        "Underwriting IP as an origination driver: the transformer-based real-time underwriting model brought to checkout for thin-file borrowers (2026-09-17 and 2026-09-23) expands the approved funnel, supporting the model's 39.0%→3.0% fading growth schedule (21.0%/yr average over 10 forecast years).",
+        "Sell-side re-rating already in motion: a Goldman Sachs price-target increase (2026-09-19) and a separate analyst upgrade (2026-09-14, 2 sources) within a news window carrying net sentiment of +1.22 and a bullish catalyst outlook.",
+        "Valuation-room argument: TTM EV/EBITDA of 26.8x sits below the 5-year median of 36.8x and inside the p25 of 27.9x, a 'cheap' classification against the historical band — a narrower discount to that median band would still leave room even though the DCF mid of $37.47 (band $29.98–$44.97) anchors the fundamental floor."
+      ],
+      "company_overview": "Affirm Holdings, Inc. (AFRM) operates a next-generation payment network that sells point-of-sale instalment financing to consumers and conversion economics to merchants. Consumers split purchases into fixed-instalment or interest-bearing plans, including through the Affirm Card; merchants pay a fee for incremental basket conversion and higher average order value. Revenue therefore mixes merchant network fees, card and processing income, and interest income on loans held, with originations routed through warehouse facilities and Affirm ABS securitization trusts. A segment revenue breakdown was not available for this issuer; see the latest annual report for business-line detail. Geographic revenue breakdown was also not available in the supplied XBRL snapshot, so no geographic split is asserted here.\n\nScale is now evident in reported figures: $4.26B of trailing-twelve-month revenue and $1.93B of trailing-twelve-month net income, against $15.79B of total assets, $10.31B of total liabilities and $5.48B of shareholders' equity at the fiscal year ended 2026-06-30.\n\nThe moat is underwriting IP plus two-sided network scale rather than a regulatory franchise. The transformer-based real-time risk model is designed to approve thin-file borrowers at checkout, widening the funnel without loosening aggregate credit standards; that edge monetises through merchant integrations — the reported Antom (Ant International) and Crate & Barrel additions widen acceptance. The funding stack of warehouse capacity and recurring ABS issuance is a scale advantage and simultaneously the binding constraint: the model is balance-sheet-intensive and its cost of capital sets the terminal economics. The moat is therefore real but partial and rate-sensitive, which is why the market price embeds a growth and discount-rate path the base-case DCF cannot reproduce.",
+      "competitor_analysis": "No peer set was produced for AFRM in this run — the peer-screen data fetch returned no usable comps — so the competitive read here is structural rather than multiple-based, and it is a data-coverage gap, not a suppression of available evidence. Sector economics dominate: buy-now-pay-later is capital-intensive and funding-sensitive, so scale of ABS/warehouse capacity and underwriting IP, not distribution alone, decides who earns excess returns. Affirm competes on differentiated risk technology — the transformer-based real-time underwriting model extended to thin-file borrowers at checkout — versus merchant-funded, balance-sheet-light structures and versus incumbent card rails, and the reported Antom and Crate & Barrel integrations are share-gaining evidence on the merchant side. On valuation, the only relative anchor available is the issuer's own history: TTM EV/EBITDA of 26.8x versus a five-year median of 36.8x, a p25 of 27.9x and a p90 of 41.6x, classified as cheap against that band. Peer-relative premium or discount conclusions are not asserted, because no peer multiple was supplied.",
+      "key_takeaways": [
+        "The call is HOLD on relative value, not on franchise quality: the $77.89 market price sits above the entire published fundamental band of $28.10–$46.84 produced by the surviving 10-year DCF (mid $37.47, WACC 12.61%, terminal growth 3.0%).",
+        "The gap is a growth-path gap: the price implies ~29.4%/yr revenue growth held flat across the 10-year horizon, versus the model's fading schedule of 39.0% in FY1 to 3.0% in FY10 (21.0% average) — the same cash-flow engine run at two different shapes.",
+        "Operating momentum is real and measurable — $4.26B TTM revenue, $1.93B TTM net income, $5.48B equity — and the multiple is undemanding versus its own history at 26.8x TTM EV/EBITDA against a 36.8x five-year median.",
+        "Ownership flow is a live negative: -$18,693,560 net insider selling over 90 days with $0 of open-market purchases, while institutions on file hold 54.7% of shares outstanding.",
+        "No point target is published this run: a lone method priced at 0.48x the market is outside the [0.5x, 2x] calibration band, so the band stands as a floor and the direction is taken from the market's own implied growth and discount rate — refusing to print a phantom number is the deliverable, not a gap in it."
+      ],
+      "momentum_divergence_note": null,
+      "narrative": "Affirm Holdings (AFRM) at $77.89 trades above its entire published fundamental band of $28.10–$46.84. The one valuation method that survived this run — a 10-year DCF at a 12.61% WACC, revenue growth fading from 39.0% in FY1 to 3.0% in FY10 (21.0%/yr average) and a 3.0% perpetuity rate — returns $37.47, with an own-range of $29.98–$44.97. Reverse-engineering the quote: holding that growth fade fixed, $77.89 implies a ~9.31% discount rate; holding the 12.61% WACC fixed, it implies ~29.4%/yr revenue growth held flat for ten years. A flat 29.4% is a different construct from a 39.0%→3.0% fade averaging 21.0%, and that spread — not a claim that the market is irrational — is why the stance is HOLD rather than Buy.\n\nThe supportive side is genuine and quantified. Momentum is constructive at +6.4% over one year, 74% up the 52-week range and -13.9% off the high; TTM revenue of $4.26B and TTM net income of $1.93B show the platform has crossed into real profitability, with $5.48B of equity against $15.79B of assets. TTM EV/EBITDA of 26.8x versus a five-year median of 36.8x classifies the multiple as cheap on its own history, and the catalyst tape is positive — net sentiment +1.22, led by the reported Antom and Crate & Barrel merchant wins and the transformer-underwriting rollout.\n\nThe bear arithmetic is equally concrete. Over the last 90 days insiders were net sellers of [target withheld] with zero open-market purchases and a largest single sale of [target withheld], and the market price already sits at the 94th percentile of the Monte Carlo distribution (mean [target withheld]). If growth converges on the fade schedule rather than the flat 29.4% the price implies, the DCF lands at $37.47 — 0.48x the market — and the published band of $28.10–$46.84 acts as a floor, not a target. With the point withheld and one method only, HOLD is the honest read: the franchise is compounding, but the multiple has already banked the fade.",
+      "news_summary": "The last 30 days of coverage read bullish: 50 news items between 2026-09-14 and 2026-10-14 with an overall net sentiment of +1.22, no top-negative items, and a category mix of three acquisition, two product-launch and two market stories. The flow is merchant-network accretion — the reported Ant International/Antom partnership (2026-10-06) and the Crate & Barrel Holdings win (2026-09-29), the latter echoed two sources and framed on 2026-09-30 against a discount to fair value. Product news reinforces the underwriting moat, with the transformer-based real-time risk model rolled to checkout for thin-file borrowers (2026-09-17, 2026-09-23). Sell-side positioning turned more constructive via a Goldman Sachs price-target increase (2026-09-19) and a separate upgrade (2026-09-14, two sources). This supports the operating half of the thesis but challenges none of the valuation arithmetic — a +1.22 sentiment print and a de-rating catalyst do not change the ~29.4%/yr flat growth the $77.89 price already implies relative to the model's 39.0%→3.0% fade. Note the SEC 8-K index is stale relative to the news window (newest filing 2026-08-27 versus news earliest 2026-09-14), so filings in that gap are invisible to this run.",
+      "price_target": null,
+      "price_target_basis": "POINT TARGET WITHHELD (confidence=very_low): the only number available (the surviving method $37.47) would be fabricated, so it is not published (never fabricate a number). The HOLD verdict reads off the nearest published range bound ($46.84), not the withheld interior point — the market sits above the whole range. Methods: DCF $37.47 (own range $29.98–$44.97, wt 0.85). Published target band $28.10–$46.84 (±25% single-method confidence dial). single method dcf [target withheld] is 0.48x the market price, outside the [0.5x,2x] single-method calibration band — point target withheld (avoid stamping false precision on a lone far-from-market method); the band still provides a fundamental floor, with direction taken from the market implied.",
+      "recommendation": "HOLD",
+      "risks": [
+        "Growth-deceleration risk is the core thesis-invalidation: if revenue follows the model's own fade (39.0% FY1 down to 3.0% FY10, 21.0% average) rather than the ~29.4%/yr flat rate implied by the $77.89 price, the DCF returns $37.47 — roughly half the market price and below the top of the published band at $46.84.",
+        "Insider distribution: 90-day net insider flow is -$18,693,560 with $0 of open-market purchases and a largest single sale of $7,130,502 by COO Michael Linford — sellers were active, buyers were absent.",
+        "Discount-rate sensitivity: the market price implies a ~9.31% WACC versus the model's 12.61%; a reversion toward the modelled cost of capital, with beta modelled at 2.88 and a 30.2% debt ratio in the capital structure, drags the DCF grid toward its low end at $29.98.",
+        "Balance-sheet intensity of the funding model: $10.31B of total liabilities against $5.48B of shareholders' equity (FY ending 2026-06-30) means the ABS/warehouse funding stack, not merchant demand alone, sets the marginal economics — credit-spread widening transmits directly into fair value.",
+        "Positioning and momentum risk: the $77.89 quote sits 74% up the 52-week range and only -13.9% below the 52-week high after a +6.4% one-year return, with resistance near $80.70 and the Monte Carlo distribution placing the market price at the 94th percentile (mean $41.22) — a lot of upside is already discounted, and institutional coverage of 54.7% of shares on file leaves room for outflow."
+      ],
+      "tagline": "AFRM · price embeds 29% growth the DCF cannot underwrite",
+      "valuation_overview": "Only one valuation method survived this run: a 10-year DCF built on FY1 revenue growth of 39.0% fading linearly to 3.0% by FY10 (21.0% average), a 12.61% WACC and a 3.0% perpetuity growth rate, returning $37.47 within an own-range of $29.98–$44.97. No comparable-company set was produced — the peer screen returned no usable data for this ticker — so there is no comps cross-check and no DDM, leaving the DCF to carry the full evidence weight at a 0.85 method weight. That lone method lands at 0.48x the $77.89 market price, outside the [0.5x, 2x] single-method calibration band, so the point target is withheld rather than published: $37.47 is the only available number and stamping it as a 12-month target would be false precision on a single far-from-market method. The published band of $28.10–$46.84 is best read as a fundamental floor. The reverse-DCF explains the divergence: holding the growth fade fixed, $77.89 implies a ~9.31% discount rate against the model's 12.61% WACC; holding WACC fixed, it implies ~29.4%/yr growth held flat for ten years against a 21.0% average fade."
+    },
+    "valuation_synthesis": {
+      "anchor_method": null,
+      "confidence": "very_low",
+      "cross_checks": [
+        {
+          "band_break_caveat": null,
+          "basis": "Own 5-year EV/EBITDA band (p25 27.91x · median 36.76x · p75 39.60x, 325 samples) applied to this run's TTM EBITDA (income.ebitda $1,174,327,000) through the EV→equity bridge (− net debt $8,320,907,392 − preferred $0 − NCI $0) ÷ 296,881,962 shares outstanding.",
+          "high": 128.61230912047117,
+          "label": "Own 5-year EV/EBITDA",
+          "low": 82.38084578736724,
+          "mid": 117.38019120044127,
+          "name": "ev_ebitda_band",
+          "note": "Mean-reversion cross-check only — excluded from the published target blend, which keeps its existing method weighting."
+        }
+      ],
+      "current_price": 77.89,
+      "degradation_note": "single method dcf $37 is 0.48x the market price, outside the [0.5x,2x] single-method calibration band — point target withheld (avoid stamping false precision on a lone far-from-market method); the band still provides a fundamental floor, with direction taken from the market implied.",
+      "financial_sector": false,
+      "methods": [
+        {
+          "assumptions": "WACC 12.6% · 10yr growth 39%→3.0% · β2.88",
+          "confidence": 0.85,
+          "high": 44.96762505751692,
+          "low": 29.97841670501128,
+          "mid": 37.4730208812641,
+          "name": "dcf",
+          "rerating_ratio": null,
+          "source": "implied_price ± 20% (placeholder band, not a real distribution)"
+        }
+      ],
+      "mna_transition": false,
+      "outlier_methods": [],
+      "target_high": 46.84127610158012,
+      "target_low": 28.104765660948075,
+      "upside_downside": null,
+      "valuation_withheld": true,
+      "warnings": [],
+      "weighted_price": null
+    },
+    "valuation_withheld": true,
+    "withheld_reason": "contract_C7",
+    "xbrl_facts_snapshot": {
+      "us-gaap:Assets": [
+        {
+          "concept": "us-gaap:Assets",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 15790148000.0
+        }
+      ],
+      "us-gaap:Liabilities": [
+        {
+          "concept": "us-gaap:Liabilities",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 10306324000.0
+        }
+      ],
+      "us-gaap:NetIncomeLoss:annual": [
+        {
+          "concept": "us-gaap:NetIncomeLoss:annual",
+          "matched_concept": "us-gaap:NetIncomeLoss",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 1929793000.0
+        }
+      ],
+      "us-gaap:OperatingIncomeLoss": [
+        {
+          "concept": "us-gaap:OperatingIncomeLoss",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 416977000.0
+        }
+      ],
+      "us-gaap:Revenues": [
+        {
+          "concept": "us-gaap:Revenues",
+          "has_calculated_q4": true,
+          "period_end": "2026-06-30",
+          "periods": [
+            "Q1 2026",
+            "Q2 2026",
+            "Q3 2026",
+            "Q4 2026"
+          ],
+          "value": 4261081000.0,
+          "warning": "Some quarters were derived from YTD or annual facts. These are calculated values, not directly reported quarterly data."
+        },
+        {
+          "concept": "us-gaap:Revenues",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 4261082000.0
+        }
+      ],
+      "us-gaap:StockholdersEquity": [
+        {
+          "concept": "us-gaap:StockholdersEquity",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 5483824000.0
+        }
+      ]
+    }
+  },
+  "pinned_for": [
+    "C10c",
+    "C14b"
+  ],
+  "source": "~/.finrobot/artifacts.db",
+  "ticker": "AFRM",
+  "type": "equity_research",
+  "verdicts": {
+    "C1": false,
+    "C10a": false,
+    "C10b": false,
+    "C10c": true,
+    "C10d": true,
+    "C11": false,
+    "C12a": true,
+    "C12b": false,
+    "C12c": false,
+    "C13b": false,
+    "C13c": false,
+    "C14a": false,
+    "C14b": true,
+    "C1b": false,
+    "C2": false,
+    "C3": false,
+    "C4": false,
+    "C6": false,
+    "C6b": false,
+    "C7": false,
+    "C8": false,
+    "C9": false
+  }
+}

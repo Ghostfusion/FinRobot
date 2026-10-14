@@ -36,6 +36,7 @@ from finrobot.artifact.models import (
     ArtifactMeta,
     ArtifactOutputs,
 )
+from finrobot.artifact.proposed_clauses import PROPOSED_CLAUSES
 from finrobot.artifact.summary_extractor import extract_target_price
 
 UTC = timezone.utc
@@ -871,3 +872,629 @@ def test_c3_noop_when_dollar_amounts_have_no_conclusion_cue() -> None:
     before = art.model_dump()
     out = enforce_artifact_contract(art)
     assert out.model_dump() == before
+
+
+# ── Staged clauses: proposed_clauses.py (§7.2–§7.5) ──────────────────────────
+#
+# §7.4: one payload that passes and one that violates, per clause, plus the
+# invariant that a violation NEVER raises — a clause that raised at the persist
+# boundary would blank the run. The staged clauses are inert (nothing in the run
+# path imports them), so besides the read-only scanner
+# (``scripts/scan_artifact_contract.py --proposed``, which measured the same
+# predicates over the stored corpus — §7.1/§7.5) this is the only place they run.
+#
+# The payloads below are the shapes the corpus actually carries, reduced to the
+# paths each clause reads. The corpus-wide fixtures that prove the SAME predicates
+# against whole stored payloads — including instance B (99cdca), where the root
+# OMITS ``valuation_withheld`` while the synthesis writes ``false`` — are §7.2's
+# job and live in ``tests/artifact/``.
+
+_STAGED = {clause.id: clause for clause in PROPOSED_CLAUSES}
+
+
+def _staged_finding(clause_id: str, art: Artifact):
+    """Assert the clause fired, and that the finding is reportable."""
+    finding = _STAGED[clause_id].check(art)
+    assert finding is not None, f"{clause_id} did not fire"
+    assert finding.check.startswith("contract_")
+    assert finding.field_key
+    assert finding.evidence.strip()
+    return finding
+
+
+def _staged_violating_artifact() -> Artifact:
+    """One artifact that trips several staged clauses and NO live one."""
+    return _artifact(
+        raw_data={
+            "income": {"operating_margin": 0.18159},
+            "market": {"current_price": 271.6},
+            "data_authority": {
+                "decisions": [
+                    {
+                        "metric": "ebitda",
+                        "status": "accepted",
+                        "selected_source": "yfinance",
+                        "comparability": "caliber_divergent",
+                        "agreement_is_independent": False,
+                    }
+                ]
+            },
+        },
+        structured={
+            "thesis": {
+                "recommendation": "HOLD",
+                "narrative": "Insiders were net sellers of [target withheld].",
+            },
+            "valuation_synthesis": {
+                "valuation_withheld": False,
+                "methods": [{"name": "dcf"}],
+                "cross_checks": [
+                    {"name": "ev_ebitda_band", "low": 70.0, "mid": 219.8, "high": 255.3}
+                ],
+                "current_price": 271.6,
+                "degradation_note": "single method dcf with no cross-validation",
+            },
+            "ownership_governance": {"insider_net_flow": 49_991_274.0},
+            "catalyst_analysis": {
+                "news_window": {"count": 0, "sources": [], "provider": None},
+                "overall_sentiment": "neutral",
+            },
+            "technical_analysis": {
+                "monte_carlo": {"assumptions_used": {"centered_on": "base-case DCF assumptions"}}
+            },
+            "xbrl_facts_snapshot": {
+                "us-gaap:Assets": [{"value": 30_676_000_000.0}],
+                "us-gaap:Liabilities": [{"value": 21_976_000_000.0}],
+                "us-gaap:StockholdersEquity": [{"value": 4_658_000_000.0}],
+            },
+        },
+    )
+
+
+def test_staged_registry_is_disjoint_from_the_live_gate() -> None:
+    """No staged id may already be live: a promotion diff that double-ran a clause
+    would report every violation twice."""
+    assert {clause.id for clause in CONTRACT_CLAUSES} & set(_STAGED) == set()
+
+
+def test_staged_clauses_are_inert_at_the_persist_boundary() -> None:
+    """THE INERTNESS PROOF. An artifact that trips several staged clauses and no
+    live one comes out of ``enforce_artifact_contract`` byte-identical — no
+    withhold, no warning, no mutation. If this fails, a promotion landed without
+    its review diff (§7.1)."""
+    art = _staged_violating_artifact()
+    assert [c.id for c in PROPOSED_CLAUSES if c.check(art) is not None]
+    before = art.model_dump()
+    out = enforce_artifact_contract(art)
+    assert out.model_dump() == before
+
+
+@pytest.mark.parametrize("clause_id", sorted(_STAGED))
+def test_staged_clause_never_raises_on_any_shape(clause_id: str) -> None:
+    """A clause must report a violation, never throw one, whatever the payload
+    holds — this is the invariant the scanner relies on to sweep the store, and
+    the reason the guard is a return value rather than an exception."""
+    for art in _degenerate_artifacts():
+        _STAGED[clause_id].check(art)
+
+
+def _degenerate_artifacts() -> list[Artifact]:
+    """Empty, wrongly-typed and null-valued payloads — every shape a clause reads
+    a container from, made hostile."""
+    return [
+        _artifact(),
+        _artifact(structured={}, raw_data={}),
+        _artifact(
+            structured={
+                "thesis": [],
+                "valuation_synthesis": "block",
+                "ownership_governance": None,
+                "catalyst_analysis": {"news_window": [], "sec_8k_staleness_warning": 7},
+                "technical_analysis": {"monte_carlo": {"assumptions_used": []}},
+                "xbrl_facts_snapshot": {"us-gaap:Assets": "123"},
+                "valuation_withheld": None,
+            },
+            raw_data={
+                "income": [],
+                "data_authority": {"decisions": "none"},
+                "market": {"current_price": "271.6"},
+            },
+        ),
+        _artifact(
+            structured={
+                "thesis": {"narrative": None, "catalysts": [None, 3]},
+                "valuation_synthesis": {
+                    "cross_checks": [{"low": None, "mid": "x", "high": True}, []],
+                    "methods": None,
+                    "valuation_withheld": None,
+                },
+                "xbrl_facts_snapshot": {"_equity_identity": [{"assets": None}]},
+                "technical_analysis": {"monte_carlo": {"assumptions_used": {"centered_on": 5}}},
+            },
+            raw_data={"data_authority": {"decisions": [None, {"metric": None}]}},
+        ),
+    ]
+
+
+# ── C6b / C8 / C9: the cross-check readers ──────────────────────────────────
+
+
+def test_c6b_fires_when_the_note_denies_the_cross_check_it_publishes() -> None:
+    """Instance B's shape: one method, a published cross-check, and a note that
+    claims there was no cross-validation."""
+    art = _artifact(
+        structured={
+            "thesis": {"recommendation": "BUY"},
+            "valuation_synthesis": {
+                "methods": [{"name": "dcf"}],
+                "cross_checks": [
+                    {"name": "ev_ebitda_band", "low": 70.0, "mid": 219.8, "high": 255.3}
+                ],
+                "current_price": 271.6,
+                "degradation_note": "single method dcf with no cross-validation — band widened.",
+            },
+        }
+    )
+    finding = _staged_finding("C6b", art)
+    assert "ev_ebitda_band" in finding.evidence
+    assert "none brackets" in finding.evidence
+
+
+def test_c6b_quiet_when_the_note_and_the_evidence_agree() -> None:
+    art = _artifact(
+        structured={
+            "thesis": {"recommendation": "BUY"},
+            "valuation_synthesis": {
+                "methods": [{"name": "dcf"}],
+                "cross_checks": [],
+                "degradation_note": "single method dcf with no cross-validation — band widened.",
+            },
+        }
+    )
+    assert _STAGED["C6b"].check(art) is None
+
+
+def test_c8_fires_on_a_buy_whose_only_band_sits_below_the_tape() -> None:
+    art = _artifact(
+        structured={
+            "thesis": {"recommendation": "BUY"},
+            "valuation_synthesis": {
+                "current_price": 271.6,
+                "cross_checks": [
+                    {"name": "ev_ebitda_band", "low": 70.0, "mid": 219.8, "high": 255.3}
+                ],
+            },
+        }
+    )
+    finding = _staged_finding("C8", art)
+    assert "contradicts" in finding.evidence
+
+
+def test_c8_quiet_when_a_band_brackets_the_tape() -> None:
+    """A band that spans the price claims no side → not a contradiction."""
+    art = _artifact(
+        structured={
+            "thesis": {"recommendation": "BUY"},
+            "valuation_synthesis": {
+                "current_price": 271.6,
+                "cross_checks": [
+                    {"name": "ev_ebitda_band", "low": 100.0, "mid": 300.0, "high": 400.0}
+                ],
+            },
+        }
+    )
+    assert _STAGED["C8"].check(art) is None
+
+
+def test_c8_does_not_read_a_band_c9_has_rejected() -> None:
+    """SKM's shape: the only cross-check is degenerate, so C9 owns it. C8 must
+    return None rather than count the unusable band as evidence — this is why C8
+    flags 7 of §1.1's 8 artifacts and the two clauses cover the list only as a
+    pair."""
+    art = _artifact(
+        structured={
+            "thesis": {"recommendation": "BUY"},
+            "valuation_synthesis": {
+                "current_price": 34.42,
+                "cross_checks": [
+                    {"name": "ev_ebitda_band", "low": -2.97, "mid": -1.70, "high": -1.23}
+                ],
+            },
+        }
+    )
+    assert _STAGED["C8"].check(art) is None
+    assert _staged_finding("C9", art) is not None
+
+
+def test_c9_fires_on_a_non_positive_band() -> None:
+    art = _artifact(
+        structured={
+            "valuation_synthesis": {
+                "cross_checks": [
+                    {"name": "ev_ebitda_band", "low": -2.97, "mid": -1.70, "high": -1.23}
+                ]
+            }
+        }
+    )
+    finding = _staged_finding("C9", art)
+    assert "not positive" in finding.evidence
+
+
+def test_c9_fires_on_a_band_that_is_not_monotone() -> None:
+    art = _artifact(
+        structured={
+            "valuation_synthesis": {
+                "cross_checks": [{"name": "ev_ebitda_band", "low": 10.0, "mid": 99.0, "high": 20.0}]
+            }
+        }
+    )
+    assert "outside" in _staged_finding("C9", art).evidence
+
+
+# ── C11: the mirrored slot ──────────────────────────────────────────────────
+
+
+def test_c11_fires_when_one_writer_omits_the_mirrored_slot() -> None:
+    """The corpus shape, and the one the first probe's ``is not None`` guard hid:
+    the root OMITS the key while the synthesis writes ``false``."""
+    art = _artifact(structured={"valuation_synthesis": {"valuation_withheld": False}})
+    finding = _staged_finding("C11", art)
+    assert "omits the slot" in finding.evidence
+
+
+def test_c11_fires_when_the_two_writers_disagree_on_the_value() -> None:
+    art = _artifact(
+        structured={
+            "valuation_withheld": False,
+            "valuation_synthesis": {"valuation_withheld": True},
+        }
+    )
+    assert "disagree" in _staged_finding("C11", art).evidence
+
+
+def test_c11_quiet_when_the_writers_agree_or_both_stay_silent() -> None:
+    both_true = _artifact(
+        structured={
+            "valuation_withheld": True,
+            "valuation_synthesis": {"valuation_withheld": True},
+        }
+    )
+    neither = _artifact(structured={"valuation_synthesis": {}})
+    assert _STAGED["C11"].check(both_true) is None
+    assert _STAGED["C11"].check(neither) is None
+
+
+# ── C10a–C10d: conclusion ratios ────────────────────────────────────────────
+
+
+def test_c10a_fires_on_a_margin_with_no_numerator() -> None:
+    art = _artifact(raw_data={"income": {"operating_margin": 0.18159}})
+    finding = _staged_finding("C10a", art)
+    assert "operating_income" in finding.evidence
+
+
+def test_c10a_quiet_when_both_operands_are_present() -> None:
+    art = _artifact(
+        raw_data={"income": {"operating_margin": 0.18159, "operating_income": 4_418_000_000.0}}
+    )
+    assert _STAGED["C10a"].check(art) is None
+
+
+def test_c10b_fires_when_the_two_operands_come_from_different_sources() -> None:
+    art = _artifact(
+        raw_data={
+            "data_authority": {
+                "decisions": [
+                    {"metric": "revenue", "status": "accepted", "selected_source": "yfinance"},
+                    {
+                        "metric": "operating_income",
+                        "status": "accepted",
+                        "selected_source": "eodhd",
+                    },
+                ]
+            }
+        }
+    )
+    finding = _staged_finding("C10b", art)
+    assert "different sources" in finding.evidence
+
+
+def test_c10b_quiet_when_one_source_serves_both_operands() -> None:
+    art = _artifact(
+        raw_data={
+            "data_authority": {
+                "decisions": [
+                    {"metric": "revenue", "status": "accepted", "selected_source": "yfinance"},
+                    {
+                        "metric": "operating_income",
+                        "status": "accepted",
+                        "selected_source": "yfinance",
+                    },
+                ]
+            }
+        }
+    )
+    assert _STAGED["C10b"].check(art) is None
+
+
+def test_c10c_fires_when_the_identity_is_computable_but_unrecorded() -> None:
+    art = _artifact(
+        structured={
+            "xbrl_facts_snapshot": {
+                "us-gaap:Assets": [{"value": 30_676_000_000.0}],
+                "us-gaap:Liabilities": [{"value": 21_976_000_000.0}],
+                "us-gaap:StockholdersEquity": [{"value": 4_658_000_000.0}],
+            }
+        }
+    )
+    assert "not recorded" in _staged_finding("C10c", art).evidence
+
+
+def test_c10c_verifies_a_recorded_identity_and_quiet_when_it_closes() -> None:
+    """THC's record: 30.676 − 21.976 = 8.700 total, of which 4.658 parent and
+    4.042 noncontrolling interest."""
+    art = _artifact(
+        structured={
+            "xbrl_facts_snapshot": {
+                "_equity_identity": [
+                    {
+                        "assets": 30_676_000_000.0,
+                        "liabilities": 21_976_000_000.0,
+                        "total_equity": 8_700_000_000.0,
+                        "parent_stockholders_equity": 4_658_000_000.0,
+                        "noncontrolling_interest": 4_042_000_000.0,
+                    }
+                ]
+            }
+        }
+    )
+    assert _STAGED["C10c"].check(art) is None
+
+
+def test_c10c_fires_on_a_recorded_identity_that_does_not_close() -> None:
+    art = _artifact(
+        structured={
+            "xbrl_facts_snapshot": {
+                "_equity_identity": [
+                    {
+                        "assets": 30_676_000_000.0,
+                        "liabilities": 21_976_000_000.0,
+                        "total_equity": 9_000_000_000.0,
+                        "parent_stockholders_equity": 4_658_000_000.0,
+                        "noncontrolling_interest": 4_042_000_000.0,
+                    }
+                ]
+            }
+        }
+    )
+    assert "does not close" in _staged_finding("C10c", art).evidence
+
+
+def test_c10d_fires_on_an_accepted_caliber_divergent_decision() -> None:
+    art = _artifact(
+        raw_data={
+            "data_authority": {
+                "decisions": [
+                    {
+                        "metric": "ebitda",
+                        "status": "accepted",
+                        "selected_source": "yfinance",
+                        "comparability": "caliber_divergent",
+                    }
+                ]
+            }
+        }
+    )
+    assert "caliber_divergent" in _staged_finding("C10d", art).evidence
+
+
+def test_c10d_quiet_when_the_divergent_comparison_was_not_accepted() -> None:
+    art = _artifact(
+        raw_data={
+            "data_authority": {
+                "decisions": [
+                    {
+                        "metric": "ebitda",
+                        "status": "rejected",
+                        "selected_source": "yfinance",
+                        "comparability": "caliber_divergent",
+                    }
+                ]
+            }
+        }
+    )
+    assert _STAGED["C10d"].check(art) is None
+
+
+# ── C12a–C12c: recency and window closure ───────────────────────────────────
+
+
+def test_c12a_fires_on_the_artifact_s_own_staleness_disclosure() -> None:
+    art = _artifact(
+        structured={
+            "catalyst_analysis": {
+                "sec_8k_staleness_warning": "SEC 8-K index is stale relative to the news window",
+                "sec_8k_window": {"count": 10, "oldest": "2025-11-24", "newest": "2026-09-22"},
+            }
+        }
+    )
+    assert "stale" in _staged_finding("C12a", art).evidence
+
+
+def test_c12a_quiet_without_the_disclosure() -> None:
+    art = _artifact(structured={"catalyst_analysis": {"sec_8k_window": {"count": 10}}})
+    assert _STAGED["C12a"].check(art) is None
+
+
+def test_c12b_fires_on_an_empty_news_window_carrying_a_populated_read() -> None:
+    art = _artifact(
+        structured={
+            "catalyst_analysis": {
+                "news_window": {"count": 0, "sources": [], "provider": None},
+                "overall_sentiment": "neutral",
+                "key_catalysts": ["no"],
+            }
+        }
+    )
+    finding = _staged_finding("C12b", art)
+    assert "news window is empty" in finding.evidence
+
+
+def test_c12b_quiet_when_the_window_has_news() -> None:
+    art = _artifact(structured={"catalyst_analysis": {"news_window": {"count": 3}}})
+    assert _STAGED["C12b"].check(art) is None
+
+
+def test_c12c_fires_on_a_fact_the_producer_annotated_as_stale() -> None:
+    art = _artifact(
+        structured={
+            "xbrl_facts_snapshot": {
+                "us-gaap:OperatingIncomeLoss": [
+                    {
+                        "value": 1.0,
+                        "period_end": "2022-12-31",
+                        "warning": (
+                            "stale: latest reported period is 2026-06-30, this fact is 2022-12-31"
+                        ),
+                    }
+                ]
+            }
+        }
+    )
+    assert "annotated as stale" in _staged_finding("C12c", art).evidence
+
+
+def test_c12c_quiet_on_a_derived_quarter_warning() -> None:
+    """The other warning the snapshot carries is a caliber caveat, not staleness —
+    the clause keys on ``stale:`` and must not collect it."""
+    art = _artifact(
+        structured={
+            "xbrl_facts_snapshot": {
+                "us-gaap:Revenues": [
+                    {
+                        "value": 1.0,
+                        "period_end": "2026-07-26",
+                        "warning": "Some quarters were derived from YTD or annual facts.",
+                    }
+                ]
+            }
+        }
+    )
+    assert _STAGED["C12c"].check(art) is None
+
+
+# ── C13b / C13c: independence ───────────────────────────────────────────────
+
+
+def test_c13b_fires_when_a_self_centred_distribution_is_not_declared_dependent() -> None:
+    art = _artifact(
+        structured={
+            "technical_analysis": {
+                "monte_carlo": {"assumptions_used": {"centered_on": "base-case DCF assumptions"}}
+            }
+        }
+    )
+    assert "independent" in _staged_finding("C13b", art).evidence
+
+
+def test_c13b_quiet_when_the_declaration_is_present() -> None:
+    art = _artifact(
+        structured={
+            "technical_analysis": {
+                "monte_carlo": {
+                    "assumptions_used": {
+                        "centered_on": "base-case DCF assumptions",
+                        "independent": False,
+                    }
+                }
+            }
+        }
+    )
+    assert _STAGED["C13b"].check(art) is None
+
+
+def test_c13c_fires_when_every_agreement_is_non_independent() -> None:
+    art = _artifact(
+        raw_data={
+            "data_authority": {
+                "decisions": [
+                    {
+                        "metric": "ebitda",
+                        "status": "accepted",
+                        "agreement_is_independent": False,
+                    }
+                ]
+            }
+        }
+    )
+    assert "circular" in _staged_finding("C13c", art).evidence
+
+
+def test_c13c_quiet_when_an_independent_agreement_exists() -> None:
+    art = _artifact(
+        raw_data={
+            "data_authority": {
+                "decisions": [
+                    {"metric": "ebitda", "status": "accepted", "agreement_is_independent": False},
+                    {"metric": "revenue", "status": "accepted", "agreement_is_independent": True},
+                ]
+            }
+        }
+    )
+    assert _STAGED["C13c"].check(art) is None
+
+
+# ── C14a / C14b: prose grounding ────────────────────────────────────────────
+
+
+def test_c14a_fires_when_a_direction_word_contradicts_the_leaf_sign() -> None:
+    art = _artifact(
+        structured={
+            "thesis": {"narrative": "Insiders were net buyers over the quarter."},
+            "ownership_governance": {"insider_net_flow": -49_991_274.0},
+        }
+    )
+    assert "contradicts the sign" in _staged_finding("C14a", art).evidence
+
+
+def test_c14a_quiet_when_the_direction_word_matches() -> None:
+    art = _artifact(
+        structured={
+            "thesis": {"narrative": "Insiders were net sellers over the quarter."},
+            "ownership_governance": {"insider_net_flow": -49_991_274.0},
+        }
+    )
+    assert _STAGED["C14a"].check(art) is None
+
+
+def test_c14b_fires_when_the_placeholder_took_a_published_flow() -> None:
+    """AFRM's shape: the flow is a published leaf, so the sentence asserting the
+    placeholder contradicts the artifact's own numbers."""
+    art = _artifact(
+        structured={
+            "thesis": {
+                "narrative": "Over the last 90 days insiders were net sellers of [target withheld]."
+            },
+            "ownership_governance": {"insider_net_flow": -4_413_467.0},
+        }
+    )
+    assert "insider-flow amount" in _staged_finding("C14b", art).evidence
+
+
+def test_c14b_quiet_on_the_withheld_path_s_own_disclaimer() -> None:
+    """THE FALSE-POSITIVE GUARD. The withheld path legitimately prints the
+    placeholder and disclaims the point; the coarse "token anywhere in the prose"
+    form flags these 27 artifacts and was rejected for it (re-measured as
+    over-broad, §7.1). Only a sentence that also names a flow is a defect."""
+    art = _artifact(
+        structured={
+            "thesis": {
+                "narrative": (
+                    "We initiate SMCI at BUY on a directional read, not a point estimate: "
+                    "the point target is [target withheld]."
+                )
+            },
+            "ownership_governance": {"insider_net_flow": -4_413_467.0},
+        }
+    )
+    assert _STAGED["C14b"].check(art) is None

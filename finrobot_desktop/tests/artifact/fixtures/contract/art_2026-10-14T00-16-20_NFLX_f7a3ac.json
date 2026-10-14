@@ -1,0 +1,922 @@
+{
+  "artifact_id": "art_2026-10-14T00:16:20_NFLX_equity_research_f7a3ac",
+  "extracted_at": "2026-10-14",
+  "inputs_raw_data": {
+    "balance": {
+      "noncontrolling_interest": null,
+      "preferred_stock": null,
+      "total_cash": 9127910400.0,
+      "total_debt": 16654660608.0
+    },
+    "data_authority": {
+      "clock": "2026-10-14T00:12:57.499581Z",
+      "decisions": [
+        {
+          "agreement_is_independent": true,
+          "basis": "delayed quote / last daily bar close, quote currency",
+          "candidates": [
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "authoritative_selected",
+              "source": "eodhd",
+              "value": 70.46
+            },
+            {
+              "deviation_abs": 0.0,
+              "deviation_pct": 0.0,
+              "eligible": true,
+              "non_independent": false,
+              "reason_code": "sources_agree",
+              "source": "yfinance",
+              "value": 70.46
+            }
+          ],
+          "comparability": "session_price",
+          "currency": null,
+          "definition_version": "current_price_1",
+          "disagreement_pct": null,
+          "is_authoritative": true,
+          "metric": "current_price",
+          "period_basis": "session",
+          "period_end": "2026-10-13",
+          "policy_version": "metric_authority_v1",
+          "reason_code": "sources_agree",
+          "reconciled_at": "2026-10-14T00:12:57.499581Z",
+          "selected_source": "eodhd",
+          "status": "accepted",
+          "tolerance_abs": 0.01,
+          "tolerance_pct": 0.05,
+          "unit": "USD",
+          "value": 70.46
+        }
+      ],
+      "policy_version": "metric_authority_v1",
+      "run_as_of": null
+    },
+    "income": {
+      "capital_expenditure": -13416719360.0,
+      "depreciation_amortization": null,
+      "ebitda": 14726931456.0,
+      "gross_margin": 0.49118,
+      "income_tax_expense": null,
+      "interest_expense": null,
+      "net_income": 13649642496.0,
+      "operating_income": null,
+      "operating_margin": 0.33381,
+      "rd_expense": null,
+      "revenue": 48370765824.0,
+      "sga_expense": null
+    },
+    "market": {
+      "beta": null,
+      "country": "United States",
+      "current_price": 70.46,
+      "industry": "Entertainment",
+      "is_adr": null,
+      "market_cap": 293391189570.95996,
+      "pe_basis": "market cap ÷ TTM net income (one net-income authority); supersedes the provider's trailingPE 22.20×, which rides a different denominator",
+      "pe_ratio": 21.49442299730104,
+      "price_52w_high": 124.86,
+      "price_52w_low": 65.08,
+      "quote_as_of": "2026-10-13T20:00:00Z",
+      "quote_is_live": false,
+      "sector": "Communication Services",
+      "shares_outstanding": 4163939676.0,
+      "trailing_1y_return_pct": -42.1999458585925
+    },
+    "valuation": {
+      "book_value_per_share": 7.241,
+      "ebitda_operating": 14726931456.0,
+      "ebitda_reported": null,
+      "enterprise_value": 300917939778.95996,
+      "ev_ebitda": 20.433173107243665,
+      "ev_ebitda_reported": null,
+      "ev_revenue": 6.221070405911462
+    }
+  },
+  "notes": "NFLX — a contradicted BUY, and prose where the scrubber took an insider-flow amount",
+  "outputs_structured": {
+    "catalyst_analysis": {
+      "category_breakdown": {
+        "management": 2,
+        "regulatory": 3
+      },
+      "events": [
+        {
+          "category": "management",
+          "headline": "SEC 8-K: Executive / director change",
+          "impact_score": 3,
+          "published": "2026-07-30T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1065280/000106528026000214/0001065280-26-000214-index.html"
+        },
+        {
+          "category": "regulatory",
+          "headline": "SEC 8-K: Other material event",
+          "impact_score": 3,
+          "published": "2026-07-22T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1065280/000119312526312575/0001193125-26-312575-index.html"
+        },
+        {
+          "category": "regulatory",
+          "headline": "SEC 8-K: Other material event",
+          "impact_score": 3,
+          "published": "2026-06-05T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1065280/000106528026000189/0001065280-26-000189-index.html"
+        },
+        {
+          "category": "regulatory",
+          "headline": "SEC 8-K: Other material event",
+          "impact_score": 3,
+          "published": "2026-04-23T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1065280/000106528026000139/0001065280-26-000139-index.html"
+        },
+        {
+          "category": "management",
+          "headline": "SEC 8-K: Executive / director change",
+          "impact_score": 3,
+          "published": "2026-04-16T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/1065280/000106528026000137/0001065280-26-000137-index.html"
+        }
+      ],
+      "key_catalysts": [],
+      "net_sentiment": 0.0,
+      "overall_sentiment": "neutral",
+      "top_negative": [],
+      "top_positive": []
+    },
+    "currency": {
+      "quote_currency": "USD",
+      "reporting_currency": "USD"
+    },
+    "numeric_audit": {
+      "artifact_status": "caveated",
+      "findings": [
+        {
+          "check": "ev_bridge_unverified",
+          "evidence": "NFLX: preferred stock not reported by the provider — when the provider reports no preferred stock, BOTH the multiples EV and the DCF equity bridge assume 0 for it. If the issuer carries preferred stock, this EV (and EV/EBITDA, EV/Revenue) is understated, and the DCF equity value is overstated, by that amount. Metric authority: producer of record 'fmp.balance_sheet.preferred_stock' supplied no value, so no wired source states this number and the assumed 0 cannot be confirmed.",
+          "field_key": "enterprise_value",
+          "severity": "review"
+        },
+        {
+          "check": "ev_bridge_unverified",
+          "evidence": "NFLX: noncontrolling interest not reported by the provider — when the provider reports no noncontrolling interest, BOTH the multiples EV and the DCF equity bridge assume 0 for it. If the issuer carries noncontrolling interest, this EV (and EV/EBITDA, EV/Revenue) is understated, and the DCF equity value is overstated, by that amount. Metric authority: producer of record 'fmp.balance_sheet.minority_interest' supplied no value, so no wired source states this number and the assumed 0 cannot be confirmed.",
+          "field_key": "enterprise_value",
+          "severity": "review"
+        }
+      ],
+      "withhold_valuation": false
+    },
+    "ownership_governance": {
+      "insider_buy_value": 0.0,
+      "insider_largest_sale": {
+        "name": "Theodore A Sarandos",
+        "position": "Co-CEO",
+        "value": 5969731.0635
+      },
+      "insider_net_flow": -13187186.5488,
+      "insider_sell_value": 13187186.5488,
+      "insider_window_days": 90,
+      "warnings": [
+        "13F index incomplete for period 2026-06-30: the 20 holder row(s) on file account for only 6.8% of shares outstanding (284,620,584 shares) — holder concentration cannot be asserted from a partial index; refresh the 13F cache (scripts/refresh_sec_holdings.py) for full coverage."
+      ]
+    },
+    "technical_analysis": {
+      "historical_bands": {
+        "classification": "expensive",
+        "current": 20.433173107243665,
+        "median": 12.331748310842551,
+        "metric": "ev_ebitda",
+        "p25": 9.708763774146734,
+        "p75": 15.405776144991448,
+        "p90": 18.97640549116787,
+        "sample_count": 948,
+        "timeline": [
+          [
+            "2023-01-03",
+            6.492971668093497
+          ],
+          [
+            "2023-01-12",
+            7.2134148983159605
+          ],
+          [
+            "2023-01-25",
+            7.988126876693329
+          ],
+          [
+            "2023-02-06",
+            7.8554244283749215
+          ],
+          [
+            "2023-02-16",
+            7.634868044364236
+          ],
+          [
+            "2023-03-01",
+            6.872443329720053
+          ],
+          [
+            "2023-03-13",
+            6.46348223513385
+          ],
+          [
+            "2023-03-23",
+            7.013542074922803
+          ],
+          [
+            "2023-04-04",
+            7.553772103725208
+          ],
+          [
+            "2023-04-17",
+            7.266454920097545
+          ],
+          [
+            "2023-04-27",
+            7.125765750352569
+          ],
+          [
+            "2023-05-09",
+            7.254577231822133
+          ],
+          [
+            "2023-05-19",
+            7.934882067182857
+          ],
+          [
+            "2023-06-01",
+            8.708365319186907
+          ],
+          [
+            "2023-06-13",
+            9.37597331535667
+          ],
+          [
+            "2023-06-26",
+            8.970698399890425
+          ],
+          [
+            "2023-07-07",
+            9.424508007102755
+          ],
+          [
+            "2023-07-19",
+            10.233214748475271
+          ],
+          [
+            "2023-07-31",
+            9.442324539515873
+          ],
+          [
+            "2023-08-10",
+            9.258220371246972
+          ],
+          [
+            "2023-08-22",
+            8.913972198988882
+          ],
+          [
+            "2023-09-01",
+            9.46096022284454
+          ],
+          [
+            "2023-09-14",
+            8.654301358760888
+          ],
+          [
+            "2023-09-26",
+            8.21933222260611
+          ],
+          [
+            "2023-10-05",
+            8.082943595167746
+          ],
+          [
+            "2023-10-17",
+            7.7374666965363375
+          ],
+          [
+            "2023-10-27",
+            8.600646973792642
+          ],
+          [
+            "2023-11-08",
+            9.394813786414224
+          ],
+          [
+            "2023-11-20",
+            10.169320977062704
+          ],
+          [
+            "2023-12-01",
+            9.990541289744849
+          ],
+          [
+            "2023-12-13",
+            10.282159015679127
+          ],
+          [
+            "2023-12-26",
+            10.511726059760816
+          ],
+          [
+            "2024-01-08",
+            9.735268112156808
+          ],
+          [
+            "2024-01-19",
+            9.695000124947539
+          ],
+          [
+            "2024-01-31",
+            11.266226010478425
+          ],
+          [
+            "2024-02-12",
+            11.145034856665912
+          ],
+          [
+            "2024-02-23",
+            11.642770410103557
+          ],
+          [
+            "2024-03-06",
+            11.91632168859729
+          ],
+          [
+            "2024-03-18",
+            12.317065599766455
+          ],
+          [
+            "2024-03-28",
+            12.102948321624861
+          ],
+          [
+            "2024-04-10",
+            12.320743925521146
+          ],
+          [
+            "2024-04-22",
+            11.082116126651432
+          ],
+          [
+            "2024-05-02",
+            11.28636000408306
+          ],
+          [
+            "2024-05-14",
+            12.225494648083837
+          ],
+          [
+            "2024-05-24",
+            12.866104117677443
+          ],
+          [
+            "2024-06-06",
+            12.900370626023793
+          ],
+          [
+            "2024-06-18",
+            13.619580109112412
+          ],
+          [
+            "2024-07-01",
+            13.386103221735596
+          ],
+          [
+            "2024-07-11",
+            12.982261773088796
+          ],
+          [
+            "2024-07-23",
+            12.788859276828894
+          ],
+          [
+            "2024-08-02",
+            12.225107455899133
+          ],
+          [
+            "2024-08-14",
+            13.15514308355936
+          ],
+          [
+            "2024-08-26",
+            13.673206226693985
+          ],
+          [
+            "2024-09-06",
+            13.23432388533143
+          ],
+          [
+            "2024-09-18",
+            13.712506233441493
+          ],
+          [
+            "2024-09-30",
+            14.076466887063733
+          ],
+          [
+            "2024-10-10",
+            14.483405873188167
+          ],
+          [
+            "2024-10-22",
+            15.140664606724066
+          ],
+          [
+            "2024-11-01",
+            14.983077387549331
+          ],
+          [
+            "2024-11-13",
+            16.422851526373037
+          ],
+          [
+            "2024-11-25",
+            17.10276100271415
+          ],
+          [
+            "2024-12-06",
+            18.44147798132998
+          ],
+          [
+            "2024-12-18",
+            17.56661723999015
+          ],
+          [
+            "2024-12-31",
+            14.399426931356743
+          ],
+          [
+            "2025-01-14",
+            13.40380896985163
+          ],
+          [
+            "2025-01-27",
+            15.674330605203965
+          ],
+          [
+            "2025-02-06",
+            16.367243995768316
+          ],
+          [
+            "2025-02-19",
+            16.804765239182434
+          ],
+          [
+            "2025-03-03",
+            15.702971236327999
+          ],
+          [
+            "2025-03-13",
+            14.381229845283462
+          ],
+          [
+            "2025-03-25",
+            16.07609061859581
+          ],
+          [
+            "2025-04-04",
+            13.83832373817538
+          ],
+          [
+            "2025-04-15",
+            15.74379600334458
+          ],
+          [
+            "2025-04-28",
+            17.865734475020293
+          ],
+          [
+            "2025-05-08",
+            18.404526458320504
+          ],
+          [
+            "2025-05-20",
+            19.15756935069222
+          ],
+          [
+            "2025-06-02",
+            19.58417234246237
+          ],
+          [
+            "2025-06-12",
+            19.521669307688928
+          ],
+          [
+            "2025-06-25",
+            20.474563675804596
+          ],
+          [
+            "2025-07-08",
+            20.475513088991033
+          ],
+          [
+            "2025-07-18",
+            19.43005093519823
+          ],
+          [
+            "2025-07-30",
+            19.033829165393904
+          ],
+          [
+            "2025-08-11",
+            19.573570561880548
+          ],
+          [
+            "2025-08-21",
+            19.382105569283407
+          ],
+          [
+            "2025-09-03",
+            19.698101924834223
+          ],
+          [
+            "2025-09-15",
+            19.31960253450996
+          ],
+          [
+            "2025-09-25",
+            19.414227382091028
+          ],
+          [
+            "2025-10-07",
+            19.142378739709308
+          ],
+          [
+            "2025-10-17",
+            19.27371423049908
+          ],
+          [
+            "2025-10-29",
+            17.707973650541497
+          ],
+          [
+            "2025-11-10",
+            18.019064704629077
+          ],
+          [
+            "2025-11-20",
+            17.01632614422572
+          ],
+          [
+            "2025-12-03",
+            16.745743386092574
+          ],
+          [
+            "2025-12-15",
+            15.133323324468746
+          ],
+          [
+            "2025-12-26",
+            15.244088196219156
+          ],
+          [
+            "2026-01-08",
+            12.639082949497594
+          ],
+          [
+            "2026-01-20",
+            12.189033202031942
+          ],
+          [
+            "2026-01-30",
+            11.670168508470624
+          ],
+          [
+            "2026-02-11",
+            11.137540825690175
+          ],
+          [
+            "2026-02-24",
+            10.920085596027874
+          ],
+          [
+            "2026-03-06",
+            13.807560734201989
+          ],
+          [
+            "2026-03-18",
+            13.212999599935442
+          ],
+          [
+            "2026-03-30",
+            12.974899886444438
+          ],
+          [
+            "2026-04-10",
+            14.3567040040454
+          ],
+          [
+            "2026-04-22",
+            13.012059957336097
+          ],
+          [
+            "2026-05-04",
+            12.706521596671344
+          ],
+          [
+            "2026-05-14",
+            12.144991636530715
+          ],
+          [
+            "2026-05-27",
+            12.20141989232916
+          ],
+          [
+            "2026-06-08",
+            11.553183100107994
+          ],
+          [
+            "2026-06-18",
+            10.829249867181595
+          ],
+          [
+            "2026-07-01",
+            10.390210511091249
+          ],
+          [
+            "2026-07-14",
+            10.299374782244971
+          ],
+          [
+            "2026-07-24",
+            9.825927953106795
+          ],
+          [
+            "2026-08-05",
+            10.391586810013163
+          ],
+          [
+            "2026-08-17",
+            10.642073213801384
+          ],
+          [
+            "2026-08-27",
+            11.167819401972269
+          ],
+          [
+            "2026-09-09",
+            10.643449512723299
+          ],
+          [
+            "2026-09-21",
+            10.275977700572444
+          ],
+          [
+            "2026-10-01",
+            9.517636994598211
+          ],
+          [
+            "2026-10-13",
+            20.433173107243665
+          ]
+        ],
+        "warnings": [
+          "54 price point(s) predate the earliest fiscal year — skipped",
+          "current point uses TTM EBITDA (consistent with the comps caliber); historical quantiles use each annual-report year's EBITDA, so the two carry a caliber basis difference (no quarterly data, so a rolling TTM cannot be reconstructed point by point).",
+          "per-year share counts are unavailable from the serving providers, so the historical band is computed on the run's own share count (4,163,939,676); a buyback or issuance history makes the earlier multiples approximate."
+        ],
+        "window_years": 5
+      },
+      "monte_carlo": {
+        "assumptions_used": {
+          "centered_on": "base-case DCF assumptions",
+          "ebitda_margin_std": 0.02,
+          "independent": false,
+          "mid_year_convention": false,
+          "n_simulations": 10000,
+          "revenue_growth_std": 0.02,
+          "seed": 3505243366,
+          "terminal_growth_std": 0.005,
+          "valid_simulations": 9935,
+          "variance_reduction": "antithetic_variates",
+          "wacc_std": 0.01
+        },
+        "current_price_percentile": 0.0,
+        "mean": 205.61,
+        "n_valid": 9935,
+        "percentiles": {
+          "10": 153.06,
+          "25": 170.87,
+          "5": 143.42,
+          "50": 197.3,
+          "75": 230.74,
+          "90": 269.19,
+          "95": 297.05
+        },
+        "std": 48.0
+      }
+    },
+    "thesis": {
+      "catalysts": [
+        "Valuation floor asymmetry: the DCF-implied range of $157.04–$235.56 sits entirely above the $70.46 market price, so even a partial re-rating toward the model's 7.60% WACC assumptions is a large directional move from spot.",
+        "Discount-rate mean reversion is the primary upside lever: the $70.46 clearing price implies a 16.16% discount rate (with the model's growth fade held fixed), and any compression of that implied rate toward the 7.60% WACC the model uses would re-rate the equity without requiring new fundamental news.",
+        "The implied-growth solve looks unreachable rather than merely aggressive: holding the 7.60% WACC fixed, $70.46 prices -5.0% annual revenue growth over 10 years, versus the 3.0% terminal growth assumption — a gap that TTM revenue of $48.37B and TTM net income of $13.65B do not currently support.",
+        "Self-funded cash generation de-risks the terminal-value assumption: $13.65B of TTM net income on $48.37B of TTM revenue (net margin near 28%) funds the 10-year growth fade without external capital, keeping the equity bridge free of financing dilution.",
+        "Positioning mean-reversion potential: at a 9th-percentile 52-week range position after a -42.2% one-year return, the shareholder base is already washed out, so the marginal seller that drove the -43.6% drawdown is exhausted relative to the $157.04–$235.56 DCF range."
+      ],
+      "company_overview": "Netflix, Inc. (NFLX) is a global subscription streaming entertainment platform. The company monetizes a direct-to-consumer subscription base and, increasingly, advertising, funding a content library that it both licenses and produces in-house. It sits between content creators and production talent upstream and consumer devices, connected TVs and broadband access downstream; demand is driven by household entertainment wallet share, connected-TV penetration and pricing power on a largely non-commoditized library. The model is subscription-led with high fixed content cost and low marginal cost per incremental subscriber — an operating-leverage structure, not a capital-light one.\n\nReportable segment disclosure is limited. The SEC XBRL segment extract for the fiscal year ended 2025-12-31 identifies a single Reportable Segment with no business-line revenue split disclosed (segment revenue reported as not available), so no segment revenue-share percentages are citable and none are estimated here. Geographic revenue breakdown was not available in the injected XBRL snapshot; no regional revenue percentage should be inferred.\n\nThe consolidated figures carry the analysis: FY2025 revenue of $45.18B, FY2025 operating income of $13.33B and net income of $10.98B, with TTM revenue of $48.37B and TTM net income of $13.65B — a net margin near 28%. Total assets stand at $58.45B against $28.30B of liabilities and $30.15B of shareholders' equity.\n\nThe durable moat is scale economics in content amortization and recommendation data, a global subscriber base that spreads fixed content spend across a larger denominator, and brand-led pricing power, evidenced by operating income of $13.33B on $45.18B of FY2025 revenue. The principal structural vulnerability is that content remains capital-intensive, and no segment-level unit economics are disclosed to test the durability of that leverage.",
+      "competitor_analysis": "Peer multiples were not supplied in this run, so relative-multiple positioning cannot be asserted: neither a premium nor a discount to a streaming peer set is citable here, and we do not infer one from model memory. What can be compared is the economics rather than the multiples. NFLX carries TTM revenue of $48.37B and TTM net income of $13.65B (net margin near 28%), while the DCF assumes a 10-year fade from trailing growth to 3.0% terminal and the market's $70.46 clearing price discounts that same stream at an implied 16.16% or prices -5.0% perpetual growth — a spread that is about discount rates and terminal assumptions, not about share capture. Streaming competitors are differentiated primarily by monetization model (subscription-only versus ad-supported hybrids), content-cost intensity and territorial breadth; scale in content amortization is the structural differentiator that would justify a premium multiple over sub-scale, single-territory platforms, but with no numeric peer set injected the size of that spread cannot be quantified. The competitive conclusion is therefore model-internal: the 7.60% WACC and 3.0% terminal growth are the assumptions that must hold for NFLX's cash flows to support anything above $157.04, and a peer-relative verdict is not supportable on the injected data.",
+      "key_takeaways": [
+        "Directional BUY, point target withheld: the only surviving method (DCF, weight 0.85) implies a $157.04–$235.56 range against a $70.46 market price, and publishing an interior point on a single method sitting roughly 2.8x spot would be false precision.",
+        "The market's own reverse-DCF is the bear case, and it is extreme — holding the 7.60% WACC fixed, $70.46 implies -5.0% annual revenue growth over a 10-year horizon, versus a 3.0% terminal growth assumption in the model.",
+        "Fundamentals are not deteriorating: TTM revenue of $48.37B and TTM net income of $13.65B (a net margin near 28%), with FY2025 operating income of $13.33B on $45.18B of revenue and equity of $30.15B against $28.30B of liabilities.",
+        "Positioning is washed out but insiders are not buying it — a -42.2% one-year return and a 9th-percentile 52-week range position alongside a 90-day insider net flow of -$13.19M ([target withheld] of purchases versus $13.19M of sales).",
+        "Confidence is very_low by construction: one method only, no comps or DDM output computed, and 13F rows on file covering just 6.8% of shares outstanding, so holder concentration cannot be asserted."
+      ],
+      "momentum_divergence_note": "The market is pricing terminal decline: a -42.2% one-year return, a 9th-percentile 52-week range position and a -43.6% drawdown from the 52-week high are consistent with the reverse-DCF read that $70.46 embeds -5.0% perpetual revenue growth — not with an issuer generating $13.65B of TTM net income and $48.37B of TTM revenue. Our BUY differs because we treat that implied growth as the aggressive end of the distribution rather than the base case: the same cash flows discounted at the model's 7.60% WACC support a $157.04–$235.56 range, so the disagreement is about the discount rate and terminal value, not about near-term numbers. The very_low confidence dial exists precisely because the tape may be the better forecaster on the terminal assumption. We are not asserting a point value — the target is withheld because a single method sitting roughly 2.8x above the $70.46 spot cannot be stamped with precision.",
+      "narrative": "NFLX clears at $70.46 against a DCF-implied range of $157.04–$235.56, and the reverse-DCF explains the gap: holding the model's 7.60% WACC and 10-year fade fixed, the market is pricing -5.0% annual revenue growth in perpetuity, while holding the growth fade fixed it is discounting the same cash flows at 16.16%. Neither solve is corroborated by the operating record — TTM revenue of $48.37B and TTM net income of $13.65B imply a net margin near 28%, and FY2025 operating income of $13.33B was earned on $45.18B of revenue.\n\nWe therefore take the BUY direction off the market-implied read rather than off a point estimate. The gap is a discount-rate and terminal-value disagreement, not an earnings dispute: the market's 16.16% implied discount rate is more than double the 7.60% WACC the model uses, and its -5.0% implied growth sits below the 3.0% terminal growth assumption. We do not publish an interior point because a single surviving method (DCF, weight 0.85) landing roughly 2.8x spot falls outside the calibration band; the $157.04–$235.56 range is used as a fundamental floor and confidence is flagged very_low.\n\nThe tape, not the news, is the risk: a -42.2% one-year return, a 9th-percentile 52-week range position and a -43.6% drawdown from the 52-week high have already discounted a great deal, but insiders are not leaning against it — the 90-day net flow is -$13.19M, comprising [target withheld] of purchases against $13.19M of sales, including a $5.97M disposal by Co-CEO Theodore Sarandos. Catalyst flow over the last 30 days was neutral: five SEC 8-K filings split management (2) and regulatory (3) with net sentiment of +0.00, leaving valuation and positioning as the sole drivers.",
+      "news_summary": "The last 30 days of filing-derived catalyst flow is neutral: five SEC 8-K current reports split between management (2) and regulatory (3), with net sentiment of +0.00 and no item scoring above an impact of 3. The mix — executive/director changes and unspecified material events — reads as housekeeping rather than thesis-changing, and the deterministic pipeline surfaced no key positive or negative catalysts, so the equity is trading on valuation and positioning rather than news. That challenges the bull case in the near term: with no positive catalyst to re-rate against, the -42.2% one-year return and 9th-percentile 52-week range position dominate the narrative. It supports the thesis only weakly, in that the absence of negative catalysts implies the -43.6% drawdown is not news-driven deterioration of the operating story. Insider filings lean the other way, with a 90-day net flow of -$13.19M ([target withheld] of purchases versus $13.19M of sales), and 13F coverage on file of just 6.8% of shares outstanding leaves institutional positioning unverifiable.",
+      "price_target": null,
+      "price_target_basis": "POINT TARGET WITHHELD (confidence=very_low): the only number available (the surviving method $196.30) would be fabricated, so it is not published (never fabricate a number). The BUY verdict reads off the nearest published range bound ($147.22), not the withheld interior point — the market sits below the whole range. Methods: DCF $196.30 (own range $157.04–$235.56, wt 0.85). Published target band $147.22–$245.37 (±25% single-method confidence dial). single method dcf $196 is 2.8x the market price, outside the [0.5x,2x] single-method calibration band — point target withheld (avoid stamping false precision on a lone far-from-market method); the band still provides a fundamental floor, with direction taken from the market implied.",
+      "recommendation": "BUY",
+      "risks": [
+        "The reverse-DCF may be right and the model wrong: holding the 7.60% WACC fixed, the $70.46 price implies -5.0% annual revenue growth over the 10-year horizon, so if the market's implied growth proves closer to reality than the model's 3.0% terminal assumption, the $157.04–$235.56 DCF range is unreachable.",
+        "Discount-rate risk is the direct mechanism of further downside: the model's 7.60% WACC sits far below the 16.16% rate the market is implying (growth fade held fixed), and any repricing of the equity toward that implied rate compresses the DCF range toward spot.",
+        "Insider distribution during the drawdown: the 90-day net insider flow is -$13.19M, consisting of $0 of purchases against $13.19M of sales, including a $5.97M disposal by Co-CEO Theodore Sarandos — insiders are not accumulating against a -42.2% one-year return.",
+        "Momentum/thesis-invalidation risk: the stock sits at a 9th-percentile 52-week range position, -43.6% below the 52-week high, with a -42.2% one-year return; continued downside would confirm the market's terminal-decline read and undermine the BUY direction.",
+        "Disclosure and verification risk: 13F rows on file cover only 6.8% of shares outstanding, so institutional accumulation or distribution cannot be verified from the index, and the SEC XBRL segment extract shows a single reportable segment with no revenue split (revenue n/a), leaving no business-line disclosure to test the growth assumption against."
+      ],
+      "tagline": "NFLX: BUY — DCF range sits well above $70.46 spot",
+      "valuation_overview": "Only one valuation method survived this run — a 10-year DCF (weight 0.85) run on a 7.60% WACC, a 3.0% terminal growth rate and a linear fade of trailing growth toward terminal. No comps or DDM output was computed, so there is no cross-method triangulation and no weighted average exists to publish; any \"blended\" figure would be a single method wearing a multi-method label. The DCF's implied range of $157.04–$235.56 sits entirely above the $70.46 market price, with the method's output roughly 2.8x spot, which is exactly why the point target is withheld: a lone method that far from the market, carried at a very_low confidence dial, cannot be stamped with false precision. The band is instead treated as a fundamental floor, and the direction is read off the market's own implied assumptions. That reverse-DCF is the honest bridge: holding the model's growth fade fixed, $70.46 discounts the projected cash flows at 16.16%; holding the 7.60% WACC fixed, it implies -5.0% annual revenue growth across the 10-year horizon. The divergence is therefore a discount-rate and terminal-value argument, not a near-term earnings argument — and it is large enough that the confidence dial, not the arithmetic, is the binding constraint on publishing a point."
+    },
+    "valuation_synthesis": {
+      "anchor_method": null,
+      "confidence": "very_low",
+      "cross_checks": [
+        {
+          "basis": "Own 5-year EV/EBITDA band (p25 9.71x · median 12.33x · p75 15.41x, 948 samples) applied to this run's TTM EBITDA (income.ebitda $14,726,931,456) through the EV→equity bridge (− net debt $7,526,750,208 − preferred $0 − NCI $0) ÷ 4,163,939,676 shares outstanding.",
+          "high": 52.679211557763445,
+          "label": "Own 5-year EV/EBITDA",
+          "low": 32.53014187431153,
+          "mid": 41.80705664440611,
+          "name": "ev_ebitda_band",
+          "note": "Mean-reversion cross-check only — excluded from the published target blend, which keeps its existing method weighting."
+        }
+      ],
+      "current_price": 70.46,
+      "degradation_note": "single method dcf $196 is 2.8x the market price, outside the [0.5x,2x] single-method calibration band — point target withheld (avoid stamping false precision on a lone far-from-market method); the band still provides a fundamental floor, with direction taken from the market implied.",
+      "financial_sector": false,
+      "methods": [
+        {
+          "assumptions": "WACC 7.6% · 10yr growth 13%→3.0% · β0.83",
+          "confidence": 0.85,
+          "high": 235.55834586812398,
+          "low": 157.03889724541602,
+          "mid": 196.29862155677,
+          "name": "dcf",
+          "rerating_ratio": null,
+          "source": "implied_price ± 20% (placeholder band, not a real distribution)"
+        }
+      ],
+      "mna_transition": false,
+      "outlier_methods": [],
+      "target_high": 245.37327694596252,
+      "target_low": 147.2239661675775,
+      "upside_downside": null,
+      "valuation_withheld": true,
+      "warnings": [],
+      "weighted_price": null
+    },
+    "valuation_withheld": true,
+    "withheld_reason": "contract_C7",
+    "xbrl_facts_snapshot": {
+      "us-gaap:Assets": [
+        {
+          "concept": "us-gaap:Assets",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 58450441000.0
+        }
+      ],
+      "us-gaap:GrossProfit": [
+        {
+          "concept": "us-gaap:GrossProfit",
+          "period_end": "2020-12-31",
+          "units": "USD",
+          "value": 2479282000.0,
+          "warning": "stale: latest reported period is 2026-06-30, this fact is 2020-12-31"
+        }
+      ],
+      "us-gaap:Liabilities": [
+        {
+          "concept": "us-gaap:Liabilities",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 28298389000.0
+        }
+      ],
+      "us-gaap:NetIncomeLoss:annual": [
+        {
+          "concept": "us-gaap:NetIncomeLoss:annual",
+          "matched_concept": "us-gaap:NetIncomeLoss",
+          "period_end": "2025-12-31",
+          "units": "USD",
+          "value": 10981201000.0
+        }
+      ],
+      "us-gaap:NetIncomeLoss:ttm": [
+        {
+          "concept": "us-gaap:NetIncomeLoss:ttm",
+          "has_calculated_q4": true,
+          "period_end": "2026-06-30",
+          "periods": [
+            "Q3 2025",
+            "Q4 2025",
+            "Q1 2026",
+            "Q2 2026"
+          ],
+          "value": 13649642000.0,
+          "warning": "Some quarters were derived from YTD or annual facts. These are calculated values, not directly reported quarterly data."
+        }
+      ],
+      "us-gaap:OperatingIncomeLoss": [
+        {
+          "concept": "us-gaap:OperatingIncomeLoss",
+          "period_end": "2025-12-31",
+          "units": "USD",
+          "value": 13326603000.0
+        }
+      ],
+      "us-gaap:Revenues": [
+        {
+          "concept": "us-gaap:Revenues",
+          "has_calculated_q4": true,
+          "period_end": "2026-06-30",
+          "periods": [
+            "Q3 2025",
+            "Q4 2025",
+            "Q1 2026",
+            "Q2 2026"
+          ],
+          "value": 48370764000.0,
+          "warning": "Some quarters were derived from YTD or annual facts. These are calculated values, not directly reported quarterly data."
+        },
+        {
+          "concept": "us-gaap:Revenues",
+          "period_end": "2025-12-31",
+          "units": "USD",
+          "value": 45183036000.0
+        }
+      ],
+      "us-gaap:StockholdersEquity": [
+        {
+          "concept": "us-gaap:StockholdersEquity",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 30152052000.0
+        }
+      ]
+    }
+  },
+  "pinned_for": [
+    "C8",
+    "C14b"
+  ],
+  "source": "~/.finrobot/artifacts.db",
+  "ticker": "NFLX",
+  "type": "equity_research",
+  "verdicts": {
+    "C1": false,
+    "C10a": true,
+    "C10b": false,
+    "C10c": true,
+    "C10d": false,
+    "C11": false,
+    "C12a": false,
+    "C12b": false,
+    "C12c": true,
+    "C13b": false,
+    "C13c": false,
+    "C14a": false,
+    "C14b": true,
+    "C1b": false,
+    "C2": false,
+    "C3": false,
+    "C4": false,
+    "C6": false,
+    "C6b": false,
+    "C7": false,
+    "C8": true,
+    "C9": false
+  }
+}

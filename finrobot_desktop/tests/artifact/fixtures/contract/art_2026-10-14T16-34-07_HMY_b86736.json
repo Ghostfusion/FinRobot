@@ -1,0 +1,726 @@
+{
+  "artifact_id": "art_2026-10-14T16:34:07_HMY_equity_research_b86736",
+  "extracted_at": "2026-10-14",
+  "inputs_raw_data": {
+    "balance": {
+      "noncontrolling_interest": 19245283.603668213,
+      "preferred_stock": null,
+      "total_cash": 518660393.11885834,
+      "total_debt": 569900945.3173981
+    },
+    "data_authority": null,
+    "income": {
+      "capital_expenditure": 1429187831.503746,
+      "depreciation_amortization": null,
+      "ebitda": 2720200438.8842773,
+      "gross_margin": 0.49622002,
+      "income_tax_expense": null,
+      "interest_expense": null,
+      "net_income": 1765093163.974945,
+      "operating_income": null,
+      "operating_margin": 0.47175,
+      "rd_expense": null,
+      "revenue": 5968323456.225464,
+      "sga_expense": null
+    },
+    "market": {
+      "beta": null,
+      "country": "South Africa",
+      "current_price": 16.71,
+      "industry": "Gold",
+      "is_adr": null,
+      "market_cap": 10477659703.26,
+      "pe_basis": "market cap ÷ TTM net income (one net-income authority)",
+      "pe_ratio": 5.936037778121907,
+      "price_52w_high": 24.868185330261134,
+      "price_52w_low": 12.434056483516484,
+      "quote_as_of": "2026-10-13T00:00:00Z",
+      "quote_is_live": false,
+      "sector": "Basic Materials",
+      "shares_outstanding": 627029306.0,
+      "trailing_1y_return_pct": -11.828490320129582
+    },
+    "valuation": {
+      "book_value_per_share": 0.43676501162089554,
+      "ebitda_operating": 2720200438.8842773,
+      "ebitda_reported": null,
+      "enterprise_value": 10548145539.062208,
+      "ev_ebitda": 3.877708932136139,
+      "ev_ebitda_reported": null,
+      "ev_revenue": 1.7673548721726207
+    }
+  },
+  "notes": "HMY — a positive, monotone, fully sampled band that still sits ~5x below the tape: the case that belongs to C8 and not C9",
+  "outputs_structured": {
+    "currency": {
+      "quote_currency": "USD",
+      "reporting_currency": "USD"
+    },
+    "numeric_audit": {
+      "artifact_status": "caveated",
+      "findings": [
+        {
+          "check": "ev_bridge_unverified",
+          "evidence": "HMY: preferred stock not reported by the provider — when the provider reports no preferred stock, BOTH the multiples EV and the DCF equity bridge assume 0 for it. If the issuer carries preferred stock, this EV (and EV/EBITDA, EV/Revenue) is understated, and the DCF equity value is overstated, by that amount. Metric authority: producer of record 'fmp.balance_sheet.preferred_stock' supplied no value, so no wired source states this number and the assumed 0 cannot be confirmed.",
+          "field_key": "enterprise_value",
+          "severity": "review"
+        }
+      ],
+      "withhold_valuation": false
+    },
+    "ownership_governance": {
+      "insider_buy_value": null,
+      "insider_largest_sale": null,
+      "insider_net_flow": null,
+      "insider_sell_value": null,
+      "insider_window_days": 90,
+      "warnings": [
+        "No DEF 14A found",
+        "No 10-Q/10-K filing found",
+        "5 Schedule 13D/13G filing(s) are stale (older than 400 days; a 13G annual amendment is due within 45 days of year-end): VAN ECK ASSOCIATES CORP (699d, filed 2024-11-14), Exor N.V. (973d, filed 2024-02-14), BlackRock Inc. (4205d, filed 2015-04-10), First Eagle Investment Management, LLC (4625d, filed 2014-02-14), FMR LLC (4625d, filed 2014-02-14). The reported holdings may no longer reflect the filer's current position — verify against a newer filing before relying on them."
+      ]
+    },
+    "technical_analysis": {
+      "historical_bands": {
+        "classification": "expensive",
+        "classification_caveat": "the band's cheap/fair/expensive classification is computed on a window containing a structural EBITDA break (FY2022-06-30 -> FY2023-06-30, 3.3x step): the P25/P90 quantiles are driven by the pre-step small-EBITDA base - treat the badge as directional only (quantile method unchanged).",
+        "current": 3.877708932136139,
+        "median": 0.6126628973692961,
+        "metric": "ev_ebitda",
+        "p25": 0.30734352506225593,
+        "p75": 0.887076970484146,
+        "p90": 1.0228082768816633,
+        "sample_count": 751,
+        "structural_break": {
+          "from_ebitda": 3343000000.0,
+          "from_fiscal_year": "2022-06-30",
+          "step_multiple": 3.3066108285970683,
+          "to_ebitda": 11054000000.0,
+          "to_fiscal_year": "2023-06-30"
+        },
+        "timeline": [
+          [
+            "2022-06-30",
+            0.8974024156816632
+          ],
+          [
+            "2022-07-11",
+            0.912895272599282
+          ],
+          [
+            "2022-07-19",
+            0.8853607520725696
+          ],
+          [
+            "2022-07-27",
+            0.9094440792907569
+          ],
+          [
+            "2022-08-05",
+            0.9490390199119355
+          ],
+          [
+            "2022-08-15",
+            0.9593738433521388
+          ],
+          [
+            "2022-08-23",
+            0.9180533060766977
+          ],
+          [
+            "2022-09-01",
+            0.7734783168260844
+          ],
+          [
+            "2022-09-12",
+            0.7648690900401436
+          ],
+          [
+            "2022-09-20",
+            0.7235673092500747
+          ],
+          [
+            "2022-09-29",
+            0.7648690900401436
+          ],
+          [
+            "2022-10-07",
+            0.8474914081056537
+          ],
+          [
+            "2022-10-17",
+            0.83428684240347
+          ],
+          [
+            "2022-10-25",
+            0.836031195543105
+          ],
+          [
+            "2022-11-03",
+            0.8152677662358361
+          ],
+          [
+            "2022-11-11",
+            0.9536343588281784
+          ],
+          [
+            "2022-11-21",
+            0.9415364257629675
+          ],
+          [
+            "2022-12-01",
+            0.9847701245463953
+          ],
+          [
+            "2022-12-09",
+            0.955359955482441
+          ],
+          [
+            "2022-12-19",
+            0.922498593109961
+          ],
+          [
+            "2022-12-29",
+            0.9570855521367037
+          ],
+          [
+            "2023-01-09",
+            1.0331993697779838
+          ],
+          [
+            "2023-01-18",
+            1.0020636040597666
+          ],
+          [
+            "2023-01-26",
+            1.0072591505079271
+          ],
+          [
+            "2023-02-06",
+            0.9449876190714926
+          ],
+          [
+            "2023-02-14",
+            0.9346152826605445
+          ],
+          [
+            "2023-02-23",
+            0.8827160876350583
+          ],
+          [
+            "2023-03-06",
+            0.8982839704941668
+          ],
+          [
+            "2023-03-14",
+            0.9778489814439726
+          ],
+          [
+            "2023-03-22",
+            1.0401205128804067
+          ],
+          [
+            "2023-03-31",
+            1.0677863288047262
+          ],
+          [
+            "2023-04-11",
+            1.133509053549686
+          ],
+          [
+            "2023-04-19",
+            1.107568834279629
+          ],
+          [
+            "2023-04-27",
+            1.1490769364087945
+          ],
+          [
+            "2023-05-08",
+            1.2718756461420282
+          ],
+          [
+            "2023-05-16",
+            1.2286419473586
+          ],
+          [
+            "2023-05-24",
+            1.1680960125764284
+          ],
+          [
+            "2023-06-05",
+            1.15772367616548
+          ],
+          [
+            "2023-06-13",
+            1.133509053549686
+          ],
+          [
+            "2023-06-22",
+            1.0885497581119952
+          ],
+          [
+            "2023-07-03",
+            0.527292976478216
+          ],
+          [
+            "2023-07-12",
+            0.5346160706888728
+          ],
+          [
+            "2023-07-20",
+            0.5393241792828659
+          ],
+          [
+            "2023-07-31",
+            0.5278148391175502
+          ],
+          [
+            "2023-08-08",
+            0.5089824047415777
+          ],
+          [
+            "2023-08-16",
+            0.5042742961475846
+          ],
+          [
+            "2023-08-24",
+            0.5157836363129003
+          ],
+          [
+            "2023-09-05",
+            0.514739911034232
+          ],
+          [
+            "2023-09-13",
+            0.5257217161402208
+          ],
+          [
+            "2023-09-21",
+            0.531479222432875
+          ],
+          [
+            "2023-10-02",
+            0.48858438244760266
+          ],
+          [
+            "2023-10-10",
+            0.5257217161402208
+          ],
+          [
+            "2023-10-18",
+            0.5614749793546047
+          ],
+          [
+            "2023-10-27",
+            0.5514461408074
+          ],
+          [
+            "2023-11-06",
+            0.5620025144139317
+          ],
+          [
+            "2023-11-14",
+            0.5889124748595983
+          ],
+          [
+            "2023-11-22",
+            0.6057992691780532
+          ],
+          [
+            "2023-12-04",
+            0.6242686686744888
+          ],
+          [
+            "2023-12-12",
+            0.5973587082288222
+          ],
+          [
+            "2023-12-20",
+            0.629549691687751
+          ],
+          [
+            "2024-01-02",
+            0.6242686686744888
+          ],
+          [
+            "2024-01-10",
+            0.6036891289407454
+          ],
+          [
+            "2024-01-19",
+            0.6010514536441107
+          ],
+          [
+            "2024-01-30",
+            0.6258512738524696
+          ],
+          [
+            "2024-02-07",
+            0.622686063496508
+          ],
+          [
+            "2024-02-15",
+            0.598941313406803
+          ],
+          [
+            "2024-02-26",
+            0.597886243288149
+          ],
+          [
+            "2024-03-06",
+            0.6759841217485073
+          ],
+          [
+            "2024-03-14",
+            0.7113459879833907
+          ],
+          [
+            "2024-03-22",
+            0.7108184529240638
+          ],
+          [
+            "2024-04-03",
+            0.7567253479254931
+          ],
+          [
+            "2024-04-11",
+            0.7953602004962005
+          ],
+          [
+            "2024-04-19",
+            0.7980205654728063
+          ],
+          [
+            "2024-04-30",
+            0.7596863511617152
+          ],
+          [
+            "2024-05-08",
+            0.7756598858613353
+          ],
+          [
+            "2024-05-16",
+            0.8012141379287316
+          ],
+          [
+            "2024-05-24",
+            0.7958934079755202
+          ],
+          [
+            "2024-06-05",
+            0.7793866657965804
+          ],
+          [
+            "2024-06-13",
+            0.7442516963614076
+          ],
+          [
+            "2024-06-24",
+            0.7857738107084312
+          ],
+          [
+            "2024-07-03",
+            0.18105039261625988
+          ],
+          [
+            "2024-07-12",
+            0.1899449680227336
+          ],
+          [
+            "2024-07-22",
+            0.1701079878863784
+          ],
+          [
+            "2024-07-31",
+            0.19336287532763827
+          ],
+          [
+            "2024-08-08",
+            0.18344438525946072
+          ],
+          [
+            "2024-08-16",
+            0.22516981867999772
+          ],
+          [
+            "2024-08-27",
+            0.21149090181154115
+          ],
+          [
+            "2024-09-05",
+            0.16634391726168063
+          ],
+          [
+            "2024-09-13",
+            0.19609938746621342
+          ],
+          [
+            "2024-09-23",
+            0.220381833393596
+          ],
+          [
+            "2024-10-02",
+            0.2227758260367968
+          ],
+          [
+            "2024-10-10",
+            0.20362388489119018
+          ],
+          [
+            "2024-10-18",
+            0.26591870715627614
+          ],
+          [
+            "2024-10-29",
+            0.25182075047964897
+          ],
+          [
+            "2024-11-06",
+            0.21056901423356578
+          ],
+          [
+            "2024-11-14",
+            0.16381145929056248
+          ],
+          [
+            "2024-11-25",
+            0.1772207331520223
+          ],
+          [
+            "2024-12-04",
+            0.16931363416306366
+          ],
+          [
+            "2024-12-12",
+            0.1751583285309391
+          ],
+          [
+            "2024-12-20",
+            0.15074834874889587
+          ],
+          [
+            "2025-01-02",
+            0.15246823387460484
+          ],
+          [
+            "2025-01-13",
+            0.170002316978231
+          ],
+          [
+            "2025-01-22",
+            0.22019235452381447
+          ],
+          [
+            "2025-01-31",
+            0.24838462405264988
+          ],
+          [
+            "2025-02-10",
+            0.28551519488098553
+          ],
+          [
+            "2025-02-19",
+            0.24494485380123202
+          ],
+          [
+            "2025-02-28",
+            0.20300443473998145
+          ],
+          [
+            "2025-03-10",
+            0.25663424253698286
+          ],
+          [
+            "2025-03-18",
+            0.2889513213079846
+          ],
+          [
+            "2025-03-26",
+            0.2927336110547768
+          ],
+          [
+            "2025-04-04",
+            0.30785912621752676
+          ],
+          [
+            "2025-04-14",
+            0.4524970927003487
+          ],
+          [
+            "2025-04-23",
+            0.41612808117555783
+          ],
+          [
+            "2025-05-02",
+            0.3821858567137378
+          ],
+          [
+            "2025-05-12",
+            0.3496319293555091
+          ],
+          [
+            "2025-05-20",
+            0.39396269723554156
+          ],
+          [
+            "2025-05-30",
+            0.36625505635441663
+          ],
+          [
+            "2025-06-09",
+            0.3776857335564272
+          ],
+          [
+            "2025-06-17",
+            0.35863581949454904
+          ],
+          [
+            "2025-06-27",
+            3.877708932136139
+          ]
+        ],
+        "warnings": [
+          "178 price point(s) predate the earliest fiscal year — skipped",
+          "the historical band spans a structural EBITDA break: FY2022-06-30→FY2023-06-30 EBITDA stepped 3.3x ($3.34B→$11.05B, annual basis), so the P25/P75/P90 quantiles blend the pre-step (small-EBITDA) base with the post-step base and the cheap/fair/expensive classification is on a mixed regime — treat the badge as directional only. The quantile method is unchanged.",
+          "current point uses TTM EBITDA (consistent with the comps caliber); historical quantiles use each annual-report year's EBITDA, so the two carry a caliber basis difference (no quarterly data, so a rolling TTM cannot be reconstructed point by point).",
+          "per-year share counts are unavailable from the serving providers, so the historical band is computed on the run's own share count (627,029,306); a buyback or issuance history makes the earlier multiples approximate."
+        ],
+        "window_years": 5
+      },
+      "monte_carlo": {
+        "assumptions_used": {
+          "centered_on": "base-case DCF assumptions",
+          "ebitda_margin_std": 0.02,
+          "independent": false,
+          "mid_year_convention": false,
+          "n_simulations": 10000,
+          "revenue_growth_std": 0.02,
+          "seed": 2091195812,
+          "terminal_growth_std": 0.005,
+          "valid_simulations": 9951,
+          "variance_reduction": "antithetic_variates",
+          "wacc_std": 0.01
+        },
+        "current_price_percentile": 0.0,
+        "mean": 42.34,
+        "n_valid": 9951,
+        "percentiles": {
+          "10": 29.06,
+          "25": 33.97,
+          "5": 26.58,
+          "50": 40.49,
+          "75": 48.56,
+          "90": 58.2,
+          "95": 65.17
+        },
+        "std": 11.84
+      }
+    },
+    "thesis": {
+      "catalysts": [
+        "Valuation gap: at $16.71 the equity trades below the entire published confidence band of $30.27–$50.45 built off the per-method DCF range of $32.29–$48.43 — convergence toward the nearest band bound ($30.27) is itself the re-rating case.",
+        "Reverse-DCF growth gap: the tape discounts ~0.63%/yr revenue growth held flat over the 10-year horizon versus the model's 20.0%→3.0% fade averaging 11.5%/yr — partial delivery of a fade the company is already running lifts the cash-flow base.",
+        "Reverse-DCF discount-rate gap: the market's implied 14.56% WACC versus the model's 7.94% is close to a doubling of the required return; normalisation of the priced risk compresses that spread and pulls value back toward the $32.29–$48.43 DCF range.",
+        "Momentum mean reversion: a 34% 52-week range position and a -32.8% drawdown from the 52-week high leave the shares near the floor of their own trading range — historically the zone that precedes re-rating when the modelled cash-flow gap is this wide.",
+        "Terminal-value sensitivity: with a 3.0% perpetuity growth rate stacked on a 7.94% WACC, the model's value is unusually sensitive to the discount-rate assumption, so any compression in the market-implied 14.56% rate moves the whole $32.29–$48.43 range upward."
+      ],
+      "company_overview": "Harmony Gold Mining Company Limited is a South African precious-metals issuer (industry: Gold; sector: Basic Materials) whose economics are those of a price-taking producer: it mines, processes and sells gold, so revenue is realised metal price times delivered ounces rather than proprietary product pricing. The company reports under IFRS in ZAR — the SEC XBRL revenue and profit facts were filed in rand and are suppressed here for lack of FX — while the ADR trades in USD; current run-rate figures are TTM and FX-normalised, showing revenue of $5.97B, EBITDA of $2.72B, a 49.6% TTM gross margin and a 47.2% TTM operating margin.\n\nA segment revenue breakdown was not available for this issuer; see the latest annual report for business-line detail. A geographic revenue breakdown was likewise not available for this issuer and is not cited here.\n\nThe moat is structural rather than commercial: value sits in orebody grade, reserve life and the operating cost-curve position of the mines, not in switching costs, ecosystem lock-in or IP that would surface as a pricing premium. The evidence for that position is the margin the assets throw off at prevailing metal prices — a 47.2% TTM operating margin on $5.97B of TTM revenue, on a 49.6% TTM gross margin — set against the model's through-cycle normalisation, which assumes a 22.4% EBITDA margin rather than extrapolating the 28.0% FY2024 peak or the 7.8% FY2022 trough. That spread between spot margins and normalised margins is the central cyclical variable for this issuer.",
+      "competitor_analysis": "Peer-relative positioning cannot be quantified for HMY in this run: the peer-screen / peer-financials fetch returned no usable comp set, so no peer multiples are cited and no premium or discount to peers is asserted here. On the evidence available, positioning is best read against the issuer's own trading history — a current 3.9x EV/EBITDA versus a 5-year median of 0.6x — though that band contains a structural EBITDA break (FY2022-06-30→FY2023-06-30, a 3.3x step from $3.34B to $11.05B), so the 'expensive' badge it produces is directional only. Structurally, a gold producer competes on reserve quality, cost-curve position and jurisdictional risk rather than on product differentiation, which is why the valuation argument here runs through the DCF range of $32.29–$48.43 and the market-implied 0.63%/yr growth rather than through a peer-multiple cross-check.",
+      "key_takeaways": [
+        "Directional BUY: at $16.71 the equity trades below the entire DCF-derived confidence band of $30.27–$50.45 (per-method DCF range $32.29–$48.43), so the stock is priced at a discount to fundamental value rather than at it.",
+        "Reverse-DCF growth read: the tape discounts ~0.63%/yr revenue growth held flat across the 10-year horizon versus the model's own 20.0%→3.0% fade averaging 11.5%/yr — a declining schedule vs a flat rate, which is a deliverability question, not an unreachable growth claim.",
+        "Reverse-DCF discount-rate read: holding the model's growth fade fixed, today's price implies a 14.56% cost of capital versus the model's 7.94% WACC — the market is charging a distressed required return on a producer whose own margins remain positive through the cycle.",
+        "Momentum is washed out — -11.8% over 12 months, a 34% 52-week range position and a -32.8% drawdown from the 52-week high — the zone in which a cash-flow gap of this width can close rather than widen.",
+        "Confidence is very_low by construction: a single method ~2.4x the $16.71 market price is uncalibrated, no peer comp set was sourced, so conviction rests on direction, not on a published point."
+      ],
+      "momentum_divergence_note": null,
+      "narrative": "We initiate on Harmony Gold (HMY) with a BUY, defined directionally rather than by a point. The only method that survived this run is a DCF, and it frames equity value at $32.29–$48.43 (published confidence band $30.27–$50.45); at $16.71 the market sits below the entire band, so the discount is structural rather than a rounding error. We withhold a point target deliberately: the lone method's implied value lands roughly 2.4x the market price, outside the [0.5x, 2x] single-method calibration band, and stamping one number on a single uncalibrated method would be false precision.\n\nWhat is the market pricing? Two separate reverse-DCF solves: holding the model's 20.0%→3.0% revenue fade fixed, today's price implies a 14.56% discount rate versus the model's 7.94% WACC; holding WACC fixed, it implies ~0.63%/yr revenue growth held flat across the 10-year horizon. The model's own schedule is a fade averaging 11.5%/yr across the same 10 forecast fiscal years — a declining rate, not the flat 0.63% the tape assumes. The gap is therefore about deliverability of a fade the company has already been running, not about an unreachable growth claim.\n\nMomentum is washed out — -11.8% over 12 months, a 34% 52-week range position and a -32.8% drawdown from the high — the setup in which a cash-flow gap can close rather than widen. The discipline is that confidence is very_low: with no second method and no peer comp set, the BUY stands on direction versus a withheld point, and the primary risk is that the market's implied 14.56% discount rate, not the model's 7.94%, is the correct one.",
+      "news_summary": "The catalyst pipeline surfaced 0 discrete events across the 50-item news window (2026-03-11 to 2026-09-30) with net sentiment of +0.00 — neutral — so the last 30 days add no corroborating or contradicting fundamental signal. No SEC 8-K filings and no categorised news items were logged, meaning the thesis has to stand on the DCF's $32.29–$48.43 band rather than on a news catalyst. The one live sentiment read is bullish — an average retail score of 0.94 with bullish reads at 96.9% — but it is single-source and therefore weak corroboration. Net, news flow neither supports nor challenges the BUY; it leaves the valuation gap as the whole argument.",
+      "price_target": null,
+      "price_target_basis": "POINT TARGET WITHHELD (confidence=very_low): the only number available (the surviving method $40.36) would be fabricated, so it is not published (never fabricate a number). The BUY verdict reads off the nearest published range bound ($30.27), not the withheld interior point — the market sits below the whole range. Methods: DCF $40.36 (own range $32.29–$48.43, wt 0.85). Published target band $30.27–$50.45 (±25% single-method confidence dial). single method dcf $40 is 2.4x the market price, outside the [0.5x,2x] single-method calibration band — point target withheld (avoid stamping false precision on a lone far-from-market method); the band still provides a fundamental floor, with direction taken from the market implied.",
+      "recommendation": "BUY",
+      "risks": [
+        "Calibration risk: the lone DCF's implied value is ~2.4x the $16.71 market price, outside the [0.5x, 2x] single-method band — when the only method sits that far from market, the model, not the market, is the more likely error, which is precisely why no point is published.",
+        "Commodity cyclicality: the model normalises the EBITDA margin to a 22.4% through-cycle level against a 28.0% FY2024 peak and a 7.8% FY2022 trough; a gold-price reversal re-prices both earnings and the $32.29–$48.43 DCF range.",
+        "Discount-rate risk: if the market's implied 14.56% WACC is right and the model's 7.94% is too low — a plausible read given single-country, single-commodity concentration — the entire DCF band is overstated.",
+        "Multiple risk: on the issuer's own 5-year history the current 3.9x EV/EBITDA sits far above the 0.6x median (a band distorted by a FY2022-06-30→FY2023-06-30 EBITDA step of 3.3x), so multiple normalisation could cap a re-rating even if cash flows hold.",
+        "Momentum persistence: -11.8% over 12 months with a -32.8% drawdown means the tape has been discounting a risk the model does not capture; continued de-rating keeps the price below the $30.27 band floor."
+      ],
+      "tagline": "HMY: market at $16.71 sits below the entire DCF band",
+      "valuation_overview": "Only one valuation method was run for HMY — a DCF — so there is no cross-method divergence to arbitrate: no comps multiple and no second cash-flow model were computed, and the peer screen returned no usable comp set. The DCF result is driven by three inputs: a 7.94% WACC, a 3.0% perpetuity growth rate applied after the explicit forecast window, and a revenue fade of 20.0% in forecast year 1 declining to 3.0% in year 10 (11.5%/yr average across the 10 forecast fiscal years). Those inputs produce an implied value roughly 2.4x the $16.71 market price, so the confidence band around the single method — $30.27–$50.45, the ±25% calibration dial around the per-method range of $32.29–$48.43 — is published in place of a point. The reverse-DCF is the honest bridge between model and market: at the model's WACC the price implies only 0.63%/yr flat growth, and at the model's growth fade it implies a 14.56% cost of capital. A weighted target is therefore intentionally absent; confidence is very_low and the direction, not the level, carries the call."
+    },
+    "valuation_synthesis": {
+      "anchor_method": null,
+      "confidence": "very_low",
+      "cross_checks": [
+        {
+          "band_break_caveat": "the band's cheap/fair/expensive classification is computed on a window containing a structural EBITDA break (FY2022-06-30 -> FY2023-06-30, 3.3x step): the P25/P90 quantiles are driven by the pre-step small-EBITDA base - treat the badge as directional only (quantile method unchanged).",
+          "basis": "Own 5-year EV/EBITDA band (p25 0.31x · median 0.61x · p75 0.89x, 751 samples) applied to this run's TTM EBITDA (income.ebitda $2,720,200,439) through the EV→equity bridge (− net debt $51,240,552 − preferred $0 − NCI $19,245,284) ÷ 627,029,306 shares outstanding. the band's cheap/fair/expensive classification is computed on a window containing a structural EBITDA break (FY2022-06-30 -> FY2023-06-30, 3.3x step): the P25/P90 quantiles are driven by the pre-step small-EBITDA base - treat the badge as directional only (quantile method unchanged).",
+          "high": 3.7359359542166297,
+          "label": "Own 5-year EV/EBITDA",
+          "low": 1.2209160698469514,
+          "mid": 2.5454632363066367,
+          "name": "ev_ebitda_band",
+          "note": "Mean-reversion cross-check only — excluded from the published target blend, which keeps its existing method weighting."
+        }
+      ],
+      "current_price": 16.71,
+      "degradation_note": "single method dcf $40 is 2.4x the market price, outside the [0.5x,2x] single-method calibration band — point target withheld (avoid stamping false precision on a lone far-from-market method); the band still provides a fundamental floor, with direction taken from the market implied.",
+      "financial_sector": false,
+      "methods": [
+        {
+          "assumptions": "WACC 7.9% · 10yr growth 20%→3.0% · β0.91",
+          "confidence": 0.85,
+          "high": 48.42874640994987,
+          "low": 32.28583093996658,
+          "mid": 40.35728867495823,
+          "name": "dcf",
+          "rerating_ratio": null,
+          "source": "implied_price ± 20% (placeholder band, not a real distribution)"
+        }
+      ],
+      "mna_transition": false,
+      "outlier_methods": [],
+      "target_high": 50.44661084369778,
+      "target_low": 30.26796650621867,
+      "upside_downside": null,
+      "valuation_withheld": true,
+      "warnings": [],
+      "weighted_price": null
+    },
+    "valuation_withheld": true,
+    "withheld_reason": "contract_C7",
+    "xbrl_facts_snapshot": {}
+  },
+  "pinned_for": [
+    "C8"
+  ],
+  "source": "~/.finrobot/artifacts.db",
+  "ticker": "HMY",
+  "type": "equity_research",
+  "verdicts": {
+    "C1": false,
+    "C10a": true,
+    "C10b": false,
+    "C10c": false,
+    "C10d": false,
+    "C11": false,
+    "C12a": false,
+    "C12b": false,
+    "C12c": false,
+    "C13b": false,
+    "C13c": false,
+    "C14a": false,
+    "C14b": false,
+    "C1b": false,
+    "C2": false,
+    "C3": false,
+    "C4": false,
+    "C6": false,
+    "C6b": false,
+    "C7": false,
+    "C8": true,
+    "C9": false
+  }
+}

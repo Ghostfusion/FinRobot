@@ -363,13 +363,39 @@ def _clause_c11_mirrored_withheld_slot(artifact: "Artifact") -> Finding | None:
     where the other says "not withheld". A reader that must know an implicit
     present-else-false convention is the duplication, not the reconciliation.
 
-    MEASURED CATCH LIST 63 of 98 equity artifacts — always the same shape: the
-    root key is OMITTED while the synthesis writes ``false``; 32 artifacts agree
-    (both write ``true``) and 3 agree (neither writes). Instance B is one of the
-    63. The divergence never changed a verdict, which is why no reader caught it.
+    MEASURED CATCH LIST 63 — and the population makes the mechanism plain. The
+    root writer emits the flag ONLY on the withheld path; the synthesis writer
+    ALWAYS emits a bool:
+
+        root absent + synthesis false    63   every non-withheld artifact
+        root true   + synthesis true     32   every withheld artifact
+        root absent + synthesis absent    8
+        root true   + synthesis absent    2
+
+    So this clause is not catching an anomaly: it is flagging the NORMAL case
+    (nothing was withheld), because one of the two writers is conditional on the
+    very outcome it reports. Instance B is one of the 63. The divergence never
+    changed a verdict, which is why no reader caught it.
+
+    UNIFY, THEN PROMOTE. Arming `H` before the root writer emits on both paths
+    would withhold the headline on every non-withheld report — that is, on every
+    ordinary one. And after the unification the STORED corpus still reads 63: the
+    archive is annotated on read, never rewritten (§9.3), so this clause's
+    promotion criterion is not "the scanner reports 0" but "the catch list's SPAN
+    HAS CLOSED — no instance after the writer fix". That is the general rule for
+    every clause whose defect class a shipped fix already closed (`C10a` and
+    `C10c` likewise: their spans end at 16:44 and 19:59). The end state is a
+    single writer, and what remains for this clause is regression — catching a
+    second writer re-introduced.
+
+    Scope: a mirrored pair cannot diverge when one side does not exist for the
+    artifact type, so an artifact with no synthesis block (a plain ddm/dcf dump) is
+    out of scope. An earlier revision counted the 2 such artifacts and read 65.
     """
     structured = _structured(artifact)
-    synthesis = _synthesis(structured)
+    synthesis = structured.get("valuation_synthesis")
+    if not isinstance(synthesis, dict):
+        return None  # no synthesis block for this artifact type — no pair to mirror
     root_present = "valuation_withheld" in structured
     synthesis_present = "valuation_withheld" in synthesis
     if root_present != synthesis_present:

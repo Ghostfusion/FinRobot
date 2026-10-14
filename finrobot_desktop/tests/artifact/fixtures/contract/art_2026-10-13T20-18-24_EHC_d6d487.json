@@ -1,0 +1,952 @@
+{
+  "artifact_id": "art_2026-10-13T20:18:24_EHC_equity_research_d6d487",
+  "extracted_at": "2026-10-14",
+  "inputs_raw_data": {
+    "balance": {
+      "noncontrolling_interest": 863400000.0,
+      "preferred_stock": null,
+      "total_cash": 107700000.0,
+      "total_debt": 2842299904.0
+    },
+    "income": {
+      "capital_expenditure": 982574976.0,
+      "depreciation_amortization": null,
+      "ebitda": 1463500032.0,
+      "gross_margin": 0.43865,
+      "income_tax_expense": null,
+      "interest_expense": null,
+      "net_income": 603699968.0,
+      "operating_income": null,
+      "operating_margin": 0.18054001,
+      "rd_expense": null,
+      "revenue": 6206099968.0,
+      "sga_expense": null
+    },
+    "market": {
+      "beta": null,
+      "country": "United States",
+      "current_price": 124.36,
+      "industry": "Medical Care Facilities",
+      "is_adr": null,
+      "market_cap": 12268534834.24,
+      "pe_basis": "market cap ÷ TTM net income (one net-income authority); supersedes the provider's trailingPE 20.85×, which rides a different denominator",
+      "pe_ratio": 20.32223866912645,
+      "price_52w_high": 127.27958316713205,
+      "price_52w_low": 92.25404306909708,
+      "sector": "Healthcare",
+      "shares_outstanding": 98653384.0,
+      "trailing_1y_return_pct": 3.2724820689042304
+    },
+    "valuation": {
+      "book_value_per_share": 26.293,
+      "ebitda_operating": 1463500032.0,
+      "ebitda_reported": null,
+      "enterprise_value": 15866534738.24,
+      "ev_ebitda": 10.841499413264106,
+      "ev_ebitda_reported": null,
+      "ev_revenue": 2.5566031517460726
+    }
+  },
+  "notes": "EHC — the stale-fact class: us-gaap:OperatingIncomeLoss frozen at 2022-12-31 while every other fact runs to 2026-06-30, annotated by the producer's own staleness guard",
+  "outputs_structured": {
+    "catalyst_analysis": {
+      "category_breakdown": {
+        "acquisition": 3,
+        "management": 1,
+        "market": 1,
+        "product_launch": 5,
+        "regulatory": 1
+      },
+      "events": [
+        {
+          "category": "product_launch",
+          "headline": "Encompass Health Expands Rehab Footprint With New Maine Hospital",
+          "impact_score": 3,
+          "published": "2026-10-07T15:08:00Z",
+          "reasoning": "Encompass Health opens a new inpatient rehabilitation hospital in Maine, extending its de novo capacity expansion.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/healthcare/articles/encompass-health-expands-rehab-footprint-150800092.html"
+        },
+        {
+          "category": "product_launch",
+          "headline": "Encompass Health Rehabilitation Hospital of Bangor now open in Maine",
+          "impact_score": 3,
+          "published": "2026-10-06T20:30:00Z",
+          "reasoning": "Encompass Health Rehabilitation Hospital of Bangor is now open, adding new bed capacity in Maine.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/healthcare/articles/encompass-health-rehabilitation-hospital-bangor-203000969.html"
+        },
+        {
+          "category": "product_launch",
+          "headline": "Encompass Health Adds New Capacity With First Small-Format Hospital",
+          "impact_score": 3,
+          "published": "2026-09-25T13:54:00Z",
+          "reasoning": "Encompass Health opens its first small-format rehabilitation hospital, adding a new lower-cost capacity format.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/healthcare/articles/encompass-health-adds-capacity-first-135400597.html"
+        },
+        {
+          "category": "product_launch",
+          "headline": "Encompass Health expands in Montgomery County, Texas, with first small-format hospital, replacement hospital",
+          "impact_score": 3,
+          "published": "2026-09-24T20:30:00Z",
+          "reasoning": "Encompass Health opens its first small-format hospital plus a replacement hospital in Montgomery County, Texas.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/healthcare/articles/encompass-health-expands-montgomery-county-203000769.html"
+        },
+        {
+          "category": "market",
+          "headline": "Encompass Health (EHC) Upgraded to Buy: Here's Why",
+          "impact_score": 3,
+          "published": "2026-09-24T15:00:04Z",
+          "reasoning": "A sell-side upgrade of EHC to Buy, a third-party rating action on the stock.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/markets/stocks/articles/encompass-health-ehc-upgraded-buy-150004426.html"
+        },
+        {
+          "category": "product_launch",
+          "headline": "Encompass Health Rehabilitation Hospital of Lower Providence now open in Pennsylvania",
+          "impact_score": 3,
+          "published": "2026-09-15T20:30:00Z",
+          "reasoning": "Encompass Health Rehabilitation Hospital of Lower Providence opens in Pennsylvania, adding capacity.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/healthcare/articles/encompass-health-rehabilitation-hospital-lower-203000956.html"
+        },
+        {
+          "category": "regulatory",
+          "headline": "SEC 8-K: Other material event",
+          "impact_score": 3,
+          "published": "2026-08-13T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/785161/000078516126000195/0000785161-26-000195-index.html"
+        },
+        {
+          "category": "acquisition",
+          "headline": "SEC 8-K: Material agreement entered; Material financial obligation created",
+          "impact_score": 3,
+          "published": "2026-06-01T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/785161/000078516126000161/0000785161-26-000161-index.html"
+        },
+        {
+          "category": "acquisition",
+          "headline": "SEC 8-K: Material agreement entered; Other material event",
+          "impact_score": 3,
+          "published": "2026-05-15T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/785161/000078516126000156/0000785161-26-000156-index.html"
+        },
+        {
+          "category": "acquisition",
+          "headline": "SEC 8-K: Material agreement entered; Material agreement terminated; Material financial obligation created",
+          "impact_score": 3,
+          "published": "2026-03-10T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/785161/000078516126000100/0000785161-26-000100-index.html"
+        },
+        {
+          "category": "management",
+          "headline": "SEC 8-K: Executive / director change",
+          "impact_score": 3,
+          "published": "2026-02-20T00:00:00Z",
+          "reasoning": "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context.",
+          "sentiment": "neutral",
+          "source_count": 1,
+          "url": "https://www.sec.gov/Archives/edgar/data/785161/000078516126000049/0000785161-26-000049-index.html"
+        }
+      ],
+      "key_catalysts": [
+        "Encompass Health Expands Rehab Footprint With New Maine Hospital",
+        "Encompass Health Rehabilitation Hospital of Bangor now open in Maine",
+        "Encompass Health Adds New Capacity With First Small-Format Hospital"
+      ],
+      "net_sentiment": 1.15,
+      "overall_sentiment": "bullish",
+      "top_negative": [],
+      "top_positive": [
+        {
+          "category": "product_launch",
+          "headline": "Encompass Health Expands Rehab Footprint With New Maine Hospital",
+          "impact_score": 3,
+          "published": "2026-10-07T15:08:00Z",
+          "reasoning": "Encompass Health opens a new inpatient rehabilitation hospital in Maine, extending its de novo capacity expansion.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/healthcare/articles/encompass-health-expands-rehab-footprint-150800092.html"
+        },
+        {
+          "category": "product_launch",
+          "headline": "Encompass Health Rehabilitation Hospital of Bangor now open in Maine",
+          "impact_score": 3,
+          "published": "2026-10-06T20:30:00Z",
+          "reasoning": "Encompass Health Rehabilitation Hospital of Bangor is now open, adding new bed capacity in Maine.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/healthcare/articles/encompass-health-rehabilitation-hospital-bangor-203000969.html"
+        },
+        {
+          "category": "product_launch",
+          "headline": "Encompass Health Adds New Capacity With First Small-Format Hospital",
+          "impact_score": 3,
+          "published": "2026-09-25T13:54:00Z",
+          "reasoning": "Encompass Health opens its first small-format rehabilitation hospital, adding a new lower-cost capacity format.",
+          "sentiment": "positive",
+          "source_count": 1,
+          "url": "https://finance.yahoo.com/healthcare/articles/encompass-health-adds-capacity-first-135400597.html"
+        }
+      ]
+    },
+    "currency": {
+      "quote_currency": "USD",
+      "reporting_currency": "USD"
+    },
+    "numeric_audit": {
+      "artifact_status": "caveated",
+      "findings": [
+        {
+          "check": "ev_bridge_unverified",
+          "evidence": "EHC: preferred stock not reported by the provider — when the provider reports no preferred stock, BOTH the multiples EV and the DCF equity bridge assume 0 for it. If the issuer carries preferred stock, this EV (and EV/EBITDA, EV/Revenue) is understated, and the DCF equity value is overstated, by that amount. Metric authority: producer of record 'fmp.balance_sheet.preferred_stock' supplied no value, so no wired source states this number and the assumed 0 cannot be confirmed.",
+          "field_key": "enterprise_value",
+          "severity": "review"
+        },
+        {
+          "check": "target_multiple_outside_band",
+          "evidence": "EHC: the $151.37 target implies 12.7x TTM EBITDA vs the issuer's own 5-year p90 of 12.2x — the target sits above its own historical multiple range",
+          "field_key": "thesis.price_target",
+          "severity": "review"
+        }
+      ],
+      "withhold_valuation": false
+    },
+    "ownership_governance": {
+      "insider_buy_value": 0.0,
+      "insider_largest_sale": {
+        "name": "Mark J Tarr",
+        "position": "President & CEO",
+        "value": 21525046.74
+      },
+      "insider_net_flow": -26430022.849999994,
+      "insider_sell_value": 26430022.849999994,
+      "insider_window_days": 90,
+      "warnings": [
+        "13F index incomplete for period 2026-06-30: the 16 holder row(s) on file account for only 7.3% of shares outstanding (7,229,881 shares) — holder concentration cannot be asserted from a partial index; refresh the 13F cache (scripts/refresh_sec_holdings.py) for full coverage."
+      ]
+    },
+    "technical_analysis": {
+      "historical_bands": {
+        "classification": "fair",
+        "current": 10.841499413264106,
+        "median": 10.590751147845076,
+        "metric": "ev_ebitda",
+        "p25": 9.975651894724482,
+        "p75": 11.401397804210033,
+        "p90": 12.164236111867318,
+        "sample_count": 947,
+        "timeline": [
+          [
+            "2023-01-03",
+            9.964634934622687
+          ],
+          [
+            "2023-01-12",
+            10.073708093349271
+          ],
+          [
+            "2023-01-25",
+            10.257681177912424
+          ],
+          [
+            "2023-02-06",
+            9.967945679149523
+          ],
+          [
+            "2023-02-16",
+            10.297342083237329
+          ],
+          [
+            "2023-03-01",
+            9.606586984578325
+          ],
+          [
+            "2023-03-13",
+            9.232007988232157
+          ],
+          [
+            "2023-03-23",
+            9.116336016784278
+          ],
+          [
+            "2023-04-04",
+            10.050578234326167
+          ],
+          [
+            "2023-04-17",
+            10.196409727833583
+          ],
+          [
+            "2023-04-27",
+            10.422900935600966
+          ],
+          [
+            "2023-05-09",
+            10.206353299580279
+          ],
+          [
+            "2023-05-19",
+            10.241705701753823
+          ],
+          [
+            "2023-06-01",
+            10.296945247420757
+          ],
+          [
+            "2023-06-13",
+            10.452731650841054
+          ],
+          [
+            "2023-06-26",
+            10.628393859588554
+          ],
+          [
+            "2023-07-07",
+            10.692193720727273
+          ],
+          [
+            "2023-07-19",
+            10.982303378974372
+          ],
+          [
+            "2023-07-31",
+            10.725403209491322
+          ],
+          [
+            "2023-08-10",
+            11.227003681639351
+          ],
+          [
+            "2023-08-21",
+            11.160573365945066
+          ],
+          [
+            "2023-08-31",
+            11.28015700472773
+          ],
+          [
+            "2023-09-13",
+            11.007768900232156
+          ],
+          [
+            "2023-09-25",
+            11.171639416144352
+          ],
+          [
+            "2023-10-05",
+            10.741673477970808
+          ],
+          [
+            "2023-10-17",
+            10.598517791683713
+          ],
+          [
+            "2023-10-27",
+            10.16681711408344
+          ],
+          [
+            "2023-11-08",
+            10.52193981725135
+          ],
+          [
+            "2023-11-20",
+            10.620706582913229
+          ],
+          [
+            "2023-12-01",
+            10.781629175616594
+          ],
+          [
+            "2023-12-13",
+            10.845995945064706
+          ],
+          [
+            "2023-12-26",
+            10.900373790101368
+          ],
+          [
+            "2024-01-08",
+            9.21956546757447
+          ],
+          [
+            "2024-01-19",
+            9.450032713272691
+          ],
+          [
+            "2024-01-31",
+            9.504809123732969
+          ],
+          [
+            "2024-02-12",
+            9.743778315368338
+          ],
+          [
+            "2024-02-23",
+            9.902455630254147
+          ],
+          [
+            "2024-03-06",
+            10.029965562355653
+          ],
+          [
+            "2024-03-18",
+            9.972348750931094
+          ],
+          [
+            "2024-03-28",
+            10.609869526005074
+          ],
+          [
+            "2024-04-09",
+            10.550249991188757
+          ],
+          [
+            "2024-04-19",
+            10.291898673651376
+          ],
+          [
+            "2024-05-01",
+            10.638263907170018
+          ],
+          [
+            "2024-05-13",
+            10.950553957595158
+          ],
+          [
+            "2024-05-23",
+            10.796305742518056
+          ],
+          [
+            "2024-06-05",
+            10.93447439959399
+          ],
+          [
+            "2024-06-17",
+            10.869174062849112
+          ],
+          [
+            "2024-06-28",
+            10.913648002015226
+          ],
+          [
+            "2024-07-11",
+            10.938296905298458
+          ],
+          [
+            "2024-07-23",
+            11.018877636383369
+          ],
+          [
+            "2024-08-02",
+            11.583886344806558
+          ],
+          [
+            "2024-08-14",
+            11.040686138702323
+          ],
+          [
+            "2024-08-26",
+            11.415147270572712
+          ],
+          [
+            "2024-09-06",
+            11.484347140844816
+          ],
+          [
+            "2024-09-18",
+            11.559237441523326
+          ],
+          [
+            "2024-09-30",
+            11.95645066654148
+          ],
+          [
+            "2024-10-10",
+            11.681047314740583
+          ],
+          [
+            "2024-10-22",
+            11.863381799691586
+          ],
+          [
+            "2024-11-01",
+            12.188179242837398
+          ],
+          [
+            "2024-11-13",
+            12.547148153855163
+          ],
+          [
+            "2024-11-22",
+            12.398051174425142
+          ],
+          [
+            "2024-12-05",
+            12.564248330507906
+          ],
+          [
+            "2024-12-17",
+            12.001088289830959
+          ],
+          [
+            "2024-12-30",
+            11.571841119022448
+          ],
+          [
+            "2025-01-13",
+            9.819177319575259
+          ],
+          [
+            "2025-01-24",
+            10.073027292074162
+          ],
+          [
+            "2025-02-05",
+            10.611131368648577
+          ],
+          [
+            "2025-02-18",
+            10.611131368648577
+          ],
+          [
+            "2025-02-28",
+            10.44190082496747
+          ],
+          [
+            "2025-03-12",
+            9.960481290118322
+          ],
+          [
+            "2025-03-24",
+            10.427110299926513
+          ],
+          [
+            "2025-04-03",
+            10.598095088005394
+          ],
+          [
+            "2025-04-15",
+            10.633479278322604
+          ],
+          [
+            "2025-04-28",
+            11.704915221593124
+          ],
+          [
+            "2025-05-08",
+            11.753468715825383
+          ],
+          [
+            "2025-05-20",
+            12.232402378281476
+          ],
+          [
+            "2025-06-02",
+            12.159987834657677
+          ],
+          [
+            "2025-06-12",
+            12.10484968846789
+          ],
+          [
+            "2025-06-25",
+            12.145172367753245
+          ],
+          [
+            "2025-07-08",
+            11.949653099968987
+          ],
+          [
+            "2025-07-17",
+            11.309353894781056
+          ],
+          [
+            "2025-07-29",
+            11.1363072459882
+          ],
+          [
+            "2025-08-08",
+            11.904325420079555
+          ],
+          [
+            "2025-08-20",
+            12.395463967729647
+          ],
+          [
+            "2025-09-02",
+            12.408649899553684
+          ],
+          [
+            "2025-09-12",
+            12.602298527577279
+          ],
+          [
+            "2025-09-24",
+            12.58335102529041
+          ],
+          [
+            "2025-10-06",
+            12.417313040134164
+          ],
+          [
+            "2025-10-16",
+            12.366148964191472
+          ],
+          [
+            "2025-10-28",
+            12.636843008490814
+          ],
+          [
+            "2025-11-07",
+            11.728202608124727
+          ],
+          [
+            "2025-11-19",
+            11.451730365453564
+          ],
+          [
+            "2025-12-02",
+            11.611832187102646
+          ],
+          [
+            "2025-12-12",
+            11.045685142027304
+          ],
+          [
+            "2025-12-24",
+            11.054763980332378
+          ],
+          [
+            "2026-01-07",
+            9.313508378395841
+          ],
+          [
+            "2026-01-20",
+            8.786684834082473
+          ],
+          [
+            "2026-01-30",
+            8.486242034194715
+          ],
+          [
+            "2026-02-11",
+            9.806789350583577
+          ],
+          [
+            "2026-02-24",
+            9.206606360194858
+          ],
+          [
+            "2026-03-05",
+            9.401538308467488
+          ],
+          [
+            "2026-03-17",
+            8.978131839796596
+          ],
+          [
+            "2026-03-27",
+            8.698647877916958
+          ],
+          [
+            "2026-04-09",
+            9.465349292976283
+          ],
+          [
+            "2026-04-21",
+            9.076103692691404
+          ],
+          [
+            "2026-05-01",
+            9.405838277914679
+          ],
+          [
+            "2026-05-13",
+            9.406540887301475
+          ],
+          [
+            "2026-05-26",
+            9.225921092237876
+          ],
+          [
+            "2026-06-05",
+            9.162911082430027
+          ],
+          [
+            "2026-06-17",
+            8.734466904455807
+          ],
+          [
+            "2026-06-30",
+            8.957791298048855
+          ],
+          [
+            "2026-07-13",
+            9.599568764135888
+          ],
+          [
+            "2026-07-23",
+            9.671108451899437
+          ],
+          [
+            "2026-08-04",
+            9.631832587177552
+          ],
+          [
+            "2026-08-14",
+            10.549960377279112
+          ],
+          [
+            "2026-08-26",
+            10.35286439209515
+          ],
+          [
+            "2026-09-08",
+            10.331125657667688
+          ],
+          [
+            "2026-09-18",
+            10.420905085112455
+          ],
+          [
+            "2026-09-30",
+            10.402665345431238
+          ],
+          [
+            "2026-10-12",
+            10.841499413264106
+          ]
+        ],
+        "warnings": [
+          "55 price point(s) predate the earliest fiscal year — skipped",
+          "current point uses TTM EBITDA (consistent with the comps caliber); historical quantiles use each annual-report year's EBITDA, so the two carry a caliber basis difference (no quarterly data, so a rolling TTM cannot be reconstructed point by point).",
+          "per-year share counts are unavailable from the serving providers, so the historical band is computed on the run's own share count (98,653,384); a buyback or issuance history makes the earlier multiples approximate."
+        ],
+        "window_years": 5
+      },
+      "monte_carlo": {
+        "assumptions_used": {
+          "centered_on": "base-case DCF assumptions",
+          "ebitda_margin_std": 0.02,
+          "independent": false,
+          "mid_year_convention": false,
+          "n_simulations": 10000,
+          "revenue_growth_std": 0.02,
+          "seed": 2923122386,
+          "terminal_growth_std": 0.005,
+          "valid_simulations": 9952,
+          "variance_reduction": "antithetic_variates",
+          "wacc_std": 0.01
+        },
+        "current_price_percentile": 30.7,
+        "mean": 164.32,
+        "n_valid": 9952,
+        "percentiles": {
+          "10": 88.27,
+          "25": 115.52,
+          "5": 74.75,
+          "50": 152.32,
+          "75": 200.0,
+          "90": 256.24,
+          "95": 296.23
+        },
+        "std": 68.8
+      }
+    },
+    "thesis": {
+      "catalysts": [
+        "New de novo capacity: Encompass Health opened a new inpatient rehabilitation hospital in Bangor, Maine (October 2026), extending the self-funded development program that underwrites the DCF's revenue fade from the 10.9% four-year CAGR toward 3.0% terminal growth and the resulting $151.37 implied price.",
+        "First small-format hospital: the Montgomery County, Texas opening pairs a lower-cost small-format facility with a replacement hospital — a format that, if it scales, lifts returns on the build program and narrows part of the +21.7% gap between the $124.36 market price and the $151.37 DCF mid.",
+        "Pennsylvania capacity: the Lower Providence hospital opening adds licensed beds in a certificate-of-need market, extending the capacity trajectory that supports the growth path embedded in the DCF band up to $181.65.",
+        "Third-party rating action: a sell-side upgrade to Buy in late September 2026 reinforces the constructive catalyst feed (net sentiment +1.15) and, with the stock at 92% of its 52-week range, could attract incremental institutional demand on top of the 7.3% currently reported 13F coverage.",
+        "Reverse-DCF optionality: the market prices only 5.29% flat perpetual growth at the model's 6.97% WACC; if EHC sustains growth above that — its four-year revenue CAGR is 10.9% — the DCF high case of $181.65 is reachable, a +46.1% move from the $124.36 market price."
+      ],
+      "company_overview": "Encompass Health Corporation (NYSE: EHC) is the largest owner-operator of inpatient rehabilitation hospitals in the United States, providing post-acute rehabilitative care — intensive physical, occupational and speech therapy — to patients recovering from stroke, traumatic brain injury, spinal cord injury, neurological disorders and orthopedic procedures. Revenue is generated predominantly from Medicare and Medicare Advantage, supplemented by commercial payers and Medicaid, with demand driven by an ageing US population, rising neurological and stroke incidence, and the migration of higher-acuity recovery out of short-stay acute-care hospitals. The growth model is a self-funded de novo development program — the company builds and ramps its own facilities rather than acquiring them — converting capital expenditure into long-dated, high-margin licensed capacity.\n\nA segment revenue breakdown was not available for this issuer; see the latest annual report for business-line detail. Geographic revenue breakdown was likewise not available. On the consolidated basis that is reported, trailing-twelve-month revenue reached $6,206.1 million against full-year 2025 revenue of $5,935.2 million, with TTM net income of $621.0 million and FY2025 net income of $566.2 million — a franchise that has scaled revenue at roughly 10.9% compounded over four years while holding gross margin near 42.5% and EBITDA margin near 23.7%.\n\nThe durable moat rests on scale, local density and regulatory friction. As the largest operator, EHC holds referral relationships across acute-care hospitals and case-management networks, spreads shared clinical and administrative infrastructure across a national footprint, and operates under certificate-of-need and licensing regimes that restrict de novo entry in many states. The balance sheet — $7,457.5 million of assets against $3,996.4 million of liabilities and $2,597.7 million of equity — funds that build program without balance-sheet stress.",
+      "competitor_analysis": "Encompass Health competes in a structurally fragmented post-acute rehabilitation market alongside other inpatient rehabilitation operators and the rehabilitation units of large diversified acute-care hospital chains; no peer valuation multiples were supplied in this dataset, so relative positioning is described qualitatively rather than through a peer-multiple table. On the evidence available, EHC's own trading multiple of 10.8x EV/EBITDA sits essentially on its five-year median of 10.6x — a 'fair' classification — and its 20.3x P/E is carried by a 10.5% FY2025 revenue growth rate and a 23.7% EBITDA margin rather than by any scarcity premium. Versus smaller rehabilitation operators, the differentiator is scale plus a self-funded de novo pipeline that adds capacity at controlled cost and defends local referral density; versus the diversified hospital chains, EHC offers pure-play rehabilitation exposure with markedly lower balance-sheet leverage ($3,996.4 million of liabilities against $7,457.5 million of assets). Absent peer multiples, the competitive conclusion is that EHC's multiple is fair rather than a relative discount — the investment case rests on the DCF gap to $151.37, not on peer-relative mispricing.",
+      "key_takeaways": [
+        "DCF fair value of $151.37 sits +21.7% above the $124.36 market price, but it is a single method with no cross-validation — hence a Hold at medium confidence rather than a Buy.",
+        "The reverse-DCF is undemanding: $124.36 embeds 5.29% flat perpetual growth with WACC held at 6.97%, or a 7.49% discount rate with the growth fade fixed — both plausible for a company that compounded revenue at 10.9% over four years to $6,206.1 million TTM.",
+        "The balance sheet is not the constraint: $7,457.5 million of assets against $3,996.4 million of liabilities and $2,597.7 million of equity leaves room to self-fund the de novo hospital build.",
+        "The flow signal is negative: $151.37 of 90-day net insider open-market selling against $151.37 of purchases, with reported 13F coverage of only 7.3% of shares outstanding.",
+        "Momentum is already in the price: +3.3% one-year return, a 92% position in the 52-week range, -2.3% from the high, and EV/EBITDA at 10.8x versus a five-year median of 10.6x — fair, not cheap."
+      ],
+      "momentum_divergence_note": null,
+      "narrative": "Encompass Health enters this initiation at $124.36 against a DCF-anchored fair value of $151.37 — an implied +21.7% gap — yet the call is Hold, not Buy, because that anchor is a single discounted-cash-flow method with no cross-validation. The DCF's own band spans $151.37 to $151.37 before publication widening, and the published range of $113.53 to $189.22 is wide enough that the current price sits comfortably inside it. The base case itself is credible on the supplied fundamentals: revenue compounded at 10.9% over four years to $5,935.2 million in FY2025 and $6,206.1 million on a trailing-twelve-month basis, with TTM net income of $621.0 million and an EBITDA margin near 23.7%.\n\nThe market's own arithmetic is the reality check. Holding the model's 6.97% WACC fixed, $124.36 embeds 5.29% flat perpetual growth over a ten-year horizon — above the 3.0% terminal assumption but below the 10.9% trailing CAGR, so the gap between price and fair value is a question of fade speed, not of an implausible market forecast. Holding the growth fade fixed, the market implies a 7.49% discount rate, roughly 52bp above the model's 6.97% WACC. Momentum is supportive but leaves no cushion: the shares are +3.3% over one year, sit at 92% of the 52-week range, and are only -2.3% off the high, so the de novo growth story has already been re-rated.\n\nWhat holds the recommendation at Hold is the flow evidence combined with the single-method risk. Insiders were net sellers of $151.37 over the past 90 days with zero open-market purchases, led by CEO Mark J Tarr's $151.37 sale — a distribution pattern, not accumulation, that argues management sees the shares near fair value. Reported 13F coverage is only 7.3% of shares outstanding, so holder concentration cannot be asserted from an incomplete index. With EV/EBITDA at 10.8x against a five-year median of 10.6x, the stock trades at fair, and a +21.7% DCF gap is not large enough relative to the method's own error band to justify a Buy.",
+      "news_summary": "The last 30 days of news flow are unambiguously constructive, with the catalyst feed scoring net sentiment of +1.15 and every high-impact item positive. Five product-launch events dominate the tape: the opening of a new inpatient rehabilitation hospital in Bangor, Maine, a new hospital in Lower Providence, Pennsylvania, and the company's first small-format hospital alongside a replacement facility in Montgomery County, Texas — each carrying an impact score of 3 and reinforcing the de novo capacity engine that underwrites the 10.9% historical growth rate. A sell-side upgrade to Buy in late September 2026 adds a third-party validation point, and the company's own 8-K filings provide primary-source confirmation of the capacity and financing activity. This flow supports the growth leg of the thesis, but it also explains why the shares sit at 92% of their 52-week range with a +3.3% one-year return — the market has already paid for the pipeline. News sentiment therefore corroborates the DCF's $151.37 fair value while doing nothing to close the +21.7% gap to it, consistent with a Hold.",
+      "price_target": 151.37,
+      "price_target_basis": "Confidence=medium; method-weighted blend of 1 corroborating method(s) (wt = data-quality weight, NOT prediction accuracy): DCF $151.37 (own range $151.37–$151.37, wt 0.85) → $151.37. Published target band $113.53–$189.22 (±25% single-method confidence dial). single method dcf with no cross-validation — band widened, confidence medium.",
+      "recommendation": "HOLD",
+      "risks": [
+        "Single-method valuation risk: the $151.37 target rests on one DCF (WACC 6.97%, terminal growth 3.0%) with no cross-validation, and the published band runs $113.53–$189.22 — at the DCF low of $121.10 the implied move from the $124.36 market price is -2.6%.",
+        "Insider distribution: $26,430,023 of net open-market selling over 90 days against $0 of purchases, with CEO Mark J Tarr alone selling $21,525,047, is a bearish read on how close the shares sit to management's own view of fair value.",
+        "Positioning risk: the stock sits at 92% of its 52-week range and only -2.3% below the high on a +3.3% one-year return, leaving little cushion; a reversion toward the five-year median EV/EBITDA of 10.6x from the current 10.8x compresses the multiple without any change in fundamentals.",
+        "Growth-fade risk: the reverse-DCF shows $124.36 already embeds 5.29% flat perpetual growth, so if de novo ramp timing slips or reimbursement tightens and realized growth falls below that, the market's support level erodes and the DCF compresses toward its $121.10 low.",
+        "Discount-rate risk: holding the growth fade fixed, the market's own solve implies a 7.49% WACC against the model's 6.97%; if the true cost of capital is closer to the market's estimate, the DCF mid moves down toward the $121.10 low and the +21.7% implied upside largely disappears."
+      ],
+      "tagline": "EHC · 22% DCF upside, single-method risk keeps Hold",
+      "valuation_overview": "The valuation rests on a single discounted-cash-flow method; no second method was included in the synthesis, so there is no cross-validation and the confidence tier is medium. The DCF discounts ten years of explicit free cash flow at a 6.97% WACC, fading revenue growth from the 10.9% four-year CAGR toward a 3.0% terminal rate, and produces an implied price of $151.37 against a ±20% placeholder band of $151.37 to $151.37, widened for publication to $113.53–$189.22.\n\nThat method carries a data-quality weight of 0.85 in the blend, and with only one contributor the weighted output equals the DCF mid: $151.37, or +21.7% versus the $124.36 market price. The divergence between the DCF and the market is best read through the reverse-DCF: holding the growth fade fixed, $124.36 implies a 7.49% discount rate, above the model's 6.97%; holding WACC fixed, it implies 5.29% flat perpetual growth, above the 3.0% terminal rate but well below the 10.9% historical CAGR. The market is therefore not pricing an implausible outcome — which is precisely why a medium-confidence, single-method anchor supports Hold rather than Buy, and why the subject's own 10.8x EV/EBITDA, essentially on its five-year median of 10.6x, reads as fair rather than as a discount to fair value."
+    },
+    "valuation_synthesis": {
+      "anchor_method": null,
+      "confidence": "medium",
+      "cross_checks": [],
+      "current_price": 124.36,
+      "degradation_note": "single method dcf with no cross-validation — band widened, confidence medium.",
+      "financial_sector": false,
+      "methods": [
+        {
+          "assumptions": "WACC 7.0% · 10yr growth 11%→3.0% · β0.80",
+          "confidence": 0.85,
+          "high": 181.64717607042454,
+          "low": 121.09811738028303,
+          "mid": 151.37264672535377,
+          "name": "dcf",
+          "rerating_ratio": null,
+          "source": "implied_price ± 20% (placeholder band, not a real distribution)"
+        }
+      ],
+      "mna_transition": false,
+      "outlier_methods": [],
+      "target_high": 189.21580840669222,
+      "target_low": 113.52948504401533,
+      "upside_downside": null,
+      "valuation_withheld": false,
+      "warnings": [],
+      "weighted_price": null
+    },
+    "xbrl_facts_snapshot": {
+      "us-gaap:Assets": [
+        {
+          "concept": "us-gaap:Assets",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 7457500000.0
+        }
+      ],
+      "us-gaap:Liabilities": [
+        {
+          "concept": "us-gaap:Liabilities",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 3996400000.0
+        }
+      ],
+      "us-gaap:NetIncomeLoss:annual": [
+        {
+          "concept": "us-gaap:NetIncomeLoss:annual",
+          "matched_concept": "us-gaap:NetIncomeLoss",
+          "period_end": "2025-12-31",
+          "units": "USD",
+          "value": 566200000.0
+        }
+      ],
+      "us-gaap:NetIncomeLoss:ttm": [
+        {
+          "concept": "us-gaap:NetIncomeLoss:ttm",
+          "has_calculated_q4": true,
+          "period_end": "2026-06-30",
+          "periods": [
+            "Q3 2025",
+            "Q4 2025",
+            "Q1 2026",
+            "Q2 2026"
+          ],
+          "value": 621000000.0,
+          "warning": "Some quarters were derived from YTD or annual facts. These are calculated values, not directly reported quarterly data."
+        }
+      ],
+      "us-gaap:OperatingIncomeLoss": [
+        {
+          "concept": "us-gaap:OperatingIncomeLoss",
+          "period_end": "2022-12-31",
+          "units": "USD",
+          "value": 539500000.0,
+          "warning": "stale: latest reported period is 2026-06-30, this fact is 2022-12-31"
+        }
+      ],
+      "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax": [
+        {
+          "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+          "has_calculated_q4": true,
+          "period_end": "2026-06-30",
+          "periods": [
+            "Q3 2025",
+            "Q4 2025",
+            "Q1 2026",
+            "Q2 2026"
+          ],
+          "value": 6206100000.0,
+          "warning": "Some quarters were derived from YTD or annual facts. These are calculated values, not directly reported quarterly data."
+        },
+        {
+          "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+          "period_end": "2025-12-31",
+          "units": "USD",
+          "value": 5935200000.0
+        }
+      ],
+      "us-gaap:StockholdersEquity": [
+        {
+          "concept": "us-gaap:StockholdersEquity",
+          "period_end": "2026-06-30",
+          "units": "USD",
+          "value": 2597700000.0
+        }
+      ]
+    }
+  },
+  "pinned_for": [
+    "C10a",
+    "C10c",
+    "C11",
+    "C12c"
+  ],
+  "source": "~/.finrobot/artifacts.db",
+  "ticker": "EHC",
+  "type": "equity_research",
+  "verdicts": {
+    "C1": false,
+    "C10a": true,
+    "C10b": false,
+    "C10c": true,
+    "C10d": false,
+    "C11": true,
+    "C12a": false,
+    "C12b": false,
+    "C12c": true,
+    "C13b": false,
+    "C13c": false,
+    "C14a": false,
+    "C14b": false,
+    "C1b": false,
+    "C2": false,
+    "C3": false,
+    "C4": false,
+    "C6": false,
+    "C6b": false,
+    "C7": false,
+    "C8": false,
+    "C9": false
+  }
+}

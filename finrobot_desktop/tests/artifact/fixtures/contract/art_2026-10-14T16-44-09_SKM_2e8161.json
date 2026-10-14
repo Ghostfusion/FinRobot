@@ -1,0 +1,720 @@
+{
+  "artifact_id": "art_2026-10-14T16:44:09_SKM_equity_research_2e8161",
+  "extracted_at": "2026-10-14",
+  "inputs_raw_data": {
+    "balance": {
+      "noncontrolling_interest": 43484737.606486306,
+      "preferred_stock": null,
+      "total_cash": 1517184496.440155,
+      "total_debt": 7628379805.928223
+    },
+    "data_authority": null,
+    "income": {
+      "capital_expenditure": 1936407530.5136337,
+      "depreciation_amortization": null,
+      "ebitda": 3281652345.09198,
+      "gross_margin": 0.70395,
+      "income_tax_expense": null,
+      "interest_expense": null,
+      "net_income": 542022313.0371475,
+      "operating_income": null,
+      "operating_margin": 0.1303,
+      "rd_expense": null,
+      "revenue": 12708021879.133179,
+      "sga_expense": null
+    },
+    "market": {
+      "beta": null,
+      "country": "South Korea",
+      "current_price": 34.42,
+      "industry": "Telecom Services",
+      "is_adr": null,
+      "market_cap": 13213495176.800001,
+      "pe_basis": "market cap ÷ TTM net income (one net-income authority)",
+      "pe_ratio": 24.378138794249995,
+      "price_52w_high": 46.77702126086957,
+      "price_52w_low": 19.365948704926357,
+      "quote_as_of": "2026-10-13T00:00:00Z",
+      "quote_is_live": false,
+      "sector": "Communication Services",
+      "shares_outstanding": 383890040.0,
+      "trailing_1y_return_pct": 66.39272938219086
+    },
+    "valuation": {
+      "book_value_per_share": 0.02235800451602065,
+      "ebitda_operating": 3281652345.09198,
+      "ebitda_reported": null,
+      "enterprise_value": 19368175223.894558,
+      "ev_ebitda": 5.901958278079483,
+      "ev_ebitda_reported": null,
+      "ev_revenue": 1.5240904845857624
+    }
+  },
+  "notes": "SKM — the degenerate band (-2.97 .. -1.23 against a $34.42 price). C8 must NOT read it: this is the payload that makes C8 flag 7 of §1.1's 8, with C9 taking the eighth",
+  "outputs_structured": {
+    "currency": {
+      "quote_currency": "USD",
+      "reporting_currency": "USD"
+    },
+    "numeric_audit": {
+      "artifact_status": "caveated",
+      "findings": [
+        {
+          "check": "ev_bridge_unverified",
+          "evidence": "SKM: preferred stock not reported by the provider — when the provider reports no preferred stock, BOTH the multiples EV and the DCF equity bridge assume 0 for it. If the issuer carries preferred stock, this EV (and EV/EBITDA, EV/Revenue) is understated, and the DCF equity value is overstated, by that amount. Metric authority: producer of record 'fmp.balance_sheet.preferred_stock' supplied no value, so no wired source states this number and the assumed 0 cannot be confirmed.",
+          "field_key": "enterprise_value",
+          "severity": "review"
+        }
+      ],
+      "withhold_valuation": false
+    },
+    "ownership_governance": {
+      "insider_buy_value": null,
+      "insider_largest_sale": null,
+      "insider_net_flow": null,
+      "insider_sell_value": null,
+      "insider_window_days": 90,
+      "warnings": [
+        "No DEF 14A found",
+        "No 10-Q/10-K filing found",
+        "5 Schedule 13D/13G filing(s) are stale (older than 400 days; a 13G annual amendment is due within 45 days of year-end): Tradewinds Global Investors, LLC (5301d, filed 2012-04-09), UBS AG (6820d, filed 2008-02-11), J P MORGAN CHASE & CO (6845d, filed 2008-01-17), Momenta (Cayman) (7735d, filed 2005-08-10), EQUITABLE COMPANIES INC (10019d, filed 1999-05-10). The reported holdings may no longer reflect the filer's current position — verify against a newer filing before relying on them.",
+        "13F index incomplete for period 2026-06-30: the 20 holder row(s) on file account for only 6.8% of shares outstanding (26,191,207 shares) — holder concentration cannot be asserted from a partial index; refresh the 13F cache (scripts/refresh_sec_holdings.py) for full coverage."
+      ]
+    },
+    "technical_analysis": {
+      "historical_bands": {
+        "classification": "expensive",
+        "classification_caveat": null,
+        "current": 5.901958278079483,
+        "median": 1.6764898887686077,
+        "metric": "ev_ebitda",
+        "p25": 1.528235244020512,
+        "p75": 1.7312170652298124,
+        "p90": 1.945514021348065,
+        "sample_count": 948,
+        "structural_break": null,
+        "timeline": [
+          [
+            "2023-01-03",
+            1.7311267750240782
+          ],
+          [
+            "2023-01-12",
+            1.7311267750240782
+          ],
+          [
+            "2023-01-25",
+            1.7311455085098588
+          ],
+          [
+            "2023-02-06",
+            1.7311080415382978
+          ],
+          [
+            "2023-02-16",
+            1.7310482257202569
+          ],
+          [
+            "2023-03-01",
+            1.731037956941264
+          ],
+          [
+            "2023-03-13",
+            1.7310814567302795
+          ],
+          [
+            "2023-03-23",
+            1.7311297986490946
+          ],
+          [
+            "2023-04-04",
+            1.7311275183018269
+          ],
+          [
+            "2023-04-17",
+            1.7311318192099645
+          ],
+          [
+            "2023-04-27",
+            1.731094337805826
+          ],
+          [
+            "2023-05-09",
+            1.7311391870408512
+          ],
+          [
+            "2023-05-19",
+            1.7311490228425146
+          ],
+          [
+            "2023-06-01",
+            1.7311557772888515
+          ],
+          [
+            "2023-06-13",
+            1.7311920319238905
+          ],
+          [
+            "2023-06-26",
+            1.731124444162789
+          ],
+          [
+            "2023-07-07",
+            1.7310464144317625
+          ],
+          [
+            "2023-07-19",
+            1.731120200984962
+          ],
+          [
+            "2023-07-31",
+            1.7311358314665493
+          ],
+          [
+            "2023-08-10",
+            1.7311133238617151
+          ],
+          [
+            "2023-08-22",
+            1.731090809040592
+          ],
+          [
+            "2023-09-01",
+            1.7311252018731151
+          ],
+          [
+            "2023-09-14",
+            1.7311858547806593
+          ],
+          [
+            "2023-09-26",
+            1.731200864661408
+          ],
+          [
+            "2023-10-05",
+            1.7311337892568128
+          ],
+          [
+            "2023-10-17",
+            1.7311846424441375
+          ],
+          [
+            "2023-10-27",
+            1.731164941975655
+          ],
+          [
+            "2023-11-08",
+            1.7311922772777106
+          ],
+          [
+            "2023-11-20",
+            1.7313111439871778
+          ],
+          [
+            "2023-12-01",
+            1.731281903584873
+          ],
+          [
+            "2023-12-13",
+            1.7312488529820707
+          ],
+          [
+            "2023-12-26",
+            1.7312482179486546
+          ],
+          [
+            "2024-01-08",
+            1.6762461396532264
+          ],
+          [
+            "2024-01-19",
+            1.6762618439846364
+          ],
+          [
+            "2024-01-31",
+            1.6762806863867201
+          ],
+          [
+            "2024-02-12",
+            1.67630706994305
+          ],
+          [
+            "2024-02-23",
+            1.676350408865647
+          ],
+          [
+            "2024-03-06",
+            1.6763328244874411
+          ],
+          [
+            "2024-03-18",
+            1.6763529179243812
+          ],
+          [
+            "2024-03-28",
+            1.6763398135089855
+          ],
+          [
+            "2024-04-10",
+            1.6762964466303027
+          ],
+          [
+            "2024-04-22",
+            1.6762715727026263
+          ],
+          [
+            "2024-05-02",
+            1.676281776674081
+          ],
+          [
+            "2024-05-14",
+            1.6763442794937524
+          ],
+          [
+            "2024-05-24",
+            1.676317490574173
+          ],
+          [
+            "2024-06-06",
+            1.676314939581309
+          ],
+          [
+            "2024-06-18",
+            1.6763021846169905
+          ],
+          [
+            "2024-07-01",
+            1.6763138073598187
+          ],
+          [
+            "2024-07-11",
+            1.676347522399749
+          ],
+          [
+            "2024-07-23",
+            1.6763585440867241
+          ],
+          [
+            "2024-08-02",
+            1.6764084596785942
+          ],
+          [
+            "2024-08-14",
+            1.6764305030525453
+          ],
+          [
+            "2024-08-26",
+            1.6764836615504117
+          ],
+          [
+            "2024-09-06",
+            1.6765063479143447
+          ],
+          [
+            "2024-09-18",
+            1.6765387629962674
+          ],
+          [
+            "2024-09-30",
+            1.6765266859670387
+          ],
+          [
+            "2024-10-10",
+            1.6764649169946297
+          ],
+          [
+            "2024-10-22",
+            1.6764912027046581
+          ],
+          [
+            "2024-11-01",
+            1.676459004282403
+          ],
+          [
+            "2024-11-13",
+            1.6764248349560729
+          ],
+          [
+            "2024-11-25",
+            1.6764636030585793
+          ],
+          [
+            "2024-12-06",
+            1.6764445439968279
+          ],
+          [
+            "2024-12-18",
+            1.6763998631820947
+          ],
+          [
+            "2024-12-31",
+            1.528086370385503
+          ],
+          [
+            "2025-01-14",
+            1.528096461694944
+          ],
+          [
+            "2025-01-27",
+            1.5281368068171406
+          ],
+          [
+            "2025-02-06",
+            1.5281172611912135
+          ],
+          [
+            "2025-02-19",
+            1.528172109637211
+          ],
+          [
+            "2025-03-03",
+            1.5281514308343436
+          ],
+          [
+            "2025-03-13",
+            1.5281398710885121
+          ],
+          [
+            "2025-03-25",
+            1.5281270306515824
+          ],
+          [
+            "2025-04-04",
+            1.528118682691281
+          ],
+          [
+            "2025-04-15",
+            1.5281796797955889
+          ],
+          [
+            "2025-04-28",
+            1.5281173952949934
+          ],
+          [
+            "2025-05-08",
+            1.5281122591202214
+          ],
+          [
+            "2025-05-20",
+            1.528078867279015
+          ],
+          [
+            "2025-06-02",
+            1.5281094630564096
+          ],
+          [
+            "2025-06-12",
+            1.5281929895957485
+          ],
+          [
+            "2025-06-25",
+            1.5282530278580302
+          ],
+          [
+            "2025-07-08",
+            1.5281995204498318
+          ],
+          [
+            "2025-07-18",
+            1.5282053874902044
+          ],
+          [
+            "2025-07-30",
+            1.528206695002059
+          ],
+          [
+            "2025-08-11",
+            1.528226274153931
+          ],
+          [
+            "2025-08-21",
+            1.5281982129379774
+          ],
+          [
+            "2025-09-03",
+            1.528182006496171
+          ],
+          [
+            "2025-09-15",
+            1.5282051259878335
+          ],
+          [
+            "2025-09-25",
+            1.5281932376877414
+          ],
+          [
+            "2025-10-07",
+            1.5281806855739386
+          ],
+          [
+            "2025-10-17",
+            1.5281826703098818
+          ],
+          [
+            "2025-10-29",
+            1.5281463415958945
+          ],
+          [
+            "2025-11-10",
+            1.5281020873485125
+          ],
+          [
+            "2025-11-20",
+            1.528064437712293
+          ],
+          [
+            "2025-12-03",
+            1.5281007664262802
+          ],
+          [
+            "2025-12-15",
+            1.528103408270745
+          ],
+          [
+            "2025-12-26",
+            1.5281146394623155
+          ],
+          [
+            "2026-01-08",
+            1.9443090326072578
+          ],
+          [
+            "2026-01-20",
+            1.9445323178170695
+          ],
+          [
+            "2026-01-30",
+            1.9449466413390055
+          ],
+          [
+            "2026-02-11",
+            1.9450632456508974
+          ],
+          [
+            "2026-02-24",
+            1.9452145903071338
+          ],
+          [
+            "2026-03-06",
+            1.9449896511949938
+          ],
+          [
+            "2026-03-18",
+            1.9450384371159675
+          ],
+          [
+            "2026-03-30",
+            1.9449813732879069
+          ],
+          [
+            "2026-04-10",
+            1.9456264287778549
+          ],
+          [
+            "2026-04-22",
+            1.9458257366016227
+          ],
+          [
+            "2026-05-04",
+            1.9456322216337272
+          ],
+          [
+            "2026-05-14",
+            1.9458141592853222
+          ],
+          [
+            "2026-05-27",
+            1.9456504145593423
+          ],
+          [
+            "2026-06-08",
+            1.9459148878139476
+          ],
+          [
+            "2026-06-18",
+            1.9456293839738938
+          ],
+          [
+            "2026-07-01",
+            1.9452689675933406
+          ],
+          [
+            "2026-07-14",
+            1.9452273513809388
+          ],
+          [
+            "2026-07-24",
+            1.9455844431659484
+          ],
+          [
+            "2026-08-05",
+            1.945518681658637
+          ],
+          [
+            "2026-08-17",
+            1.945941526555515
+          ],
+          [
+            "2026-08-27",
+            1.9459007414919993
+          ],
+          [
+            "2026-09-09",
+            1.9457485405005468
+          ],
+          [
+            "2026-09-21",
+            1.9456125343192057
+          ],
+          [
+            "2026-10-01",
+            1.9456032993315837
+          ],
+          [
+            "2026-10-13",
+            5.901958278079483
+          ]
+        ],
+        "warnings": [
+          "54 price point(s) predate the earliest fiscal year — skipped",
+          "current point uses TTM EBITDA (consistent with the comps caliber); historical quantiles use each annual-report year's EBITDA, so the two carry a caliber basis difference (no quarterly data, so a rolling TTM cannot be reconstructed point by point).",
+          "per-year share counts are unavailable from the serving providers, so the historical band is computed on the run's own share count (383,890,040); a buyback or issuance history makes the earlier multiples approximate."
+        ],
+        "window_years": 5
+      },
+      "monte_carlo": {
+        "assumptions_used": {
+          "centered_on": "base-case DCF assumptions",
+          "ebitda_margin_std": 0.02,
+          "independent": false,
+          "mid_year_convention": false,
+          "n_simulations": 10000,
+          "revenue_growth_std": 0.02,
+          "seed": 4208202619,
+          "terminal_growth_std": 0.005,
+          "valid_simulations": 9991,
+          "variance_reduction": "antithetic_variates",
+          "wacc_std": 0.01
+        },
+        "current_price_percentile": 0.2,
+        "mean": 87.07,
+        "n_valid": 9991,
+        "percentiles": {
+          "10": 57.96,
+          "25": 68.45,
+          "5": 52.36,
+          "50": 82.72,
+          "75": 100.84,
+          "90": 122.96,
+          "95": 137.45
+        },
+        "std": 26.33
+      }
+    },
+    "thesis": {
+      "catalysts": [
+        "DCF band as a directional anchor: even the low end of the single DCF method, $65.70, sits well above the $34.42 market price, and the published ±25% band floor of $61.59 is roughly 79% above spot — the upside case does not depend on the withheld $82.12 midline.",
+        "Reverse-DCF mean-reversion: at the model's 5.91% WACC the market is discounting -8.35%/yr revenue growth held constant for 10 years, versus the model's own -0.4%/yr average fiscal-year fade; closing even part of that cash-flow gap is the core re-rating driver.",
+        "Discount-rate compression: holding the model's growth fade fixed, spot implies a 9.19% WACC against the model's 5.91%; any normalization of the market's required return toward 5.91% is direct equity upside.",
+        "Positive price momentum already underway: SKM has returned +66.4% over the trailing year and sits at 55% of its 52-week range — continued momentum at that pace is itself a driver of further re-rating.",
+        "Under-owned equity: the 13F holders on file account for only 6.8% of shares outstanding, leaving a long runway for incremental institutional sponsorship (no holder-concentration claim is made from this partial index)."
+      ],
+      "company_overview": "SK Telecom Co., Ltd. (SKM) is the U.S.-listed sponsored ADR of a South Korean communications operator that owns the network layer of the telecom value chain: it builds and operates wireless and fixed infrastructure and monetizes it through subscription connectivity and bundled services. Demand is driven by subscriber base, pricing/ARPU and data consumption, with sector economics defined by high fixed-cost network intensity, regulated pricing and long-lived capital commitments rather than cyclical volume swings. A segment revenue breakdown was not available for this issuer; see the latest annual report for business-line detail. A geographic revenue split was likewise not sourceable and is not stated here; the issuer is domiciled in South Korea per the market profile.\n\nWhat the run does quantify is the valuation consequence of that model: the single DCF method returned a $65.70–$98.55 implied range against a $34.42 market price, i.e., the equity trades below the model's entire published band of $61.59–$102.65. The durable moat is structural rather than growth-driven — a nationwide network footprint and spectrum position create replicable-cost barriers, subscriber switching costs and interconnection scale economies, and the model capitalizes that durability with a 3.00% perpetuity growth rate after a 10-year forecast window. Institutional sponsorship on file is thin: 13F holders cover only 6.8% of shares outstanding, which limits visibility into holder concentration. The investment case therefore rests less on a fresh demand cycle than on a discount-rate and under-ownership gap that the DCF frames as material.",
+      "competitor_analysis": "No peer-analysis output was produced for SKM in this run — the peer-screen / peer-financials fetch returned no usable comp set, so relative market-share, growth and multiple positioning cannot be quantified, and the subject's own comparable multiple was not supplied either. That is a data-coverage gap for this ticker, not a judgment about premium or discount. With no comps, the competitive read has to lean on the issuer's own valuation evidence: a DCF range of $65.70–$98.55 against a $34.42 market price, and a market-implied discount rate of 9.19% versus the model's 5.91% WACC. A peer-relative lens would normally arbitrate that spread; until a comp set is sourced, SKM's competitive positioning is best treated as unquantified versus peers.",
+      "key_takeaways": [
+        "Directional BUY with no published point: the one DCF method run ($65.70–$98.55, mid $82.12) sits entirely above the $34.42 market price, but at 2.4x spot it breaches the [0.5x, 2x] calibration band, so the pipeline withholds a point rather than fabricate one — confidence very_low.",
+        "The published ±25% band of $61.59–$102.65 places the whole fair-value frame above the current quote; that directional spread, not an interior level, is what makes the call BUY.",
+        "Reverse-DCF shows what is priced in: at the model's 5.91% WACC, $34.42 discounts -8.35%/yr revenue growth held flat for 10 years, versus the model's own -0.4%/yr average fiscal-year fade — the market is materially more pessimistic on cash flows than the model.",
+        "Momentum has already turned: +66.4% over the trailing year and 55% of the 52-week range, though still 26.4% below the 52-week high — the re-rating has begun but has not run to the DCF band.",
+        "Ownership is under-covered: 13F rows on file account for only 6.8% of shares outstanding, leaving room for broader institutional sponsorship without asserting holder concentration."
+      ],
+      "momentum_divergence_note": null,
+      "narrative": "SKM is a directional BUY with the point target deliberately withheld. The only valuation method that ran — a 10-year DCF at a 5.91% WACC and a 3.00% terminal growth rate — produced a $65.70 / $82.12 / $98.55 range, and the published ±25% band of $61.59–$102.65 sits entirely above the $34.42 market price. But a single method landing at 2.4x spot falls outside the [0.5x, 2x] calibration band, so the pipeline refuses to stamp a point on it; the direction, not a level, is the deliverable, and confidence is very_low.\n\nThe reverse-DCF explains the gap and is the crux of the call. Holding the model's growth fade fixed, $34.42 implies a 9.19% discount rate versus the model's 5.91% WACC; holding the WACC fixed, spot implies -8.35%/yr revenue growth held constant for 10 years, against the model's own fade averaging -0.4%/yr across the 10 forecast fiscal years. A flat rate and a declining fade schedule are different constructs, so the two are not directly comparable — but the market's single-variable solve is plainly more punitive on cash flows than the model, and that is where the directional upside sits.\n\nMomentum supports rather than contradicts the call: the shares have returned +66.4% over the trailing year while sitting at 55% of their 52-week range, still 26.4% below the 52-week high. Sponsorship is thin — the 13F rows on file cover only 6.8% of shares outstanding — so the equity remains under-owned relative to the re-rating already underway. With no peer comp set available in this run, the valuation argument rests on the DCF band and the reverse-DCF read alone; that is a genuine evidentiary limitation and the reason the call carries very_low confidence.",
+      "news_summary": "The last 30 days of coverage on SKM carried a neutral net sentiment of +0.00, with the catalyst pipeline categorizing zero discrete events across the 50 items spanning 2026-06-07 to 2026-09-28 — no M&A, guidance or regulatory item cleared the materiality bar. That is consistent with a name whose equity story is valuation- rather than event-driven: the shares have returned +66.4% over the trailing year while sitting at 55% of their 52-week range, still 26.4% below the 52-week high. A constructive retail-sentiment reading was captured on a single source and a single day, so it lacks the breadth to corroborate the +66.4% price move. Net, the news flow neither confirms nor challenges the DCF-versus-market gap — it leaves the valuation argument to stand on its own.",
+      "price_target": null,
+      "price_target_basis": "POINT TARGET WITHHELD (confidence=very_low): the only number available (the surviving method $82.12) would be fabricated, so it is not published (never fabricate a number). The BUY verdict reads off the nearest published range bound ($61.59), not the withheld interior point — the market sits below the whole range. Methods: DCF $82.12 (own range $65.70–$98.55, wt 0.85). Published target band $61.59–$102.65 (±25% single-method confidence dial). single method dcf $82 is 2.4x the market price, outside the [0.5x,2x] single-method calibration band — point target withheld (avoid stamping false precision on a lone far-from-market method); the band still provides a fundamental floor, with direction taken from the market implied.",
+      "recommendation": "BUY",
+      "risks": [
+        "Calibration risk: the lone DCF output of $82.12 is 2.4x the $34.42 market price and breaches the [0.5x, 2x] single-method band — precisely why the point is withheld and confidence is very_low; if the model overstates value, the $61.59 band floor is not a floor at all.",
+        "Discount-rate risk: the model's 5.91% WACC is far below the 9.19% the market implies when the growth fade is held fixed; if 9.19% is the correct cost of capital for a Korean telecom ADR, the DCF compresses toward $34.42 and the BUY case weakens materially.",
+        "Growth risk: the market's flat-rate solve of -8.35%/yr over the 10-year horizon is far harsher than the model's -0.4%/yr average fiscal-year fade; if the revenue decline proves structural rather than a mild fade, the valuation gap closes the wrong way.",
+        "Momentum-reversal risk: despite a +66.4% trailing-year return, the stock trades 26.4% below its 52-week high and at only 55% of its 52-week range — a name that has already given back 26.4% from the high can surrender gains quickly.",
+        "Terminal-value sensitivity: the 3.00% perpetuity growth rate applied after the 10-year window carries the bulk of the DCF's value; a lower long-run growth assumption for a declining-revenue operator is the fastest route to invalidating the $65.70–$98.55 range."
+      ],
+      "tagline": "SKM: DCF band floors ~79% over $34.42 spot; BUY",
+      "valuation_overview": "Only one valuation method was run for SKM — a 10-year DCF at a 5.91% WACC, a -0.4%/yr average fiscal-year revenue fade and a 3.00% perpetuity — so there is no comps or DDM cross-check to triangulate against, and the peer screen returned no usable comp set for this ticker in this run. The DCF stands alone at $65.70 / $82.12 / $98.55 (low/mid/high).\n\nBecause that single method lands at $82.12, 2.4x the $34.42 market price, it falls outside the [0.5x, 2x] single-method calibration band; the pipeline therefore withholds the point target rather than stamping false precision on a lone, far-from-market output, leaving confidence at very_low. What survives is the ±25% confidence band of $61.59–$102.65, which sits entirely above the current price and frames direction, not a level.\n\nThe model-versus-market divergence is explained by the reverse-DCF: holding the model's fade fixed, $34.42 implies a 9.19% discount rate versus the model's 5.91%; holding the WACC fixed, spot implies -8.35%/yr revenue growth held constant for 10 years. Those are separate single-variable solves, not a joint forecast — so the band, not a point, is the honest output."
+    },
+    "valuation_synthesis": {
+      "anchor_method": null,
+      "confidence": "very_low",
+      "cross_checks": [
+        {
+          "band_break_caveat": null,
+          "basis": "Own 5-year EV/EBITDA band (p25 1.53x · median 1.68x · p75 1.73x, 948 samples) applied to this run's TTM EBITDA (income.ebitda $3,281,652,345) through the EV→equity bridge (− net debt $6,111,195,309 − preferred $0 − NCI $43,484,738) ÷ 383,890,040 shares outstanding.",
+          "high": -1.2332372705472756,
+          "label": "Own 5-year EV/EBITDA",
+          "low": -2.9684106279559273,
+          "mid": -1.7010680248283074,
+          "name": "ev_ebitda_band",
+          "note": "Mean-reversion cross-check only — excluded from the published target blend, which keeps its existing method weighting."
+        }
+      ],
+      "current_price": 34.42,
+      "degradation_note": "single method dcf $82 is 2.4x the market price, outside the [0.5x,2x] single-method calibration band — point target withheld (avoid stamping false precision on a lone far-from-market method); the band still provides a fundamental floor, with direction taken from the market implied.",
+      "financial_sector": false,
+      "methods": [
+        {
+          "assumptions": "WACC 5.9% · 10yr growth -0%→3.0% · β0.63",
+          "confidence": 0.85,
+          "high": 98.54841689929819,
+          "low": 65.69894459953213,
+          "mid": 82.12368074941516,
+          "name": "dcf",
+          "rerating_ratio": null,
+          "source": "implied_price ± 20% (placeholder band, not a real distribution)"
+        }
+      ],
+      "mna_transition": false,
+      "outlier_methods": [],
+      "target_high": 102.65460093676894,
+      "target_low": 61.59276056206137,
+      "upside_downside": null,
+      "valuation_withheld": true,
+      "warnings": [],
+      "weighted_price": null
+    },
+    "valuation_withheld": true,
+    "withheld_reason": "contract_C7",
+    "xbrl_facts_snapshot": {}
+  },
+  "pinned_for": [
+    "C9"
+  ],
+  "source": "~/.finrobot/artifacts.db",
+  "ticker": "SKM",
+  "type": "equity_research",
+  "verdicts": {
+    "C1": false,
+    "C10a": true,
+    "C10b": false,
+    "C10c": false,
+    "C10d": false,
+    "C11": false,
+    "C12a": false,
+    "C12b": false,
+    "C12c": false,
+    "C13b": false,
+    "C13c": false,
+    "C14a": false,
+    "C14b": false,
+    "C1b": false,
+    "C2": false,
+    "C3": false,
+    "C4": false,
+    "C6": false,
+    "C6b": false,
+    "C7": false,
+    "C8": false,
+    "C9": true
+  }
+}
