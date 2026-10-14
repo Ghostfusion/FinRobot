@@ -159,6 +159,16 @@ def publish_band_cross_check(structured: dict[str, Any], raw_data: dict[str, Any
             if isinstance(band.get("sample_count"), (int, float))
             else None
         ),
+        # The band this row is filled FROM is the frozen technical band, which carries
+        # its own structural-break caveat — and this path is exactly the one the audited
+        # report took (the synthesis' own band fetch yielded no quantiles, so the row was
+        # published from here). Dropping the caveat here would publish the issuer's own
+        # multiple range as a clean signal over a window containing an EBITDA ramp.
+        band_break_caveat=(
+            band.get("classification_caveat")
+            if isinstance(band.get("classification_caveat"), str)
+            else None
+        ),
     )
     if check is None:
         return False

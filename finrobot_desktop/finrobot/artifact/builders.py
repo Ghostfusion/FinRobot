@@ -37,7 +37,9 @@ from finrobot.artifact.models import (
     ArtifactMeta,
     ArtifactOutputs,
 )
+from finrobot.engine.compute.coordinators.historical_extractor import EBITDA_CALIBER_LABEL
 from finrobot.engine.compute.operators.audit import (
+    attach_insider_flow_findings,
     attach_metric_authority_findings,
     attach_target_multiple_band_findings,
     publish_band_cross_check,
@@ -45,6 +47,10 @@ from finrobot.engine.compute.operators.audit import (
 from finrobot.engine.compute.operators.audit.claim_anchor import (
     anchor_claim_status,
     claim_status_note,
+)
+from finrobot.engine.compute.operators.audit.insider_flow import (
+    attach_correction_findings,
+    insider_flow_corrections,
 )
 from finrobot.engine.compute.operators.report_drift import (
     collect_numeric_leaves,
@@ -497,6 +503,32 @@ def _withhold_summary_note(structured_out: dict[str, Any], lang: str) -> str:
     )
 
 
+# Appended when a summary is clipped to its budget so a truncated tail is never
+# read as data. The audited NVDA artifact's summary_text was exactly 2000 chars
+# ending "… 2025-10" — a blind slice had cut a date mid-token, which a reader
+# takes for a real (impossible) period. Every budgeted slice goes through
+# _truncate_on_boundary instead of a bare ``[:limit]``.
+_TRUNCATION_MARKER = " … [truncated]"
+
+
+def _truncate_on_boundary(text: str, limit: int) -> str:
+    """Clip ``text`` to ``limit`` chars WITHOUT cutting a token, and mark the cut.
+
+    Prefers the last newline at/under the budget, then the last space; only an
+    unbroken run longer than the budget is hard-cut. The marker makes the
+    truncation explicit, so a partial number / date can never look like data.
+    """
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    cut = head.rfind("\n")
+    if cut < limit * 3 // 5:
+        cut = head.rfind(" ")
+    if cut <= 0:
+        cut = limit
+    return head[:cut].rstrip() + _TRUNCATION_MARKER
+
+
 def _summary_text(
     result: "PipelineResult",
     structured_out: dict[str, Any],
@@ -520,7 +552,7 @@ def _summary_text(
         # misattributed the cause.
         if summary_steps:
             return note
-        base = result.format_summary()[:2000]
+        base = _truncate_on_boundary(result.format_summary(), 2000)
         return f"{note}\n\n{base}" if base else note
     # A single-method artifact's summary must be ABOUT that method and stay a
     # SUMMARY: surface the pipeline's deterministic calc-step narrative (e.g.
@@ -538,8 +570,8 @@ def _summary_text(
     for step in summary_steps:
         text = (result.steps.get(step) or "").strip()
         if text:
-            return text[:4000]
-    return result.format_summary()[:2000]
+            return _truncate_on_boundary(text, 4000)
+    return _truncate_on_boundary(result.format_summary(), 2000)
 
 
 def _make_base_compute_version(
@@ -933,7 +965,7 @@ def build_earnings_artifact(
         compute_version=_make_base_compute_version("earnings_surprise_v1"),
         outputs=ArtifactOutputs(
             structured=structured_out,
-            summary_text=result.format_summary()[:2000],
+            summary_text=_truncate_on_boundary(result.format_summary(), 2000),
             warnings=_collect_warnings(result) + drift_warnings,
         ),
         meta=ArtifactMeta(
@@ -1133,6 +1165,88 @@ def _fill_narrative_fallbacks(
     return []
 
 
+_NARRATIVE_AUDIT_FIELDS: tuple[str, ...] = (
+    "key_takeaways",
+    "risks",
+    "catalysts",
+    "narrative",
+    "valuation_overview",
+    "news_summary",
+    "competitor_analysis",
+    "company_overview",
+)
+
+
+def _narrative_texts_for_audit(structured_out: dict[str, Any]) -> list[str]:
+    """The LLM-authored prose fields a narrative verifier must scan.
+
+    Read from ``structured.thesis`` — never ``summary_text``, which repeats the
+    same prose and would only duplicate findings. A list field (key_takeaways /
+    risks / catalysts) contributes each string entry.
+    """
+    thesis = structured_out.get("thesis")
+    if not isinstance(thesis, dict):
+        return []
+    texts: list[str] = []
+    for key in _NARRATIVE_AUDIT_FIELDS:
+        value = thesis.get(key)
+        if isinstance(value, str):
+            texts.append(value)
+        elif isinstance(value, list):
+            texts.extend(item for item in value if isinstance(item, str))
+    return texts
+
+
+def _correct_insider_flow_claims(
+    structured_out: dict[str, Any], result: "PipelineResult"
+) -> list[Any]:
+    """Rewrite narrative insider-flow figures that name the wrong metric.
+
+    The prompt forbids quoting anything but the computed purchase leg and the audit
+    verifier flags a violation, but a finding still ships the wrong number inside a
+    caveat. The audited NVDA thesis printed the DCF target as an insider purchase
+    figure ("$259.87 of purchases" with a computed leg of $0) and the next live run
+    repeated it with the new target ("$231.38 of purchases", this time also as the
+    "largest single sale"), so the prompt rule is not sufficient on its own.
+
+    Corrects the thesis narrative fields AND the LLM step texts (``summary_text`` is
+    assembled from them), before the ``llm_narrative`` mirror is built, so every derived
+    copy agrees. The replacement is always the COMPUTED leg — never a guess. Returns the
+    applied corrections so the caller can publish them as ``review`` findings AT THE AUDIT
+    SITE (after the numeric-audit block is built): the report page renders findings, not
+    the warning list, so a warning alone would leave the edit invisible to a reader.
+    """
+    thesis = structured_out.get("thesis")
+    ownership = structured_out.get("ownership_governance")
+    if not isinstance(thesis, dict) or not isinstance(ownership, dict):
+        return []
+    applied: list[Any] = []
+
+    def _apply(text: str) -> str:
+        corrected, corrections = insider_flow_corrections(text, ownership)
+        applied.extend(corrections)
+        return corrected
+
+    for key in _NARRATIVE_AUDIT_FIELDS:
+        value = thesis.get(key)
+        if isinstance(value, str):
+            thesis[key] = _apply(value)
+        elif isinstance(value, list):
+            items = [item if not isinstance(item, str) else _apply(item) for item in value]
+            if items != value:
+                thesis[key] = items
+    for name, step_text in list(result.steps.items()):
+        if isinstance(step_text, str):
+            corrected = _apply(step_text)
+            if corrected != step_text:
+                result.steps[name] = corrected
+    if not applied:
+        return []
+    # The findings are attached at the audit site, AFTER ``_attach_numeric_audit`` has
+    # built the numeric_audit block — writing them here would be overwritten by it.
+    return applied
+
+
 def build_equity_research_artifact(
     result: "PipelineResult",
     ticker: str,
@@ -1202,6 +1316,16 @@ def build_equity_research_artifact(
     if ownership is not None:
         structured_out["ownership_governance"] = _safe_dump(ownership)
 
+    # Label the annual EBITDA caliber where the report compares the TTM figure with
+    # the annual bars: the bars are the provider's reported EBITDA per fiscal year,
+    # while the TTM figure is operating income + D&A — two different D&A calibers,
+    # not a data error (NVDA FY2026 implies ~$14B of D&A vs $3.7B TTM). Frozen onto
+    # the payload as a sibling key (no HistoricalMetrics model change) so the chart
+    # chapter can disclose it; only when a history actually exists.
+    historical_out = structured_out.get("historical_metrics")
+    if isinstance(historical_out, dict) and historical_out.get("years"):
+        historical_out["ebitda_caliber"] = EBITDA_CALIBER_LABEL
+
     # Forward-estimate provenance (FY1 consensus the comps-forward path used).
     # The numbers themselves already ride inside valuation_synthesis.methods; we
     # persist ONLY the provenance — which fiscal year, what source, how confident
@@ -1260,6 +1384,11 @@ def build_equity_research_artifact(
         "catalysts",
         "risks",
     )
+    # Correct a narrative flow figure that names the WRONG metric BEFORE the mirror and
+    # the drift scan read it: the prompt rule that forbids it did not hold on the live
+    # run either, and a caveated wrong number is still a wrong number in Key Takeaways.
+    flow_corrections = _correct_insider_flow_claims(structured_out, result)
+
     thesis_dict = structured_out.get("thesis") or {}
     llm_narrative: dict[str, Any] = {
         k: thesis_dict[k] for k in _LLM_NARRATIVE_KEYS if k in thesis_dict
@@ -1311,6 +1440,16 @@ def build_equity_research_artifact(
     # at ``review``. The canonical value is still published (that is what the
     # conflict is measured against), so this annotates and never withholds.
     audit_warnings += attach_metric_authority_findings(structured_out, raw_data)
+
+    # Cross-check the narrative's aggregate insider-flow figures against the
+    # computed legs (owner review 2026-10-13: the audited NVDA thesis printed
+    # "$259.87 of purchases" — the DCF target — while the computed gross purchase
+    # leg is $0 and the same report's Risks section said "$0"). Reads the
+    # ownership block itself; annotates ``numeric_audit`` and never withholds.
+    audit_warnings += attach_correction_findings(structured_out, flow_corrections)
+    audit_warnings += attach_insider_flow_findings(
+        structured_out, _narrative_texts_for_audit(structured_out)
+    )
 
     # Top-level ``valuation_withheld`` is the single "point target withheld" signal,
     # and it must be cause-INDEPENDENT. _attach_numeric_audit sets it for the
@@ -1444,7 +1583,7 @@ def build_ic_memo_artifact(
         compute_version=_make_base_compute_version("ic_memo_dcf_lbo_v1", formula_warnings),
         outputs=ArtifactOutputs(
             structured=structured_out,
-            summary_text=result.format_summary()[:2000],
+            summary_text=_truncate_on_boundary(result.format_summary(), 2000),
             warnings=_collect_warnings(result) + audit_warnings,
         ),
         meta=ArtifactMeta(

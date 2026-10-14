@@ -85,6 +85,21 @@ _MIN_PEER_YEARS_FOR_MEDIAN = 3
 # full fiscal year + the normal reporting lag behind the TTM window.
 _ANNUAL_SERIES_MAX_LAG_MONTHS = 15
 
+# The annual bars and the report's TTM EBITDA are DIFFERENT calibers, and the
+# report compares them side by side: the bars take the provider's own-reported
+# ``ebitda`` field verbatim per fiscal year, while the TTM figure is computed as
+# operating income + D&A (engine/primitives/ebitda.py). The two legs therefore
+# treat D&A differently — NVDA FY2026's provider EBITDA implies ~$14B of D&A
+# against $3.7B in the TTM figure — so the gap is a definitional difference, not
+# a data error. Frozen onto every historical payload (builders.py) as
+# ``historical_metrics.ebitda_caliber`` so the report can label the caliber where
+# it puts the TTM figure beside the bars.
+EBITDA_CALIBER_LABEL = (
+    "Annual bars are the provider's reported EBITDA per fiscal year; the TTM EBITDA "
+    "shown beside them is computed as operating income + D&A — two different D&A "
+    "calibers, not a data error"
+)
+
 
 async def fetch_historical_metrics(
     data_layer: DataLayer,

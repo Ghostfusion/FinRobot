@@ -923,11 +923,23 @@ def test_headline_from_summary_plain_prose_matches_legacy_slice() -> None:
     assert _headline_from_summary(prose) == prose[:120] == prose
 
 
-def test_headline_from_summary_truncates_long_prose_to_120() -> None:
+def test_headline_from_summary_truncates_long_prose_on_a_boundary() -> None:
+    """A blind [:120] cut a long line mid-token (the audited NVDA summary ended
+    "… 2025-10" — a date the reader takes as data). The preview now cuts on a
+    whitespace boundary when it keeps most of the budget, and always marks the
+    cut with an ellipsis."""
+    prose = "Revenue rose 12% on cloud demand while operating margin held at 44.0% and " + "z" * 200
+    out = _headline_from_summary(prose)
+    assert out.endswith("…")
+    assert out == "Revenue rose 12% on cloud demand while operating margin held at 44.0% and…"
+
+
+def test_headline_from_summary_hard_cuts_an_unbroken_run_with_a_marker() -> None:
+    """An unbroken token longer than the budget can only be hard-cut — it is
+    still marked, so a partial figure never reads as data."""
     long_line = "Microsoft " + "x" * 300
     out = _headline_from_summary(long_line)
-    assert len(out) == 120
-    assert out == long_line[:120]
+    assert out == long_line[:120] + "…"
 
 
 def test_headline_from_summary_all_scaffolding_falls_back_to_slice() -> None:

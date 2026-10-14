@@ -34,6 +34,7 @@ from finrobot.engine.models.financial import (
     PeerComps,
     ValuationMetrics,
 )
+from finrobot.engine.models.sec import OwnershipGovernanceAnalysis
 from finrobot.engine.pipelines.base import PipelineResult
 
 UTC = timezone.utc
@@ -477,3 +478,70 @@ def test_price_snapshot_derived_field_split_fails_build():
     }
     with pytest.raises(ValueError, match="price snapshot as-of split"):
         _build(result, "X")
+
+
+# ---------------------------------------------------------------------------
+# Insider-flow attribution (defect #1): the narrative's AGGREGATE purchase figure
+# must be the computed gross purchase leg. The audited NVDA report printed
+# "$259.87 of purchases vs $967.6M of sales" — $259.87 is the DCF price TARGET,
+# and the computed gross purchase leg is $0 (the same report's Risks said "$0").
+# Every token matched a real numeric leaf, so only a RELATIONSHIP check can see it.
+# The verifier annotates (review) and never withholds.
+# ---------------------------------------------------------------------------
+
+
+def _ownership(*, buy: float | None, sell: float | None):
+    return OwnershipGovernanceAnalysis(
+        generated_at=datetime(2026, 6, 6, tzinfo=UTC),
+        insider_buy_value=buy,
+        insider_sell_value=sell,
+        insider_window_days=90,
+    )
+
+
+def test_insider_purchase_figure_contradicting_the_computed_leg_is_corrected():
+    """A narrative purchase figure that names another metric is CORRECTED, not just
+    flagged: the audited report's "$259.87 of purchases" (the DCF target) reached Key
+    Takeaways, and the live run after the prompt rule repeated it with the new target.
+    The published prose therefore carries the computed leg and a disclosure; nothing
+    wrong ships, so there is no finding left to raise."""
+    result = _result(_fd(industry="Semiconductors"))
+    result.structured_data["ownership_governance_analysis"] = _ownership(
+        buy=0.0, sell=967_600_000.0
+    )
+    result.structured_data["thesis"]["key_takeaways"] = [
+        "Insiders showed $259.87 of purchases vs $967.6M of sales over the last 90 days."
+    ]
+    art = _build(result, "NVDA")
+
+    takeaways = art.outputs.structured["thesis"]["key_takeaways"]
+    published = " ".join(takeaways)
+    assert "$259.87" not in published
+    assert "$0 of purchases" in published
+    # The sale leg is untouched — only the misattributed figure moves.
+    assert "$967.6M of sales" in published
+    # The reader is told the narrative was edited — as a warning AND as a caveat finding
+    # (a warning line alone is not rendered on the report page).
+    assert any("corrected" in w.lower() for w in art.outputs.warnings)
+    checks = {
+        (f["field_key"], f["check"]) for f in art.outputs.structured["numeric_audit"]["findings"]
+    }
+    assert ("ownership_governance.insider_buy_value", "insider_flow_amount_corrected") in checks
+    assert ("ownership_governance.insider_buy_value", "insider_flow_amount_mismatch") not in checks
+
+
+def test_insider_flow_verifier_is_silent_when_the_legs_reproduce():
+    """A narrative whose aggregate flow figures match the computed legs adds no
+    finding — the verifier never fires on a consistent report."""
+    result = _result(_fd(industry="Semiconductors"))
+    result.structured_data["ownership_governance_analysis"] = _ownership(
+        buy=0.0, sell=967_600_000.0
+    )
+    result.structured_data["thesis"]["key_takeaways"] = [
+        "Insiders reported $0 of purchases and $967.6M of sales over the last 90 days."
+    ]
+    art = _build(result, "NVDA")
+    audit = art.outputs.structured["numeric_audit"]
+    assert ("ownership_governance.insider_buy_value", "insider_flow_amount_mismatch") not in {
+        (f["field_key"], f["check"]) for f in audit["findings"]
+    }

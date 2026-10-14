@@ -13,6 +13,10 @@ from finrobot.engine.compute.operators.audit.currency_caliber import (
     audit_foreign_issuer_usd_tags,
 )
 from finrobot.engine.compute.operators.audit.ev_bridge import audit_ev_bridge
+from finrobot.engine.compute.operators.audit.insider_flow import (
+    attach_insider_flow_findings,
+    insider_flow_amount_findings,
+)
 from finrobot.engine.compute.operators.audit.metric_authority import (
     attach_metric_authority_findings,
     metric_authority_findings,
@@ -39,6 +43,7 @@ from finrobot.engine.models.numeric_claim import ArtifactAudit, Finding
 
 __all__ = [
     "MomentumContext",
+    "attach_insider_flow_findings",
     "attach_metric_authority_findings",
     "attach_target_multiple_band_findings",
     "publish_band_cross_check",
@@ -53,6 +58,7 @@ __all__ = [
     "audit_target_multiple_band",
     "audit_ttm_period",
     "compute_momentum_context",
+    "insider_flow_amount_findings",
     "is_momentum_divergent",
     "metric_authority_findings",
     "target_multiple_band_findings_from_structured",

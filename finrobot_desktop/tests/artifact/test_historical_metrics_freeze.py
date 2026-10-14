@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from typing import Any, cast
 
 from finrobot.artifact.builders import build_equity_research_artifact
+from finrobot.engine.compute.coordinators.historical_extractor import EBITDA_CALIBER_LABEL
 from finrobot.engine.models.financial import (
     BalanceSheet,
     FinancialData,
@@ -102,6 +103,25 @@ def test_equity_research_freezes_historical_metrics() -> None:
         "financing_cash_flow",
     ):
         assert key in hm, f"frozen historical_metrics missing chart series {key!r}"
+
+
+def test_frozen_historical_payload_labels_the_ebitda_caliber() -> None:
+    """The annual EBITDA bars (the provider's reported EBITDA per fiscal year) and
+    the report's TTM EBITDA (operating income + D&A) are different calibers. The
+    frozen payload carries the label so the chart chapter can disclose it where the
+    two are compared — a definitional disclosure, never an invented number."""
+    result = PipelineResult(
+        steps={"data_collection": "ok"},
+        structured_data={
+            "data_collection": _financial_data(),
+            "historical_metrics": _historical(),
+        },
+    )
+    artifact = build_equity_research_artifact(result, "AAPL", cast(Any, None))
+
+    hm = artifact.outputs.structured["historical_metrics"]
+    assert hm["ebitda_caliber"] == EBITDA_CALIBER_LABEL
+    assert "operating income + D&A" in hm["ebitda_caliber"]
 
 
 def test_historical_metrics_absent_when_pipeline_lacks_it() -> None:

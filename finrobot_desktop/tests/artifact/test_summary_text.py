@@ -14,6 +14,7 @@ away) is the last resort, kept for pipelines that declare no summary_steps
 
 from __future__ import annotations
 
+import re
 from typing import Any, cast
 
 from finrobot.artifact.builders import _summary_text
@@ -173,3 +174,31 @@ def test_build_ddm_artifact_summary_is_calc_line_not_generic_report() -> None:
     assert art.outputs.summary_text == _CALC
     assert "# FinRobot Analysis Report" not in art.outputs.summary_text
     assert "Recommendation:" not in art.outputs.summary_text
+
+
+def test_long_summary_is_truncated_on_a_boundary_and_marked() -> None:
+    """A >2000-char format_summary() must not be cut mid-token: the audited NVDA
+    artifact's summary_text was exactly 2000 chars ending "… 2025-10", a truncated
+    date a reader takes as data. The cut lands on a whitespace boundary and the
+    truncation is marked explicitly."""
+    # Space-joined date tokens spanning well past the 2000-char budget, so a blind
+    # [:2000] would slice one token in half — exactly the audited defect.
+    quarter_ends = " ".join(f"2025-10-{day:02d}" for day in range(1, 29))
+    body = (quarter_ends + " ") * 40
+    result = PipelineResult(steps={"data_collection": body})
+    full = result.format_summary()
+    assert len(full) > 2000
+
+    summary = _summary_text(result, {}, cast(Any, None))
+    assert summary.endswith(" … [truncated]")
+    prefix = summary[: -len(" … [truncated]")]
+    # The kept text is verbatim (never re-joined) and ends on a whole token.
+    assert prefix in full
+    assert re.search(r"\d{4}-\d{2}-\d{2}$", prefix)
+
+
+def test_short_summary_is_not_marked() -> None:
+    """A summary under the budget passes through unchanged — no marker."""
+    summary = _summary_text(_result(), {}, cast(Any, None))
+    assert "# FinRobot Analysis Report" in summary
+    assert "[truncated]" not in summary

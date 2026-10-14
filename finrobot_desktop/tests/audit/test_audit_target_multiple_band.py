@@ -183,6 +183,30 @@ class TestPublishBandCrossCheck:
         # (10.5908 × 1,463.5M − 2,734.6M − 863.4M) / 98,653,384 = 120.64
         assert rows[0]["mid"] == 120.64020773758054
 
+    def test_publishes_the_bands_structural_break_caveat_with_the_row(self):
+        """The 2026-10-14 NVDA run took THIS path (the synthesis' own band fetch
+        returned no quantiles), and the row published the issuer's own range as a clean
+        signal while the frozen chapter band knew the window contains a 5.9x EBITDA
+        step. The caveat must ride with the row it annotates."""
+        structured, raw = _structured_and_raw()
+        caveat = "the band's cheap/fair/expensive classification is computed on a window containing a structural EBITDA break"
+        structured["technical_analysis"]["historical_bands"]["classification_caveat"] = caveat
+        structured["valuation_synthesis"] = {"current_price": 124.42, "cross_checks": []}
+
+        assert publish_band_cross_check(structured, raw) is True
+        row = structured["valuation_synthesis"]["cross_checks"][0]
+        assert row["band_break_caveat"] == caveat
+        # A consumer that ignores the field still cannot read the row as clean.
+        assert caveat in row["basis"]
+
+    def test_a_clean_window_publishes_a_clean_row(self):
+        structured, raw = _structured_and_raw()
+        structured["valuation_synthesis"] = {"current_price": 124.42, "cross_checks": []}
+
+        assert publish_band_cross_check(structured, raw) is True
+        row = structured["valuation_synthesis"]["cross_checks"][0]
+        assert row["band_break_caveat"] is None
+
     def test_never_replaces_a_row_the_synthesis_already_built(self):
         structured, raw = _structured_and_raw()
         mine = {"name": "ev_ebitda_band", "mid": 999.0}

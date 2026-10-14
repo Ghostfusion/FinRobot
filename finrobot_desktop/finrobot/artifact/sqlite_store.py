@@ -182,6 +182,29 @@ def _strip_inline_markdown(line: str) -> str:
     return line.strip()
 
 
+# Appended when a preview is clipped to its budget. A blind ``[:limit]`` can end
+# mid-token (``… 2025-10`` reads as a date / partial number); the preview cuts on
+# the last whitespace and marks the cut so a partial figure is never read as data.
+_PREVIEW_ELLIPSIS = "…"
+
+
+def _clip_preview(text: str, limit: int = 120) -> str:
+    """Clip a headline preview to ``limit`` chars WITHOUT cutting a token mid-word.
+
+    Cuts on the last space at/under the budget when that keeps most of the
+    preview (≥ 60% of the budget); an unbroken run longer than the budget is
+    hard-cut. Either way an ellipsis marks the cut, so a partial figure is never
+    read as data.
+    """
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    cut = head.rfind(" ")
+    if cut < limit * 3 // 5:
+        cut = limit
+    return head[:cut].rstrip() + _PREVIEW_ELLIPSIS
+
+
 def _headline_from_summary(summary_text: str) -> str:
     """Derive a plain-text summary preview from an artifact's ``summary_text``.
 
@@ -196,9 +219,11 @@ def _headline_from_summary(summary_text: str) -> str:
 
     Skip the heading / horizontal-rule / blank scaffolding lines and preview the
     first line carrying real prose, stripped of light inline markdown. Fall back
-    to the raw ``[:120]`` slice when every line is scaffolding, so the result is
+    to the (boundary-safe) slice when every line is scaffolding, so the result is
     never emptier than the old behaviour produced (the caller keeps its
-    ``or artifact.id`` guard for a genuinely empty summary).
+    ``or artifact.id`` guard for a genuinely empty summary). Every preview is
+    clipped by ``_clip_preview`` — never a bare ``[:120]`` — so a partial token
+    (``… 2025-10``) can't leak into the headline column.
     """
     for raw_line in summary_text.splitlines():
         line = raw_line.strip()
@@ -212,8 +237,8 @@ def _headline_from_summary(summary_text: str) -> str:
             continue
         cleaned = _strip_inline_markdown(line)
         if cleaned:
-            return cleaned[:120]
-    return summary_text[:120]
+            return _clip_preview(cleaned)
+    return _clip_preview(summary_text)
 
 
 def _row_to_summary(row: tuple[Any, ...]) -> ArtifactSummary:
