@@ -1479,16 +1479,27 @@ def build_equity_research_artifact(
     # the point on its OWN terms too — single-method out-of-calibration / method
     # divergence (RIVN) — which nulls thesis.price_target via resolve_canonical_thesis
     # yet left the top-level flag at None. Same withheld state, two values depending
-    # on cause. Mirror the synthesis flag so every withhold path agrees (the contract
-    # judge _is_withheld and _summary_text both read this).
+    # on cause.
+    #
+    # ONE CONVENTION FOR BOTH WRITERS (design §4.4). This mirror used to emit only the
+    # True, so a report that withheld nothing carried "no opinion" here while the
+    # synthesis said "not withheld" — 63 of the 98 stored equity artifacts, and no
+    # reader ever noticed because every consumer tests ``is True``. The pair is now
+    # reconciled by construction, in BOTH directions: the point is withheld iff either
+    # author withheld it, and both slots then say so. The synthesis slot is written
+    # too, because the audit path can withhold the point without the dial knowing
+    # (the dial's own record would otherwise go stale, which is the same one-quantity-
+    # two-definitions defect one level down).
     vs_struct = structured_out.get("valuation_synthesis")
-    if (
-        isinstance(vs_struct, dict)
-        and vs_struct.get("valuation_withheld") is True
-        and structured_out.get("valuation_withheld") is not True
-    ):
-        structured_out["valuation_withheld"] = True
-        structured_out.setdefault("withheld_reason", "valuation_synthesis_dial")
+    if isinstance(vs_struct, dict):
+        withheld = (
+            vs_struct.get("valuation_withheld") is True
+            or structured_out.get("valuation_withheld") is True
+        )
+        structured_out["valuation_withheld"] = withheld
+        vs_struct["valuation_withheld"] = withheld
+        if withheld:
+            structured_out.setdefault("withheld_reason", "valuation_synthesis_dial")
 
     # data_collection is ALSO an LLM free-text narrative (the data agent's
     # prose summary) and format_summary() puts it FIRST — the artifact's

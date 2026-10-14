@@ -272,6 +272,19 @@ exact payload paths (verified against stored artifacts, not guessed). IDs `C8+` 
   19:59, `C6`/`C6b` at 20:27). What remains for `C11` after unification is regression protection:
   catching a second writer re-introduced. This is §9.5's expand → migrate → contract applied to a
   clause whose catch list is the writer, not the reader.
+- **Shipped 2026-10-14** — the unification is in `artifact/builders.py`: the top-level
+  mirror writes BOTH states and syncs the synthesis slot, so the point target is withheld iff
+  either author withheld it and both slots then say so. The synthesis slot is written too
+  because the audit path can withhold the point without the dial knowing (JPM's blocked EV field),
+  which would otherwise leave the dial's record stale — the same defect one level down. Verified
+  against the corpus with two live runs written after the change: GMED `art_…21:57:41` (target
+  $90.37 PUBLISHED) carries root `False` + synthesis `False`, the explicit value the old writer
+  never emitted; THC `art_…21:54:33` (withheld, `contract_C7`) carries `True` + `True`. The
+  scanner then reads **63 of 107 with the catch list ending at `…20:27:40`** — the span has
+  closed and the newest two artifacts are quiet, which is the promotion criterion above. The A/B
+  DOM check (pre-change `c75ac2` vs post-change `81fd64`) is identical on every probed surface:
+  `report-audit-banner` 1, `football-upside-withheld` 1, `report-data-authority` 1, cover text
+  unchanged.
 
 ### 4.5 `C12` — recency and window closure
 - **severity** two-threshold (§9.7, locked): `error_if` when the stale or undated item carried a
