@@ -660,6 +660,82 @@ async def test_catalyst_analysis_produces_catalyst_analysis_output(mock_deps):
 
 
 @pytest.mark.asyncio
+async def test_catalyst_analysis_publishes_feed_windows(mock_deps):
+    """§B/x1: the news and SEC 8-K coverage windows are published with real
+    dates, and a stale 8-K index raises the staleness warning — so a reader can
+    see the feed's blindness (the 2026-09-28 buyback was invisible to it)."""
+    from finrobot.engine.pipelines.equity_research import _execute_catalyst_analysis
+    from finrobot.engine.compute.coordinators.news import NewsItem
+
+    _now = datetime.now(tz=timezone.utc)
+    news_result = DataResult(
+        data={
+            "news_items": [
+                {
+                    "title": "AAPL news",
+                    "source": "Reuters",
+                    "published": _now.isoformat(),
+                    "url": "https://example.com/1",
+                }
+            ]
+        },
+        provider="fake",
+        ticker="AAPL",
+        data_type="news",
+        timestamp=_now,
+    )
+    mock_deps.data_layer.fetch = AsyncMock(return_value=news_result)
+    classified = [
+        NewsItem(
+            title="AAPL news",
+            source="Reuters",
+            published=_now,
+            url="https://example.com/1",
+            category="earnings",
+            sentiment="positive",
+            importance=4,
+            summary="Apple news.",
+        )
+    ]
+    structured_context = {
+        "sec_filings": {
+            "8k_events": [
+                {"filing_date": "2026-09-03", "items": ["Item 8.01", "Item 9.01"]},
+            ]
+        }
+    }
+    mock_agent = MagicMock()
+    with patch(
+        "finrobot.engine.pipelines.equity_research.classify_news",
+        return_value=classified,
+    ):
+        output = await _execute_catalyst_analysis(
+            mock_agent, mock_deps, "prompt", structured_context, "AAPL"
+        )
+
+    assert "News feed window:" in output.text
+    assert "SEC 8-K index:" in output.text
+    # Real dates from both feeds.
+    assert "2026-09-03" in output.text
+    assert _now.date().isoformat() in output.text
+    # Newest 8-K predates the news window → staleness warning is published.
+    assert "WARNING:" in output.text
+    assert "stale relative to the news window" in output.text
+
+    # The windows + SEC split are published on the structured analysis too, so the
+    # artifact (and the thesis prompt) can see them.
+    analysis = output.structured
+    assert analysis.news_window is not None
+    assert analysis.news_window["count"] == 1
+    assert analysis.news_window["provider"] == "Reuters"
+    assert analysis.sec_8k_window is not None
+    assert analysis.sec_8k_window["count"] == 1
+    assert analysis.sec_8k_window["newest"] == "2026-09-03"
+    assert analysis.sec_8k_category_breakdown == {"other": 1}
+    assert analysis.sec_8k_staleness_warning is not None
+
+
+@pytest.mark.asyncio
 async def test_catalyst_analysis_empty_news(mock_deps):
     """_execute_catalyst_analysis handles no news gracefully."""
     from finrobot.engine.pipelines.equity_research import _execute_catalyst_analysis
@@ -2541,9 +2617,43 @@ class TestSec8kCatalystMateriality:
         assert cat.headline == "SEC 8-K: Executive / director change"
         assert cat.category == "management"
 
-    def test_material_agreement_categorized_acquisition(self):
+    def test_material_agreement_not_categorized_acquisition(self):
+        """§B: Item 1.01 is a MATERIAL AGREEMENT (SEC item semantics), NOT an
+        acquisition. The old rule mapped 1.01/1.02/2.01 → "acquisition", which
+        mislabelled the 2026-08-17 NVDA 8-K (Items 1.01+2.03+7.01+9.01) as an
+        Acquisition catalyst."""
         from finrobot.engine.pipelines.equity_research import _sec_8k_to_catalyst
 
         cat = _sec_8k_to_catalyst({"items": ["Item 1.01", "Item 9.01"]})
-        assert cat.category == "acquisition"
+        assert cat.category == "other"
         assert "Material agreement entered" in cat.headline
+
+    def test_material_agreement_and_obligation_carry_their_meaning(self):
+        """An 8-K with Items 1.01+2.03+7.01+9.01 is a material agreement plus a
+        financial obligation — not an acquisition, not a regulatory event — and
+        says so in the headline (routine 7.01/9.01 dropped)."""
+        from finrobot.engine.pipelines.equity_research import _sec_8k_to_catalyst
+
+        cat = _sec_8k_to_catalyst({"items": ["Item 1.01", "Item 2.03", "Item 7.01", "Item 9.01"]})
+        assert cat.category == "other"
+        assert cat.headline == (
+            "SEC 8-K: Material agreement entered; Material financial obligation created"
+        )
+
+    def test_financial_obligation_alone_is_other_not_regulatory(self):
+        """A material financial obligation (2.03) is not a regulatory event; it
+        must land in the honest "other" bucket, never "regulatory"."""
+        from finrobot.engine.pipelines.equity_research import _sec_8k_to_catalyst
+
+        cat = _sec_8k_to_catalyst({"items": ["Item 2.03", "Item 9.01"]})
+        assert cat.category == "other"
+        assert "Material financial obligation created" in cat.headline
+
+    def test_acquisition_item_2_01_is_categorized_acquisition(self):
+        """Item 2.01 (completion of acquisition/disposition) IS the acquisition
+        trigger and must still route to the acquisition category."""
+        from finrobot.engine.pipelines.equity_research import _sec_8k_to_catalyst
+
+        cat = _sec_8k_to_catalyst({"items": ["Item 2.01", "Item 9.01"]})
+        assert cat.category == "acquisition"
+        assert "Acquisition or disposition completed" in cat.headline

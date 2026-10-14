@@ -30,6 +30,11 @@ CATALYST_CATEGORIES: dict[str, str] = {
     "acquisition": "M&A, partnership, strategic investment, divestiture",
     "management": "CEO/CFO change, board reshuffle, reorganization",
     "market": "Market share shift, pricing change, competitive dynamics",
+    # Honest catch-all for an SEC 8-K item that is genuinely material but matches
+    # none of the buckets above (material agreement, financial obligation, other
+    # events …). Kept distinct from "regulatory" so that "regulatory" means only
+    # regulatory (FDA/antitrust/compliance/settlement).
+    "other": "Other material event with no matching catalyst category",
 }
 
 _NEWS_TO_CATALYST: dict[str, str] = {
@@ -936,15 +941,123 @@ def compute_expected_impact(events: list[CatalystEvent]) -> list[CatalystEvent]:
     return [s[1] for s in scored]
 
 
-def summarize_catalyst_outlook(events: list[CatalystEvent]) -> dict[str, Any]:
+# Marker stamped into an SEC 8-K catalyst's `reasoning` by
+# equity_research._sec_8k_to_catalyst. It is the one in-memory signal that
+# distinguishes a company-filed 8-K from a news-derived catalyst (CatalystEvent
+# carries no `source` field), so summarize_catalyst_outlook can split the
+# category counts by source without a schema change to the shared model.
+SEC_8K_SOURCE_MARKER = (
+    "Source is a company-filed SEC 8-K current report; treated as primary-source catalyst context."
+)
+
+
+def _is_sec_8k_event(event: CatalystEvent) -> bool:
+    """True iff `event` was produced by equity_research._sec_8k_to_catalyst."""
+    return event.reasoning.startswith(SEC_8K_SOURCE_MARKER)
+
+
+def _utc(dt: datetime) -> datetime:
+    """Return `dt` as UTC, assuming UTC for a naive timestamp."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
+def _filing_date(event: dict[str, Any]) -> datetime | None:
+    """Parse an 8-K index event's filing date, or None when absent/unparseable."""
+    raw = event.get("filing_date") or event.get("filed_at")
+    if not raw:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
+    return _utc(dt)
+
+
+def build_news_window(news_items: list[NewsItem]) -> dict[str, Any]:
+    """Coverage window of the news feed that fed catalyst extraction.
+
+    count/earliest/latest describe the FETCHED feed, not the de-duplicated
+    catalyst list: a ~20-item same-day provider window is structurally blind to
+    anything older (e.g. a buyback approved weeks earlier never appears). The
+    window is published so that blindness is visible instead of implied. `provider`
+    is the feed's item source when uniform (else ``"multiple"``); ``sources`` keeps
+    the distinct outlets either way.
+    """
+    dates = [_utc(item.published) for item in news_items if item.published is not None]
+    sources = sorted({item.source for item in news_items if item.source})
+    return {
+        "count": len(news_items),
+        "earliest": min(dates).isoformat() if dates else None,
+        "latest": max(dates).isoformat() if dates else None,
+        "provider": sources[0] if len(sources) == 1 else ("multiple" if sources else None),
+        "sources": sources,
+    }
+
+
+def build_sec_8k_window(events: list[dict[str, Any]]) -> dict[str, Any]:
+    """Coverage window of the fetched SEC 8-K index (newest/oldest filing date).
+
+    `events` is the RAW fetched 8-K index, before materiality filtering — the
+    window is a property of the index, not of the catalysts derived from it.
+    """
+    dates = sorted(d for d in (_filing_date(event) for event in events) if d is not None)
+    return {
+        "count": len(events),
+        "oldest": dates[0].date().isoformat() if dates else None,
+        "newest": dates[-1].date().isoformat() if dates else None,
+        "provider": "SEC EDGAR",
+    }
+
+
+def _sec_8k_staleness_warning(
+    news_window: dict[str, Any] | None,
+    sec_8k_window: dict[str, Any] | None,
+) -> str | None:
+    """Warn when the newest fetched 8-K predates the whole news window.
+
+    The 8-K index and the news feed are independent fetches; when the newest
+    filing is older than the news feed's earliest item, the filing index has no
+    coverage inside the news window (the $150B buyback of 2026-09-28 fell in
+    exactly such a gap). Returns None when either window is unavailable/undated.
+    """
+    if not news_window or not sec_8k_window:
+        return None
+    news_earliest = news_window.get("earliest")
+    newest_8k = sec_8k_window.get("newest")
+    if not isinstance(news_earliest, str) or not isinstance(newest_8k, str):
+        return None
+    if newest_8k < news_earliest[:10]:
+        return (
+            f"SEC 8-K index is stale relative to the news window: newest 8-K filed "
+            f"{newest_8k}, older than the news feed's earliest item ({news_earliest[:10]}); "
+            f"filings in that gap are invisible to this run."
+        )
+    return None
+
+
+def summarize_catalyst_outlook(
+    events: list[CatalystEvent],
+    *,
+    news_window: dict[str, Any] | None = None,
+    sec_8k_window: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Produce structured catalyst summary for pipeline narrative.
 
     Returns dict with:
-        total_catalysts: int -- number of events.
+        total_catalysts: int -- number of events (news + SEC 8-K combined).
         net_sentiment: float -- mean expected impact per event, in [-5, 5].
         top_positive: list[CatalystEvent] -- top 3 positive events by impact.
         top_negative: list[CatalystEvent] -- top 3 negative events by impact.
-        category_breakdown: dict[str, int] -- count per category.
+        news_category_breakdown: dict[str, int] -- NEWS items only, by category.
+        sec_8k_category_breakdown: dict[str, int] -- SEC 8-K events only, by
+            category. These are kept SEPARATE from the news counts: the removed
+            source-blind ``category_breakdown`` let a narrative read news-category
+            counts as filing counts (the 2026-10 NVDA report printed "2
+            acquisition-category 8-Ks" from news counts; there was one 8-K).
+        news_window / sec_8k_window: coverage windows of the two feeds when the
+            caller supplies them (count / earliest|latest / provider).
+        sec_8k_staleness_warning: str | None -- set when the newest fetched 8-K
+            predates the news window's earliest item.
 
     net_sentiment uses mean (not sum) so a large news day with 30+ events
     doesn't collapse to a clamp ceiling and lose discriminative power.
@@ -953,15 +1066,19 @@ def summarize_catalyst_outlook(events: list[CatalystEvent]) -> dict[str, Any]:
 
     Args:
         events: Catalyst events to summarize.
+        news_window: Coverage window of the news feed (see build_news_window).
+        sec_8k_window: Coverage window of the SEC 8-K index (see build_sec_8k_window).
     """
-    breakdown: dict[str, int] = {}
+    news_breakdown: dict[str, int] = {}
+    sec_breakdown: dict[str, int] = {}
     positives: list[CatalystEvent] = []
     negatives: list[CatalystEvent] = []
     impact_sum = 0.0
 
     for e in events:
         impact_sum += _expected_impact(e)
-        breakdown[e.category] = breakdown.get(e.category, 0) + 1
+        bucket = sec_breakdown if _is_sec_8k_event(e) else news_breakdown
+        bucket[e.category] = bucket.get(e.category, 0) + 1
         if e.sentiment == "positive":
             positives.append(e)
         elif e.sentiment == "negative":
@@ -977,5 +1094,9 @@ def summarize_catalyst_outlook(events: list[CatalystEvent]) -> dict[str, Any]:
         "net_sentiment": round(net, 2),
         "top_positive": top_pos,
         "top_negative": top_neg,
-        "category_breakdown": breakdown,
+        "news_category_breakdown": news_breakdown,
+        "sec_8k_category_breakdown": sec_breakdown,
+        "news_window": news_window,
+        "sec_8k_window": sec_8k_window,
+        "sec_8k_staleness_warning": _sec_8k_staleness_warning(news_window, sec_8k_window),
     }

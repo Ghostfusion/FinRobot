@@ -33,6 +33,9 @@ from finrobot.engine.compute.operators.audit import (
 )
 from finrobot.engine.models.reconcile_tolerances import NARRATIVE_DRIFT_TOLERANCE
 from finrobot.engine.compute.operators.catalyst import (
+    SEC_8K_SOURCE_MARKER,
+    build_news_window,
+    build_sec_8k_window,
     extract_catalysts_from_news,
     cluster_near_duplicates,
     filter_fresh_news,
@@ -255,12 +258,15 @@ async def _execute_data_collection_with_sec(
 _ROUTINE_8K_ITEMS: frozenset[str] = frozenset({"2.02", "5.07", "7.01", "9.01"})
 
 # Plain-language labels for the material item codes we surface — a bare item
-# number tells a reader nothing; "Executive / director change" does.
+# number tells a reader nothing; "Executive / director change" does. Labels
+# follow the SEC Form 8-K item semantics (Item 1.01 is a MATERIAL AGREEMENT,
+# not an acquisition — Item 2.01 is the acquisition/disposition trigger).
 _8K_ITEM_LABELS: dict[str, str] = {
     "1.01": "Material agreement entered",
     "1.02": "Material agreement terminated",
     "1.03": "Bankruptcy or receivership",
     "2.01": "Acquisition or disposition completed",
+    "2.02": "Results of operations",
     "2.03": "Material financial obligation created",
     "2.04": "Debt acceleration / triggering event",
     "2.05": "Exit or disposal costs",
@@ -272,8 +278,22 @@ _8K_ITEM_LABELS: dict[str, str] = {
     "5.01": "Change in control",
     "5.02": "Executive / director change",
     "5.03": "Charter / bylaw amendment",
-    "8.01": "Other material event",
+    "5.07": "Shareholder vote results",
+    "7.01": "Regulation FD disclosure",
+    "8.01": "Other events",
+    "9.01": "Exhibits",
 }
+
+# Item codes that map to a non-default catalyst CATEGORY. Item 2.01 is the only
+# acquisition/disposition trigger; 5.02 is the only management-change trigger.
+# Everything else (1.01 material agreement, 2.03 financial obligation, 8.01 other
+# events …) maps to the honest "other" bucket and carries its meaning in the
+# headline label. It is deliberately NOT defaulted to "regulatory": a material
+# agreement or an earnings/vote filing is not a regulatory event, and the report
+# publishes an explicit SEC 8-K category breakdown where such a default would
+# mislabel the majority of the index.
+_ACQUISITION_8K_ITEMS: frozenset[str] = frozenset({"2.01"})
+_MANAGEMENT_8K_ITEMS: frozenset[str] = frozenset({"5.02"})
 
 # Cap on 8-K-derived catalysts so a busy filer can't crowd out genuine news
 # catalysts. Material 8-Ks are rare; 5 most-recent is ample context.
@@ -300,10 +320,11 @@ def _sec_8k_to_catalyst(event: dict[str, Any]) -> CatalystEvent:
         "acquisition",
         "management",
         "market",
-    ] = "regulatory"
-    if any(c == "5.02" for c in material):
+        "other",
+    ] = "other"
+    if any(c in _MANAGEMENT_8K_ITEMS for c in material):
         category = "management"
-    elif any(c in ("1.01", "1.02", "2.01") for c in material):
+    elif any(c in _ACQUISITION_8K_ITEMS for c in material):
         category = "acquisition"
 
     labels = [_8K_ITEM_LABELS.get(c, f"8-K Item {c}") for c in material]
@@ -338,10 +359,7 @@ def _sec_8k_to_catalyst(event: dict[str, Any]) -> CatalystEvent:
         # CatalystEvent.probability is exclude=True, so this never leaks a fake "100%
         # probability" into any export/response — an 8-K is a past event, not a forecast.
         probability=1.0,
-        reasoning=(
-            "Source is a company-filed SEC 8-K current report; treated as "
-            "primary-source catalyst context."
-        ),
+        reasoning=SEC_8K_SOURCE_MARKER,
         published=published,
         url=source_url,
     )
@@ -377,6 +395,11 @@ async def _execute_catalyst_analysis(
     # Extract catalysts from high-importance news
     catalysts = extract_catalysts_from_news(fresh_news)
     sec_filings = structured_context.get("sec_filings")
+    raw_8k_events = (
+        [event for event in sec_filings.get("8k_events", []) if isinstance(event, dict)]
+        if isinstance(sec_filings, dict)
+        else []
+    )
     if isinstance(sec_filings, dict):
         # Only MATERIAL 8-Ks become catalysts — a bare earnings-release filing
         # (Item 2.02/9.01) is filing mechanics, not a discrete catalyst. Keep the
@@ -396,7 +419,17 @@ async def _execute_catalyst_analysis(
     # events. Runs after the 8-K append so SEC events are deduped against news too.
     catalysts = cluster_near_duplicates(catalysts)
     catalysts = compute_expected_impact(catalysts)
-    summary = summarize_catalyst_outlook(catalysts)
+    # Disclose BOTH feeds' coverage windows. The news feed is a same-day ~20-item
+    # window (the 2026-09-28 $150B buyback was structurally invisible to it) and
+    # the SEC 8-K index lags it; publishing the two windows lets a reader see the
+    # blindness instead of inferring a complete picture from the catalysts.
+    news_window = build_news_window(news_items)
+    sec_8k_window = build_sec_8k_window(raw_8k_events)
+    summary = summarize_catalyst_outlook(
+        catalysts,
+        news_window=news_window,
+        sec_8k_window=sec_8k_window,
+    )
 
     # Fetch retail sentiment (optional — Adanos provider may not be registered)
     sentiment_snapshot: dict[str, Any] | None = None
@@ -423,18 +456,46 @@ async def _execute_catalyst_analysis(
         overall_sentiment=overall,
         key_catalysts=[e.headline for e in top_pos[:3]],
         net_sentiment=net,
-        category_breakdown=summary["category_breakdown"],
+        category_breakdown=summary["news_category_breakdown"],
         top_positive=summary["top_positive"],
         top_negative=summary["top_negative"],
+        news_window=summary["news_window"],
+        sec_8k_window=summary["sec_8k_window"],
+        sec_8k_category_breakdown=summary["sec_8k_category_breakdown"],
+        sec_8k_staleness_warning=summary["sec_8k_staleness_warning"],
     )
 
-    # Build narrative
-    cat_labels = ", ".join(f"{cat}({cnt})" for cat, cnt in summary["category_breakdown"].items())
+    # Build narrative. The category counts are source-labelled — "News" vs
+    # "SEC 8-K" — so a reader can never take the news counts for filing counts
+    # (the 2026-10 NVDA narrative read news-category counts as "8-Ks").
+    news_cat_labels = ", ".join(
+        f"{cat}({cnt})" for cat, cnt in summary["news_category_breakdown"].items()
+    )
+    sec_cat_labels = ", ".join(
+        f"{cat}({cnt})" for cat, cnt in summary["sec_8k_category_breakdown"].items()
+    )
     narrative = (
         f"Catalyst analysis: {summary['total_catalysts']} events identified. "
         f"Net sentiment: {net:+.2f} ({overall}). "
-        f"Categories: {cat_labels or 'none'}."
+        f"News items by category: {news_cat_labels or 'none'}. "
+        f"SEC 8-K events by category: {sec_cat_labels or 'none'}."
     )
+    if isinstance(news_window, dict):
+        window_from = f" from {news_window['earliest']}" if news_window.get("earliest") else ""
+        window_to = f" to {news_window['latest']}" if news_window.get("latest") else ""
+        narrative += (
+            f" News feed window: {news_window['count']} items{window_from}{window_to} "
+            f"(source: {news_window.get('provider') or 'unknown'})."
+        )
+    if isinstance(sec_8k_window, dict):
+        narrative += (
+            f" SEC 8-K index: {sec_8k_window['count']} filings, "
+            f"newest {sec_8k_window.get('newest') or 'n/a'}, "
+            f"oldest {sec_8k_window.get('oldest') or 'n/a'} (SEC EDGAR)."
+        )
+    staleness_warning = summary["sec_8k_staleness_warning"]
+    if staleness_warning:
+        narrative += f" WARNING: {staleness_warning}"
     if top_pos:
         narrative += f" Top catalyst: {top_pos[0].headline}."
 
@@ -828,6 +889,12 @@ async def _execute_financial_modeling(
                 # becomes common equity (owner review 2026-10-13).
                 historical_ev_ebitda_median=ev_band.median if ev_band else None,
                 historical_ev_ebitda_window_years=REPORT_BAND_WINDOW_YEARS,
+                # The window's structural EBITDA break (l1): the cross-check row must
+                # not read as a clean signal when its own quantiles blend the pre-ramp
+                # base (NVDA: p25 37.8x / p90 183.3x off FY2023's $5.99B EBITDA).
+                historical_ev_ebitda_break_caveat=(
+                    ev_band.structural_break_caveat if ev_band else None
+                ),
                 preferred_stock=financial_data.balance.preferred_stock,
                 noncontrolling_interest=financial_data.balance.noncontrolling_interest,
             )
@@ -1023,6 +1090,11 @@ async def _execute_financial_modeling(
             # issuer's own 5-year p90 multiple and nothing said so).
             historical_ev_ebitda_median=ev_band.median if ev_band else None,
             historical_ev_ebitda_window_years=REPORT_BAND_WINDOW_YEARS,
+            # Same structural-break disclosure as the other call site: the window's
+            # quantiles blend two earnings regimes when the base stepped >= 3x.
+            historical_ev_ebitda_break_caveat=(
+                ev_band.structural_break_caveat if ev_band else None
+            ),
             preferred_stock=financial_data.balance.preferred_stock,
             noncontrolling_interest=financial_data.balance.noncontrolling_interest,
         )

@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from finrobot.engine.models.financial import CatalystEvent
 from finrobot.engine.compute.operators.catalyst import (
+    SEC_8K_SOURCE_MARKER,
     rank_catalysts,
     filter_by_impact,
     classify_catalyst_type,
@@ -10,6 +11,8 @@ from finrobot.engine.compute.operators.catalyst import (
     filter_fresh_news,
     compute_expected_impact,
     summarize_catalyst_outlook,
+    build_news_window,
+    build_sec_8k_window,
 )
 from finrobot.engine.compute.coordinators.news import NewsItem
 
@@ -379,7 +382,12 @@ class TestSummarizeCatalystOutlook:
         assert isinstance(summary["net_sentiment"], float)
         assert len(summary["top_positive"]) == 1
         assert len(summary["top_negative"]) == 1
-        assert summary["category_breakdown"] == {"earnings": 1, "regulatory": 1}
+        # Source-split breakdown: bare events are NEWS items; no SEC 8-K here.
+        assert summary["news_category_breakdown"] == {"earnings": 1, "regulatory": 1}
+        assert summary["sec_8k_category_breakdown"] == {}
+        assert summary["news_window"] is None
+        assert summary["sec_8k_window"] is None
+        assert summary["sec_8k_staleness_warning"] is None
 
     def test_net_sentiment_calculation(self):
         events = [
@@ -431,7 +439,8 @@ class TestSummarizeCatalystOutlook:
         assert summary["net_sentiment"] == 0.0
         assert summary["top_positive"] == []
         assert summary["top_negative"] == []
-        assert summary["category_breakdown"] == {}
+        assert summary["news_category_breakdown"] == {}
+        assert summary["sec_8k_category_breakdown"] == {}
 
     def test_top_3_limit(self):
         """top_positive/top_negative are limited to 3."""
@@ -449,6 +458,98 @@ class TestSummarizeCatalystOutlook:
         summary = summarize_catalyst_outlook(events)
         assert len(summary["top_positive"]) == 3
         assert len(summary["top_negative"]) == 0
+
+
+class TestSummarizeSourceSplitAndWindows:
+    """§B: news-category counts must never be readable as filing counts, and both
+    feed coverage windows must be published with real dates."""
+
+    def test_news_and_8k_counts_are_split(self):
+        news = CatalystEvent(
+            category="acquisition",
+            headline="Reported advanced talks to acquire X",
+            sentiment="positive",
+            impact_score=4,
+            probability=0.7,
+            reasoning="a report",
+        )
+        eightk = CatalystEvent(
+            category="regulatory",
+            headline="SEC 8-K: Material agreement entered",
+            sentiment="neutral",
+            impact_score=3,
+            probability=1.0,
+            reasoning=SEC_8K_SOURCE_MARKER,
+        )
+        summary = summarize_catalyst_outlook([news, eightk])
+        # The one news acquisition is NOT an 8-K; the one 8-K is regulatory.
+        assert summary["news_category_breakdown"] == {"acquisition": 1}
+        assert summary["sec_8k_category_breakdown"] == {"regulatory": 1}
+        # The old conflatable key is gone entirely — no source-blind count remains.
+        assert "category_breakdown" not in summary
+
+    def test_windows_published_with_real_dates_and_staleness_warning(self):
+        news_items = [
+            NewsItem(
+                title="t",
+                source="Yahoo Finance",
+                published=datetime(2026, 10, 13, 12, 0, tzinfo=timezone.utc),
+                url="https://example.com/1",
+                category="earnings",
+                sentiment="positive",
+                importance=4,
+                summary="s",
+            ),
+            NewsItem(
+                title="t2",
+                source="Yahoo Finance",
+                published=datetime(2026, 10, 13, 18, 0, tzinfo=timezone.utc),
+                url="https://example.com/2",
+                category="other",
+                sentiment="neutral",
+                importance=3,
+                summary="s2",
+            ),
+        ]
+        news_window = build_news_window(news_items)
+        assert news_window["count"] == 2
+        assert news_window["earliest"] == "2026-10-13T12:00:00+00:00"
+        assert news_window["latest"] == "2026-10-13T18:00:00+00:00"
+        assert news_window["provider"] == "Yahoo Finance"
+
+        sec_8k_window = build_sec_8k_window(
+            [{"filing_date": "2026-09-03"}, {"filing_date": "2026-08-17"}]
+        )
+        assert sec_8k_window["count"] == 2
+        assert sec_8k_window["newest"] == "2026-09-03"
+        assert sec_8k_window["oldest"] == "2026-08-17"
+        assert sec_8k_window["provider"] == "SEC EDGAR"
+
+        summary = summarize_catalyst_outlook(
+            [], news_window=news_window, sec_8k_window=sec_8k_window
+        )
+        warning = summary["sec_8k_staleness_warning"]
+        assert warning is not None
+        assert "2026-09-03" in warning and "2026-10-13" in warning
+
+    def test_no_staleness_warning_when_8k_inside_news_window(self):
+        news_window = {
+            "count": 1,
+            "earliest": "2026-10-13T12:00:00+00:00",
+            "latest": "2026-10-13T12:00:00+00:00",
+            "provider": "Reuters",
+            "sources": ["Reuters"],
+        }
+        sec_8k_window = {
+            "count": 1,
+            "oldest": "2026-10-13",
+            "newest": "2026-10-13",
+            "provider": "SEC EDGAR",
+        }
+        summary = summarize_catalyst_outlook(
+            [], news_window=news_window, sec_8k_window=sec_8k_window
+        )
+        assert summary["sec_8k_staleness_warning"] is None
 
 
 def _make_news_item(
