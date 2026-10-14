@@ -68,9 +68,11 @@ def rollup_status(findings: list[Finding]) -> FieldStatus:
 
 
 class NumericClaim(BaseModel):
-    """Ledger entry for one report number. Assembled at the pipeline/artifact layer
-    (joins a verifier's findings with ``field_registry`` caliber); ``field_key``
-    references the static registry rather than duplicating it."""
+    """Ledger entry for one report number. Assembled at the artifact layer by
+    ``artifact/numeric_ledger.build_numeric_ledger``, which joins the verifiers'
+    findings with whatever the payload declares about the number's provenance;
+    ``field_key`` references the static caliber registry rather than duplicating it
+    (and most keys have no caliber — see the ledger module's measurement)."""
 
     model_config = ConfigDict(frozen=False)
 
@@ -81,6 +83,33 @@ class NumericClaim(BaseModel):
     source: str | None = None
     as_of: str | None = None
     findings: list[Finding] = Field(default_factory=list)
+    basis: str | None = Field(
+        default=None,
+        description=(
+            "How the number was produced, in the report's own words (design §6): the "
+            "data-authority decision's ``basis`` for that metric, or the field's declared "
+            "``*_basis`` sibling. None when nothing is declared — itself a fact, since an "
+            "undeclared number cannot be replayed."
+        ),
+    )
+    is_proxy: bool = Field(
+        default=False,
+        description=(
+            "True when the payload DECLARES this number non-authoritative — its "
+            "data-authority decision carries ``is_authoritative: false``, i.e. no wired "
+            "source owns the metric and an alternative was selected (design §6's Proxy: "
+            "industry beta, sector multiple, scalar fallback). A consumer that needs a "
+            "measurement must not accept a proxy silently."
+        ),
+    )
+    derivation: list[str] = Field(
+        default_factory=list,
+        description=(
+            "The declared lineage: the source, definition and policy version the value was "
+            "selected under (design §6). Empty when the payload declares none — the same "
+            "absence ``basis`` reports, and the coverage the ledger measures."
+        ),
+    )
 
     @property
     def field_status(self) -> FieldStatus:

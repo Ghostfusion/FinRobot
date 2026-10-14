@@ -496,6 +496,33 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
   reads it*, so the fields have to arrive with the ledger itself — see §9.5's amendment.
 - `FieldCaliber` (`artifact/field_registry.py`) is the static half and stays static;
   `data_authority.decisions[]` is the runtime half and stays in the data layer.
+  **Measured 2026-10-14 — the caliber is a DISPLAY lookup, not the ledger's spine.** Of the 204
+  stored numeric-audit findings (16 distinct `field_key`s), exactly **1** names a registered
+  caliber; of the 13 `field_key`s the contract clauses emit, **zero** do. The two vocabularies are
+  different kinds of name — the registry keys by the version-diff's display fields (`wacc`,
+  `terminal_growth`, …), while the findings key by payload path or rule subject
+  (`data_authority.ebitda`, `thesis.price_target`, `valuation_synthesis.cross_checks`,
+  `valuation_withheld`). So the ledger cannot be assembled BY that join: it is assembled from the
+  FINDINGS, which every claim has, and the caliber is attached only where one is registered —
+  growing the registry to the finding vocabulary is its own change, and `pe_ratio` and
+  `thesis.price_target` are the two user-facing keys that argue for doing it first.
+  **Shipped 2026-10-14 — the ledger, as the findings index that measurement implies.**
+  `artifact/numeric_ledger.py::build_numeric_ledger` returns one `NumericClaim` per field a
+  verifier filed against (stored numeric-audit findings + the contract clauses, re-run as the
+  badge re-runs them), so the claim vocabulary is the artifact's own; `NumericClaim` gained
+  `basis` / `is_proxy` / `derivation` with producers in the same change (§9.5 records their
+  reading). Measured at 120 artifacts: **528 claims over 29 `field_key`s — value resolved 124,
+  declared basis 37, proxy 11, lineage 11**, and the largest keys are not numbers at all
+  (`enterprise_value` 92, `xbrl_facts_snapshot._equity_identity` 73 — a blocker token,
+  `valuation_withheld` 63 — a flag, `data_authority.decisions` 50 — a list). Two consequences for
+  this section's own plan:
+  - the claim set is complete (a claim exists wherever a finding does) while its provenance half
+    is thin, so **the clauses cannot all be routed through it yet**: the migration is per-key and
+    can start with the keys that NAME their source (`data_authority.<metric>`, 61 claims — the
+    only ones carrying basis, proxy flag and lineage);
+  - the field vocabulary is itself the work. Turning a rule subject into a measurable claim (which
+    payload path backs `enterprise_value`, `pe_ratio`, `thesis.narrative`) is a producer-side
+    change, not a ledger change — which is why the ledger ships first and the routing follows.
 - A consumer needing a *measurement* cannot accept a `Proxy` without an explicit
   `use_proxy()` that records the disclosure string — so "silent substitution" becomes a type
   error rather than a missing warning. The fixes already shipped (`None ≠ 0`, "industry levered
@@ -558,13 +585,22 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
    hand-written fixture would have carried the same guard, and a real payload does not.
 
    **Re-measured 2026-10-14 late, over 105 artifacts, against the clauses as implemented**
-   (`scripts/scan_artifact_contract.py --proposed`): `C6b` 27, `C8` 7, `C9` 1, `C10a` 72,
+   (`scripts/scan_artifact_contract.py` — the clauses are in the registry, so the scanner always
+   measures them; there is no staging flag any more): `C6b` 27, `C8` 7, `C9` 1, `C10a` 72,
    `C10b` 0, `C10c` 73, `C10d` 35 artifacts (102 accepted rows), `C11` 63, `C12a` 10, `C12b` 14,
    `C12c` 15, `C13b` 0, `C13c` 0, `C14a` 0, `C14b` 10 — **327 flags**. The scanner reproduces every
    probed number, which is what makes it the promotion instrument rather than a second opinion. Four
    rows above moved with the re-measurement (the store grew) and two of them changed *reading*:
    `C13b`'s 47 was a declaration rate, not a catch list, and `C14`'s placeholder had been tabulated
    in occurrences rather than artifacts (68 over 27, against the 10 the clause reports).
+
+   **Where the counts stand since** (as-of readings over the growing store, §9.3's table carries
+   the artifact counts): at 120 artifacts the scan reads **360 flags** — `C6b` 31, `C8` 7, `C9` 1,
+   `C10a` 72, `C10c` 73, `C10d` 50, `C11` 63, `C12a` 24, `C12b` 14, `C12c` 15, `C14b` 10. The two
+   `H` counts and every clause whose defect class has a shipped fix are unchanged; the `S`
+   families that describe a live class (`C12a`, `C6b`, `C10d`) rose with the corpus. A per-clause
+   count here is a date, not a constant — the clause docstrings say the same thing once, in
+   `contract.py`.
 
    **Promoted severity, and why four clauses did not enter at §9's locked severity.** `C8`/`C11`
    entered at the severity §9 locks for them. `C9`, `C10`, `C12` and `C14` entered `S`/annotate
@@ -846,6 +882,23 @@ Phase 1 (§7); the archive treatment in §9.3 is the only part that is not a cod
   through the result, and add the three fields as part of that join. The decision's sequencing
   (expand → migrate → contract) and its exit criterion are unchanged; only the first mover is
   named correctly here.
+- **Shipped 2026-10-14 — the ledger, with its three fields and its instrument.** The first mover
+  is done: `artifact/numeric_ledger.py::build_numeric_ledger` builds one `NumericClaim` per field
+  a verifier filed against (the artifact's stored numeric-audit findings plus the contract
+  clauses, re-run exactly as the badge re-runs them), and `NumericClaim` gained `basis`,
+  `is_proxy` and `derivation` in the same change — each with a producer, because the doctrine
+  forbids a field nothing fills: `basis` is the data-authority decision's own basis for that
+  metric (or the field's declared `*_basis` sibling), `is_proxy` is the record's
+  `is_authoritative: false` (no wired source owns the metric), and `derivation` is the declared
+  lineage (`source:`, `definition:`, `policy:`). `scan_artifact_contract.py --ledger` prints the
+  coverage, **including the exit criterion's own number** rather than leaving it to be
+  subtracted.
+  **The criterion's first reading, and it is not close: 528 claims over 120 artifacts, of which
+  491 carry no declared basis.** That is the expand phase measured honestly — the claims all
+  exist (every one traces to a finding), while the provenance half is thin because the payload
+  declares provenance for the keys that NAME their source (`data_authority.<metric>`, 61 claims,
+  the only ones with a decision) and for almost nothing else. So the exit criterion is real,
+  reachable and currently far away, which is exactly the state a first reading should show.
 
 ### 9.6 Reason-code registry — **one enumerated vocabulary keyed by `(reason_code, domain)`**
 

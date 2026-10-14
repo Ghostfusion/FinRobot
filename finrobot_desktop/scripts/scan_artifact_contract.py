@@ -47,9 +47,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from collections import Counter
 from dataclasses import dataclass
 
 from finrobot.artifact.contract import CONTRACT_CLAUSES, ContractClause
+from finrobot.artifact.numeric_ledger import build_numeric_ledger
 from finrobot.artifact.models import Artifact, ArtifactSummary
 from finrobot.artifact.store import ArtifactStore
 from finrobot.artifact.summary_extractor import (
@@ -288,10 +290,56 @@ def _select_clauses(clause_filter: str | None) -> list[ContractClause]:
     return selected
 
 
+def _ledger_report(artifacts: list[Artifact]) -> None:
+    """What the artifact-layer ledger actually holds (design §6), per artifact and in total.
+
+    §6's exit criterion is that the CLAUSES read the ledger instead of raw payload paths, and
+    that migration cannot be judged without this: a claim exists wherever a verifier filed,
+    but a claim carries a value / declared basis / proxy flag / lineage only where the payload
+    declares one. Reporting the coverage is how "the field vocabulary is the work" stops being
+    an opinion. READ-ONLY.
+    """
+    claims = valued = based = proxied = derived = 0
+    empty = 0
+    keys: Counter[str] = Counter()
+    for artifact in artifacts:
+        ledger = build_numeric_ledger(artifact)
+        if not ledger:
+            empty += 1
+        claims += len(ledger)
+        valued += sum(1 for c in ledger if c.value is not None)
+        based += sum(1 for c in ledger if c.basis)
+        proxied += sum(1 for c in ledger if c.is_proxy)
+        derived += sum(1 for c in ledger if c.derivation)
+        for claim in ledger:
+            keys[claim.field_key] += 1
+
+    print("=" * 78)
+    print("Artifact-layer numeric ledger (design §6)")
+    print("=" * 78)
+    print(f"artifacts scanned : {len(artifacts)} ({empty} with an empty ledger)")
+    print(f"claims            : {claims}")
+    print(f"  value resolved  : {valued}")
+    print(f"  declared basis  : {based}")
+    print(f"  declared proxy  : {proxied}")
+    print(f"  declared lineage: {derived}")
+    # §9.5 locks its Phase-2 exit criterion on exactly this number, so the instrument
+    # prints it rather than leaving a reader to subtract.
+    print(f"  NO declared basis: {claims - based}  <- §9.5's exit criterion (target: 0)")
+    print(f"distinct field_keys: {len(keys)}")
+    print("-" * 78)
+    print("top field_keys by claim count")
+    print("-" * 78)
+    for key, count in keys.most_common(15):
+        print(f"{count:6d}  {key}")
+    print()
+
+
 async def _run(
     clause_filter: str | None,
     limit: int | None,
     badge: bool = False,
+    ledger: bool = False,
 ) -> int:
     clauses = _select_clauses(clause_filter)
     store = ArtifactStore()
@@ -299,6 +347,9 @@ async def _run(
         artifacts, archived = await _enumerate_artifacts(store, limit)
     finally:
         await store.close()
+    if ledger:
+        _ledger_report(artifacts)
+        return 0
     flags = _scan(artifacts, clauses)
     if badge:
         _badge_report(artifacts, flags, archived)
@@ -336,10 +387,19 @@ def main() -> int:
             "(severity H) or annotate it (S)."
         ),
     )
+    parser.add_argument(
+        "--ledger",
+        action="store_true",
+        help=(
+            "Print the artifact-layer numeric ledger's coverage (design §6) instead of the "
+            "clause readings: how many claims the store yields, and how many carry a "
+            "resolved value, a declared basis, a proxy flag and a lineage."
+        ),
+    )
     args = parser.parse_args()
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be >= 1")
-    return asyncio.run(_run(args.clause, args.limit, args.badge))
+    return asyncio.run(_run(args.clause, args.limit, args.badge, args.ledger))
 
 
 if __name__ == "__main__":

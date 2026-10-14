@@ -27,6 +27,12 @@ structurally blind to:
     drops the offending band entries rather than the headline target — is not a
     per-artifact value-withhold.
 
+Every `MEASURED CATCH LIST` below is an AS-OF reading over a live store — the corpus grows
+as runs land. The `H` families are frozen (their defect classes have shipped fixes, so a
+count that does not move is the expected result); the `S` families keep finding new
+artifacts, so their counts rise with the corpus and a later reading is a later date, never a
+contradiction. §9.3 carries the readings themselves.
+
 A violated HARD clause is a VALUE-withhold: it degrades through the existing
 withhold machinery — null the target slot(s) + ``valuation_withheld`` +
 ``[CONTRACT/*]`` warning — while PRESERVING the directional verdict (corrupt /
@@ -1211,8 +1217,11 @@ def _clause_c12a_stale_8k_index(artifact: "Artifact") -> Finding | None:
     the result, it does not re-derive the comparison (the claimed window lives in
     the producer's policy, not in the payload).
 
-    MEASURED CATCH LIST 10 / 5 tickers, span `…10-14T06:21` … `…10-14T21:12:35`
-    — LIVE, and the payload already carries the disclosure in two shapes.
+    MEASURED CATCH LIST 24 / 15 tickers, span `…10-14T06:2x` … `…10-14T22:5x` — LIVE and
+    RISING, which is the point: it read 10 over 5 tickers at the promotion and 24 over 15
+    at the 120-artifact reading, because this defect class is still being produced. The
+    count is a date (see the as-of note above), and the payload already carries the
+    disclosure in two shapes.
     """
     catalyst = _structured(artifact).get("catalyst_analysis")
     if not isinstance(catalyst, dict):
