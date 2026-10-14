@@ -189,7 +189,12 @@ def _report(total: int, clauses: list[ContractClause], flags: list[Flag]) -> Non
         clause_flags = [f for f in flags if f.clause_id == clause.id]
         if not clause_flags:
             continue
-        print(f"\n── {clause.id} (severity {clause.severity}) — {len(clause_flags)} flag(s) ──")
+        # Name the RULE, not just its id: the title comes from the clause registry, so
+        # the human-review payload reads the same words the registry will serve (§9.6).
+        heading = f"{clause.id} — {clause.title}" if clause.title else clause.id
+        print(f"\n── {heading} (severity {clause.severity}) — {len(clause_flags)} flag(s) ──")
+        if clause.doc:
+            print(f"   {clause.doc}")
         for flag in clause_flags:
             ticker = flag.ticker or "(cross)"
             print(f"  • {flag.artifact_id}")

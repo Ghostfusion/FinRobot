@@ -83,6 +83,34 @@ class ContractClause:
     # "[CONTRACT/<id>/internal]" tag the report UI skips. The analyst-facing clauses
     # (C1–C4) keep the default and drive the audit banner / cover withhold reason.
     surface: bool = True
+    #: A renderable name for the rule, so a human-review surface (the scanner's catch
+    #: lists today; the reason-code registry of design §9.6 later) names the rule
+    #: instead of only its id. It lives HERE and nowhere else — a title duplicated in
+    #: a consumer is the same drift class §4.4 is about.
+    title: str = ""
+    #: One imperative line saying what the clause requires, for the same surfaces.
+    #: Deliberately terse: the spec is design §4, and a second full copy here would
+    #: be a second truth to keep in sync.
+    doc: str = ""
+    #: Count thresholds (design §9.2, dbt's ``severity: error|warn`` +
+    #: ``error_if``/``warn_if`` shape): a clause can be over-broad while it is
+    #: calibrated, so it should be able to ANNOTATE up to some number of offending
+    #: items and WITHHOLD past it instead of being all-or-nothing. ``None`` = the
+    #: clause has one severity for every violation.
+    #:
+    #: DECLARED, NOT YET CONSUMED (design §9.8 declares the addition additive and
+    #: behaviour-preserving, which is why it lands here ahead of its first user).
+    #: ``enforce_artifact_contract`` reads only ``severity`` / ``check`` / ``surface``,
+    #: and no clause sets these, so the live gate is unchanged by their presence —
+    #: ``tests/artifact/test_contract_fixtures.py``'s verdict oracle is the proof.
+    #: What they still need is the count itself: a ``check`` returns at most ONE
+    #: :class:`Finding`, and the offending-item count a clause like `C10d` already
+    #: prints in its evidence has nowhere structured to live yet. That carrier is
+    #: :class:`~finrobot.engine.models.numeric_claim.NumericClaim`'s
+    #: ``basis``/``is_proxy``/``derivation`` addition (design §6/§9.5), so the
+    #: thresholds become readable in the same change.
+    warn_if: int | None = None
+    error_if: int | None = None
 
 
 # ── C1: headline upside band ─────────────────────────────────────────────────
@@ -462,13 +490,56 @@ def _clause_c7_no_resurrection(artifact: "Artifact") -> Finding | None:
 # ── Registry + enforcement ───────────────────────────────────────────────────
 
 CONTRACT_CLAUSES: list[ContractClause] = [
-    ContractClause(id="C1", severity="H", check=_clause_c1_upside_band),
-    ContractClause(id="C1b", severity="H", check=_clause_c1b_method_span),
-    ContractClause(id="C2", severity="H", check=_clause_c2_double_decimal),
-    ContractClause(id="C3", severity="H", check=_clause_c3_basis_matches_headline),
-    ContractClause(id="C4", severity="H", check=_clause_c4_currency_caliber),
-    ContractClause(id="C6", severity="S", check=_clause_c6_single_method_disclosure),
-    ContractClause(id="C7", severity="H", check=_clause_c7_no_resurrection, surface=False),
+    ContractClause(
+        id="C1",
+        severity="H",
+        check=_clause_c1_upside_band,
+        title="Headline upside band",
+        doc="target/entry must sit inside the calibrated divergence band.",
+    ),
+    ContractClause(
+        id="C1b",
+        severity="H",
+        check=_clause_c1b_method_span,
+        title="Method-vs-method corroboration span",
+        doc="the method disagreement must sit inside the span C1 is structurally blind to.",
+    ),
+    ContractClause(
+        id="C2",
+        severity="H",
+        check=_clause_c2_double_decimal,
+        title="Double-decimal malformation",
+        doc="a $-anchored amount may not carry two decimal points.",
+    ),
+    ContractClause(
+        id="C3",
+        severity="H",
+        check=_clause_c3_basis_matches_headline,
+        title="Basis conclusion matches the headline",
+        doc="a cue-anchored conclusion amount must equal the published headline target.",
+    ),
+    ContractClause(
+        id="C4",
+        severity="H",
+        check=_clause_c4_currency_caliber,
+        title="Currency and unit caliber",
+        doc="a per-share headline requires a complete currency caliber.",
+    ),
+    ContractClause(
+        id="C6",
+        severity="S",
+        check=_clause_c6_single_method_disclosure,
+        title="Single-method disclosure",
+        doc="a single-method headline must disclose that it has no cross-check.",
+    ),
+    ContractClause(
+        id="C7",
+        severity="H",
+        check=_clause_c7_no_resurrection,
+        surface=False,
+        title="Withheld target must not resurrect",
+        doc="a withheld target may not survive in any fallback slot.",
+    ),
 ]
 
 

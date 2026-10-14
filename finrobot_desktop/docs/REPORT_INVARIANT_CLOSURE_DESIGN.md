@@ -732,6 +732,22 @@ count thresholds (§9.2), and a `title`/`doc` pair so the reason-code registry (
 renderable name per clause. Both are additive and neither changes the existing seven clauses'
 behaviour.
 
+**Shipped 2026-10-14.** All four fields exist on the dataclass with defaults, and the decision's
+own claim — additive, behaviour-preserving — is what makes that safe to land ahead of their first
+user. The `title`/`doc` pair is populated for the seven live clauses and the fifteen staged ones
+and already has a consumer: `scripts/scan_artifact_contract.py` heads each catch list with the
+rule's name and its one-liner instead of a bare id, so the human-review payload reads the words
+the registry will serve. `warn_if`/`error_if` are **declared and inert** — no clause sets them,
+`enforce_artifact_contract` reads only `severity`/`check`/`surface`, and
+`tests/artifact/test_contract_fixtures.py`'s verdict oracle is the proof (the suite is unchanged
+by the addition).
+
+What they still need is the COUNT itself: a `check` returns at most ONE `Finding`, and the
+offending-item count a clause like `C10d` already prints in its evidence has no structured home.
+That carrier is `NumericClaim`'s `basis`/`is_proxy`/`derivation` addition (§6/§9.5), so the
+thresholds become readable in that change rather than in this one — which is why the fields land
+here declared rather than consumed.
+
 ---
 
 ## 10. References

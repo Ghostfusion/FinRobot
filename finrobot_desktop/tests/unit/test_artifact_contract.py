@@ -951,6 +951,28 @@ def _staged_violating_artifact() -> Artifact:
     )
 
 
+def test_every_clause_carries_a_renderable_title_and_doc() -> None:
+    """§9.8: the registry needs a renderable name per clause so a human-review surface
+    (and later the reason-code registry of §9.6) names the rule, not only its id. The
+    title lives on the clause and nowhere else — a copy in a consumer is the drift
+    class §4.4 exists to catch."""
+    for clause in (*CONTRACT_CLAUSES, *PROPOSED_CLAUSES):
+        assert clause.title, f"{clause.id} has no title"
+        assert clause.doc, f"{clause.id} has no doc"
+        assert len(clause.doc) < 120, f"{clause.id}'s doc is a spec, not a one-liner"
+
+
+def test_count_thresholds_are_declared_inert() -> None:
+    """§9.2/§9.8 declared `warn_if`/`error_if` additive and behaviour-preserving. This
+    pins the "inert" half: no clause sets them, and the live gate ignores them, so the
+    fixture verdict oracle (tests/artifact/test_contract_fixtures.py) is unchanged by
+    their presence. When the first clause arms one, its count carrier arrives with the
+    `NumericClaim` fields of §6/§9.5 — that change owns this assertion."""
+    for clause in (*CONTRACT_CLAUSES, *PROPOSED_CLAUSES):
+        assert clause.warn_if is None
+        assert clause.error_if is None
+
+
 def test_staged_registry_is_disjoint_from_the_live_gate() -> None:
     """No staged id may already be live: a promotion diff that double-ran a clause
     would report every violation twice."""
