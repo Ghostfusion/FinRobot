@@ -33,6 +33,7 @@ from finrobot.engine.data.registry import provider_runtime_name
 from finrobot.engine.data.types import DataType
 from finrobot.engine.data.normalize.currency import normalize_canonical_financials_currency
 from finrobot.engine.data.normalize.contracts import (
+    DEGRADED_AUTHORITY_RECORD_MISSING,
     DEGRADED_FX_NORMALIZED,
     DEGRADED_FX_UNAVAILABLE,
     DEGRADED_PRICE_HISTORY_STALE,
@@ -563,7 +564,9 @@ class DataLayer:
         cached = await self._cache.get_canonical(data_type, ticker, provider=read_provider)
         if cached is not None and not cached.is_stale:
             try:
-                return self._deserialize_canonical(data_type, cached.payload_json, from_cache=True)
+                return self._deserialize_canonical(
+                    data_type, cached.payload_json, from_cache=True, ticker=ticker
+                )
             except ValidationError:
                 # Corrupt canonical row (mangled JSON / contract drift without a
                 # version bump). Delete it and fall through to the provider path
@@ -842,7 +845,7 @@ class DataLayer:
         cached, slot_provider = found
         try:
             normalized = self._deserialize_canonical(
-                data_type, cached.payload_json, from_cache=True
+                data_type, cached.payload_json, from_cache=True, ticker=ticker
             )
         except ValidationError:
             # Same self-heal as fetch_canonical: a corrupt row reads as a miss
@@ -858,7 +861,7 @@ class DataLayer:
 
     @staticmethod
     def _deserialize_canonical(
-        data_type: DataType, payload_json: str, *, from_cache: bool
+        data_type: DataType, payload_json: str, *, from_cache: bool, ticker: str
     ) -> CanonicalSnapshot:
         obj: CanonicalSnapshot
         if data_type == DataType.PRICE:
@@ -872,6 +875,29 @@ class DataLayer:
         else:
             obj = NormalizedFinancials.model_validate_json(payload_json)
         obj.provenance.from_cache = from_cache
+        # A canonical served from cache that predates the ``reconciliation`` field
+        # (CANONICAL_CONTRACT_VERSION was deliberately NOT bumped for it — an added
+        # optional field is read-compatible; see normalize/contracts.py) deserializes
+        # with ``reconciliation=None``. That is a DATA-QUALITY gap, not a clean
+        # result — the audited NVDA report published a price-only record and showed
+        # no sign the financials had none. Disclose it in the SAME degraded marker
+        # list the UI/LLM read, matching every other silent fallback. A fresh fetch
+        # always carries a record, so this only fires on a pre-feature cached row;
+        # stamped for BOTH canonicals (PRICE and FINANCIALS) so they behave alike.
+        if (
+            from_cache
+            and isinstance(obj, (NormalizedFinancials, NormalizedPrice))
+            and obj.reconciliation is None
+            and DEGRADED_AUTHORITY_RECORD_MISSING not in obj.provenance.degraded
+        ):
+            obj.provenance.degraded.append(DEGRADED_AUTHORITY_RECORD_MISSING)
+            logger.warning(
+                "Canonical %s/%s served from cache with no reconciliation record "
+                "(pre-feature payload) — flagged %s.",
+                data_type.value,
+                ticker,
+                DEGRADED_AUTHORITY_RECORD_MISSING,
+            )
         return obj
 
     async def fetch_historical(

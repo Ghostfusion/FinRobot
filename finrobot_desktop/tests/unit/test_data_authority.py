@@ -17,11 +17,14 @@ These defend the JOIN between provider payloads and the leaf reconciliation engi
 
 from __future__ import annotations
 
+import json
+import logging
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
+from finrobot.engine.compute.coordinators.extractor import extract_financial_data
 from finrobot.engine.data import authority_log
 from finrobot.engine.data.authority import (
     observations_from_financials,
@@ -32,11 +35,17 @@ from finrobot.engine.data.cache import DataCache
 from finrobot.engine.data.interface import DataProvider, DataResult
 from finrobot.engine.data.layer import DataLayer
 from finrobot.engine.data.normalize import NormalizedFinancials, NormalizedPrice
+from finrobot.engine.data.normalize.contracts import (
+    DEGRADED_AUTHORITY_RECORD_MISSING,
+    PriceBar,
+    Provenance,
+)
 from finrobot.engine.data.types import DataType
 from finrobot.engine.data.validator import (
     authority_key_field_divergences,
     authority_reconciliation,
 )
+from finrobot.engine.models.metric_authority import compared_fields
 
 _UTC = timezone.utc
 _NOW = datetime(2026, 10, 13, 12, 0, tzinfo=_UTC)
@@ -453,3 +462,236 @@ def test_authority_respects_layer_boundaries() -> None:
     leaf_src = Path(leaf.__file__).read_text(encoding="utf-8")
     assert "engine.data.authority" not in leaf_src
     assert "engine.data import authority" not in leaf_src
+
+
+# ---------------------------------------------------------------------------
+# A2: authority-record disclosure + reader-visible provenance (2026-10-13 audit)
+#
+# The audited NVDA artifact: its FINANCIALS canonical was a cache row written
+# before the ``reconciliation`` field existed, so ``fin.reconciliation is None``;
+# ``extract_financial_data`` then published the PRICE's record as
+# ``raw_data.data_authority`` while ``warnings`` carried a 37% ``total_cash``
+# divergence that ``degraded`` can never express (total_cash is a compared, not
+# key, field). These tests pin the corrected behaviour.
+# ---------------------------------------------------------------------------
+
+_SESSION_CLOSE = datetime(2026, 10, 13, 20, 0, tzinfo=_UTC)  # US equity close
+_FIN_FETCHED_AT = datetime(2026, 10, 13, 23, 3, 27, tzinfo=_UTC)
+_PRICE_FETCHED_AT = datetime(2026, 10, 13, 23, 3, 40, tzinfo=_UTC)
+
+
+def _prov(
+    *,
+    provider: str = "fmp",
+    as_of: datetime = datetime(2026, 7, 26, tzinfo=_UTC),
+    fetched_at: datetime = _FIN_FETCHED_AT,
+    from_cache: bool = False,
+) -> Provenance:
+    return Provenance(provider=provider, as_of=as_of, fetched_at=fetched_at, from_cache=from_cache)
+
+
+def _canonical_fin(
+    *, reconciliation: object = None, warnings: list[str] | None = None
+) -> NormalizedFinancials:
+    return NormalizedFinancials(
+        ticker="NVDA",
+        as_of=_SESSION_CLOSE,
+        revenue=1.0e9,
+        net_income=1.0e8,
+        market_cap=5.0e9,
+        shares_outstanding=2.0e7,
+        current_price=250.0,
+        total_debt=1.0e9,
+        total_cash=9.9e10,
+        provenance=_prov(),
+        reconciliation=reconciliation,
+        warnings=list(warnings or []),
+    )
+
+
+def _canonical_price(*, reconciliation: object = None) -> NormalizedPrice:
+    return NormalizedPrice(
+        ticker="NVDA",
+        quote_currency="USD",
+        current_price=250.0,
+        bars=[PriceBar(date=date(2026, 10, 13), close=250.0)],
+        provenance=_prov(as_of=_SESSION_CLOSE, fetched_at=_PRICE_FETCHED_AT),
+        reconciliation=reconciliation,
+    )
+
+
+def _pre_feature_payload(model: NormalizedFinancials | NormalizedPrice) -> str:
+    """A cached canonical row as written BEFORE the ``reconciliation`` field
+    existed — the key is absent entirely, not null."""
+    payload = json.loads(model.model_dump_json())
+    payload.pop("reconciliation", None)
+    return json.dumps(payload)
+
+
+async def test_cached_financials_without_reconciliation_is_disclosed(
+    cache: DataCache, caplog: pytest.LogCaptureFixture
+) -> None:
+    await cache.set_canonical(
+        DataType.FINANCIALS,
+        "NVDA",
+        _pre_feature_payload(_canonical_fin()),
+        provider="fmp",
+    )
+    layer = DataLayer(
+        [_Provider("fmp", ["financials"], _fin_result("fmp", {"revenue": 1.0}))], cache
+    )
+
+    with caplog.at_level(logging.WARNING):
+        served = await layer.fetch_canonical("financials", "NVDA")
+
+    assert isinstance(served, NormalizedFinancials)
+    assert served.reconciliation is None  # pre-feature row really has no record
+    assert DEGRADED_AUTHORITY_RECORD_MISSING in served.provenance.degraded
+    # Logged once, naming the marker — not a silent fallback.
+    assert any(
+        DEGRADED_AUTHORITY_RECORD_MISSING in record.getMessage() for record in caplog.records
+    )
+
+
+async def test_cached_price_without_reconciliation_is_disclosed(cache: DataCache) -> None:
+    """The PRICE canonical behaves identically (both serve sites do the disclosure)."""
+    await cache.set_canonical(
+        DataType.PRICE,
+        "NVDA",
+        _pre_feature_payload(_canonical_price()),
+        provider=None,
+    )
+    layer = DataLayer(
+        [
+            _Provider(
+                "fmp",
+                ["price", "quote"],
+                _price_result("fmp", {"current_price": 100.0, "price_history": []}),
+            )
+        ],
+        cache,
+    )
+
+    served = await layer.fetch_canonical("price", "NVDA")
+
+    assert isinstance(served, NormalizedPrice)
+    assert served.reconciliation is None
+    assert DEGRADED_AUTHORITY_RECORD_MISSING in served.provenance.degraded
+
+
+async def test_read_canonical_cached_also_discloses(cache: DataCache) -> None:
+    """The stale-while-revalidate read (read_canonical_cached) is the same serve site."""
+    await cache.set_canonical(
+        DataType.FINANCIALS,
+        "NVDA",
+        _pre_feature_payload(_canonical_fin()),
+        provider="fmp",
+    )
+    layer = DataLayer([], cache)
+
+    found = await layer.read_canonical_cached("financials", "NVDA")
+
+    assert found is not None
+    served, _is_stale = found
+    assert DEGRADED_AUTHORITY_RECORD_MISSING in served.provenance.degraded
+
+
+async def test_fresh_canonical_with_record_has_no_marker(cache: DataCache) -> None:
+    """Control: a row that DOES carry a record is not flagged."""
+    report = reconcile_results([_fin_result("fmp", {"revenue": 1.0})])
+    await cache.set_canonical(
+        DataType.FINANCIALS,
+        "NVDA",
+        _canonical_fin(reconciliation=report).model_dump_json(),
+        provider="fmp",
+    )
+    layer = DataLayer([], cache)
+
+    found = await layer.read_canonical_cached("financials", "NVDA")
+
+    assert found is not None
+    served, _is_stale = found
+    assert served.reconciliation is not None
+    assert DEGRADED_AUTHORITY_RECORD_MISSING not in served.provenance.degraded
+
+
+def test_extractor_does_not_publish_price_record_as_financials_authority() -> None:
+    """A financials snapshot with NO record but a live price report must not expose
+    the price's decisions as the financials authority, and the coverage/warning
+    counts must make the empty record visible."""
+    price_report = reconcile_results([_price_result("eodhd", {"current_price": 228.52})])
+    price = _canonical_price(reconciliation=price_report)
+    fin = _canonical_fin(
+        warnings=[
+            "Data discrepancy: total_cash differs by 37% "
+            "(fmp: 99,369,000,000 vs yfinance: 62,469,001,216). Threshold: 10%."
+        ]
+    )
+
+    fd = extract_financial_data(fin, price)
+
+    assert fd.data_authority is None  # financials had NO decision record
+    assert fd.price_authority is not None  # price record rides its OWN key
+    assert fd.price_authority.decision("current_price") is not None
+    prov = fd.provenance
+    assert prov is not None
+    assert prov.metrics_decided == 0
+    assert prov.metrics_without_record == len(compared_fields())
+    assert prov.divergence_warnings == 1
+    # The degradation view cannot read "empty" while a divergence is known.
+    assert prov.divergence_warnings or prov.degraded
+
+
+def test_extractor_reports_full_financials_record_coverage() -> None:
+    report = reconcile_results(
+        [
+            _fin_result(
+                "fmp",
+                {
+                    "revenue": 1.0e9,
+                    "net_income": 1.0e8,
+                    "total_cash": 9.9e10,
+                    "market_cap": 5.0e9,
+                },
+            ),
+            _fin_result("yfinance", {"revenue": 1.1e9}),
+        ]
+    )
+    fd = extract_financial_data(_canonical_fin(reconciliation=report), _canonical_price())
+
+    assert fd.data_authority is report
+    assert fd.price_authority is None
+    assert fd.provenance is not None
+    assert fd.provenance.metrics_decided == len(report.decisions)
+    assert fd.provenance.metrics_without_record == 0
+
+
+def test_extractor_publishes_distinct_fetch_and_session_instants() -> None:
+    fd = extract_financial_data(_canonical_fin(), _canonical_price())
+
+    prov = fd.provenance
+    assert prov is not None
+    assert prov.retrieved_at == _FIN_FETCHED_AT  # financials' TRUE fetch instant
+    assert prov.price_retrieved_at == _PRICE_FETCHED_AT  # price's, separately
+    assert prov.session_as_of == _SESSION_CLOSE  # the quote's session
+    assert prov.retrieved_at != prov.session_as_of
+    assert prov.from_cache is False and prov.price_from_cache is False
+    # The artifact-level vintage key is deliberately UNCHANGED (session as-of).
+    assert fd.timestamp == _SESSION_CLOSE
+
+
+def test_published_provenance_json_carries_the_disclosure_keys() -> None:
+    blob = extract_financial_data(_canonical_fin(), _canonical_price()).model_dump(mode="json")
+    prov = blob["provenance"]
+    for key in (
+        "retrieved_at",
+        "price_retrieved_at",
+        "session_as_of",
+        "from_cache",
+        "metrics_decided",
+        "metrics_without_record",
+        "divergence_warnings",
+    ):
+        assert key in prov
+    assert blob["price_authority"] is None
+    assert blob["data_authority"] is None

@@ -137,6 +137,12 @@ DEGRADED_QUOTE_TS_MISSING = "quote_ts_missing"
 # is not safe to default to USD: a foreign local listing would bypass FX and feed
 # native prices into USD comparisons. Downstream FX gates see UNKNOWN and abstain.
 DEGRADED_QUOTE_CURRENCY_MISSING = "quote_currency_missing"
+# The quote currency was NOT carried by the payload — it was derived from the
+# provider's declared exchange suffix (EODHD's /eod rows carry no currency, so
+# ``NVDA.US`` → exchange ``US`` → ``USD``). Real enough to use (the exchange is
+# the vendor's own), but INFERRED, not observed: flagged so the UI/brief shows
+# the currency was read off the venue rather than stamped on the quote.
+DEGRADED_QUOTE_CURRENCY_INFERRED = "quote_currency_inferred"
 # The live provider served a quote WITHOUT history bars (Finnhub free tier:
 # /quote works, /stock/candle is premium-403) and the layer grafted the bars
 # from the last cached PRICE row instead of letting the chart go blank.
@@ -170,6 +176,12 @@ DEGRADED_FX_NORMALIZED = "fx_normalized"
 # (None + warning) rather than emit a cross-currency value — surfaced so the UI
 # shows "无法换算" instead of a silently wrong/negative multiple.
 DEGRADED_FX_UNAVAILABLE = "fx_unavailable"
+# A canonical served from cache carried NO ``reconciliation`` decision record —
+# the payload predates the field (a fresh fetch always carries it). Disclosed
+# rather than silently treated as "no conflicts": the Data Authority surface
+# must not read "0 conflicts" for a served snapshot whose record is simply
+# absent (A2's cache-hit path appends this to the payload's provenance.degraded).
+DEGRADED_AUTHORITY_RECORD_MISSING = "authority_record_missing"
 
 
 def degraded_circuit_open(provider_name: str) -> str:
@@ -329,11 +341,44 @@ class NormalizedPrice(BaseModel):
         """
         change, change_pct = self.latest_session_change()
         recent = self.bars[-recent_bars:] if self.bars else []
+        reconciliation = None
+        if self.reconciliation is not None:
+            reconciliation = {
+                "policy_version": self.reconciliation.policy_version,
+                "run_as_of": (
+                    self.reconciliation.run_as_of.isoformat()
+                    if self.reconciliation.run_as_of is not None
+                    else None
+                ),
+                "decisions": [
+                    {
+                        "metric": decision.metric,
+                        "status": decision.status,
+                        "selected_source": decision.selected_source,
+                        "is_authoritative": decision.is_authoritative,
+                        "reason_code": decision.reason_code,
+                    }
+                    for decision in self.reconciliation.decisions
+                ],
+            }
         return {
             "ticker": self.ticker,
             "quote_currency": self.quote_currency,
             "current_price": self.current_price,
             "as_of": self.provenance.as_of.isoformat(),
+            # The PRICE object's OWN provenance, so the step-data brief can see
+            # this price's provider/fetch instant/cache state/degradation markers
+            # instead of reading the FINANCIALS canonical's (the audited NVDA
+            # brief printed the financials' provenance beside a price heading and
+            # reported "degraded = [] (empty)" while its markers were non-empty).
+            "provenance": {
+                "provider": self.provenance.provider,
+                "as_of": self.provenance.as_of.isoformat(),
+                "fetched_at": self.provenance.fetched_at.isoformat(),
+                "from_cache": self.provenance.from_cache,
+                "degraded": list(self.provenance.degraded),
+            },
+            "reconciliation": reconciliation,
             "fifty_two_week_high": self.fifty_two_week_high(),
             "fifty_two_week_low": self.fifty_two_week_low(),
             "trailing_1y_return_pct": self.trailing_1y_return_pct(),

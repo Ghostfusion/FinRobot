@@ -472,6 +472,42 @@ def _sanitize_sec_filings_for_prompt(payload: object) -> object:
     return payload
 
 
+def _label_xbrl_fact_periods(snapshot: object) -> object:
+    """Add an explicit ``period_basis``/``period_label`` to every XBRL fact.
+
+    The snapshot's facts arrive on two bases with NO visible label: a TTM record
+    carries a ``periods`` quarter list (a window ending at ``period_end``), while
+    the ``latest_*`` point facts carry only a ``period_end`` and are the latest
+    ANNUAL point. Unlabelled, the narrative mixed FY margins (period_end
+    2026-01-25: FY2026 gross 71.1% / operating 60.4%) with TTM tiles (74.7% /
+    65.2%) as if they shared a period. Additive only: a fact's value is never
+    changed and no fact is dropped — the label is added beside the data.
+    """
+    if not isinstance(snapshot, dict):
+        return snapshot
+    labelled: dict[str, object] = {}
+    for concept, entries in snapshot.items():
+        if not isinstance(entries, list):
+            labelled[concept] = entries
+            continue
+        labelled_entries: list[object] = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                labelled_entries.append(entry)
+                continue
+            period_end = entry.get("period_end")
+            is_ttm = bool(entry.get("periods"))
+            if is_ttm:
+                basis = "ttm"
+                label = f"TTM (window ending {period_end})" if period_end else "TTM"
+            else:
+                basis = "annual"
+                label = f"FY (period_end {period_end})" if period_end else "FY"
+            labelled_entries.append({**entry, "period_basis": basis, "period_label": label})
+        labelled[concept] = labelled_entries
+    return labelled
+
+
 def _render_structured_prompt_value(
     value: object, max_chars: int = _PROMPT_MAX_STRUCTURED_CHARS
 ) -> str:
@@ -527,7 +563,12 @@ def _canonical_context_string(data_type: DataType, value: object) -> str:
     _truncate_for_prompt at that cap — rendering at the looser 16k budget would
     hand the free-text truncator a JSON document to slice mid-structure.
     """
-    header = f"[canonical] {data_type.value} (normalized contract)\n```json\n"
+    header = (
+        f"[canonical] {data_type.value} (normalized contract) — the "
+        f"`provenance`/`as_of`/`fetched_at`/`degraded` fields below belong to THIS "
+        f"{data_type.value.upper()} object only; do not attribute them to the other "
+        "canonical\n```json\n"
+    )
     footer = "\n```"
     budget = min(
         _PROMPT_MAX_STRUCTURED_CHARS,
@@ -1135,6 +1176,10 @@ class Pipeline:
                     model = _sanitize_catalyst_for_prompt(model)
                 elif name == "sec_filings":
                     model = _sanitize_sec_filings_for_prompt(model)
+                elif name == "xbrl_facts_snapshot":
+                    # Label every fact's period (TTM vs FY + period_end) so the
+                    # narrative cannot present FY margins and TTM tiles as one basis.
+                    model = _label_xbrl_fact_periods(model)
                 sc_parts.append(
                     f"### {name}:\n```json\n{_render_structured_prompt_value(model)}\n```"
                 )

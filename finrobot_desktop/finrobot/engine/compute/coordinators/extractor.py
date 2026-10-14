@@ -16,6 +16,7 @@ import math
 
 from finrobot.engine.data.instrument import FundInstrumentError, is_fund_quote_type
 from finrobot.engine.data.normalize.contracts import NormalizedFinancials, NormalizedPrice
+from finrobot.engine.models.metric_authority import compared_fields
 from finrobot.engine.models.financial import (
     FIELD_WARN_EV_MISSING_NET_DEBT,
     FIELD_WARN_SHARES_DERIVED,
@@ -60,6 +61,21 @@ from finrobot.engine.primitives.industry import is_balance_sheet_financial, is_b
 # percent/decimal mixup (the same magnitude the ``ge=-5`` model floor documents).
 _MARGIN_CEILING = 1.0
 _MARGIN_FLOOR = -5.0
+
+# The prose prefixes ``engine.data.validator`` emits when two sources disagree
+# beyond tolerance: ``cross_validate`` (financial fields) and ``cross_validate_price``
+# (the quote). Counted below so the reader-visible provenance can disclose "N
+# divergences" even when the diverging metric is NOT a key field and therefore
+# never appears as a structured ``degraded`` marker — the audited NVDA run carried
+# a 37% ``total_cash`` divergence (a compared, non-key field) beside an empty
+# degradation view.
+_VALIDATOR_DIVERGENCE_PREFIXES = ("Data discrepancy:", "Price discrepancy:")
+
+
+def _count_validator_divergences(warnings: list[str]) -> int:
+    """Number of validator cross-source divergence warnings in ``warnings``."""
+    return sum(1 for w in warnings if w.startswith(_VALIDATOR_DIVERGENCE_PREFIXES))
+
 
 # The label naming the P/E's denominator. A provider's ``trailingPE`` rides a
 # diluted-EPS basis while the report PRINTS TTM net income, so the two disagree by
@@ -405,6 +421,24 @@ def extract_financial_data(
         if w not in warnings:
             warnings.append(w)
 
+    # --- Reader-visible decision-record coverage (2026-10-13 audit) ------------
+    # The report must never present "0 conflicts + degraded []" while the run
+    # actually carried a divergence the ``degraded`` marker list cannot express
+    # (total_cash is a compared, NON-key field, so it never becomes a structured
+    # marker). These counts ride the published ``provenance`` block so the reader
+    # sees the run's real standing. ``metrics_decided`` / ``metrics_without_record``
+    # describe the FINANCIALS decision record (``data_authority``); the PRICE
+    # record is published separately as ``price_authority``.
+    fin_decisions = fin.reconciliation.decisions if fin.reconciliation is not None else ()
+    decided_metrics = {d.metric for d in fin_decisions}
+    compared_metrics = compared_fields()
+    metrics_decided = len(decided_metrics)
+    metrics_without_record = sum(1 for m in compared_metrics if m not in decided_metrics)
+    divergence_warnings = _count_validator_divergences(warnings)
+
+    fin_prov = fin.provenance
+    price_prov = price.provenance
+
     return FinancialData(
         ticker=ticker,
         company_name=fin.company_name or "",
@@ -508,15 +542,33 @@ def extract_financial_data(
             # feed's (close_only) since the snapshot shows both 52w (price)
             # and P/E (financials) numbers.
             degraded=list(dict.fromkeys([*fin.provenance.degraded, *price.provenance.degraded])),
+            # The two canonicals' TRUE fetch instants + cache state, published so
+            # a reader can tell a fetch from a session close (the audited brief
+            # rendered a session close as "Fetched" and attributed the financials'
+            # provenance to the price). ``retrieved_at``/``from_cache`` describe the
+            # FINANCIALS canonical (the block's provider/as_of/period_basis);
+            # ``price_*`` describe the PRICE canonical paired with
+            # ``price_authority``; ``session_as_of`` is the quote's session (=
+            # ``timestamp``). Never NULL-overwritten: a genuine None means the
+            # instant was not reported, not that it matched.
+            retrieved_at=fin_prov.fetched_at,
+            from_cache=fin_prov.from_cache,
+            price_retrieved_at=price_prov.fetched_at if price_prov is not None else None,
+            price_from_cache=price_prov.from_cache if price_prov is not None else None,
+            session_as_of=price_prov.as_of if price_prov is not None else None,
+            metrics_decided=metrics_decided,
+            metrics_without_record=metrics_without_record,
+            divergence_warnings=divergence_warnings,
         ),
         warnings=warnings,
         field_warnings=field_warnings,
-        # Carry the reconciliation record the data layer attached to whichever
-        # canonical it ran on — the financials' report wins, the price's is the
-        # fallback. Never invented: ``None`` when neither canonical reconciled.
-        data_authority=(
-            fin.reconciliation if fin.reconciliation is not None else price.reconciliation
-        ),
+        # The FINANCIALS decision record ONLY — never the price's. A price-only
+        # record must not masquerade as the financials authority (2026-10-13
+        # audit); ``None`` here means the financial metrics have NO decision
+        # record, which ``provenance.metrics_without_record`` discloses. The PRICE
+        # record rides under its own key so the two objects stay distinguishable.
+        data_authority=fin.reconciliation,
+        price_authority=price.reconciliation,
     )
 
 

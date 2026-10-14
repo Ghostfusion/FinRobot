@@ -18,6 +18,7 @@ from finrobot.engine.data.interface import DataResult
 from finrobot.engine.data.normalize.contracts import (
     DEGRADED_CLOSE_ONLY,
     DEGRADED_PRICE_FALLBACK_CLOSE,
+    DEGRADED_QUOTE_CURRENCY_INFERRED,
     DEGRADED_QUOTE_CURRENCY_MISSING,
     DEGRADED_QUOTE_TS_MISSING,
     NormalizedPrice,
@@ -122,6 +123,13 @@ def normalize_price(result: DataResult) -> NormalizedPrice:
     )
     if quote_currency == "UNKNOWN":
         degraded.append(DEGRADED_QUOTE_CURRENCY_MISSING)
+    elif data.get("quote_currency_inferred") is True:
+        # The provider's /eod rows carry no currency; the value came from its
+        # declared exchange suffix. It is usable — but INFERRED, not observed —
+        # so flag it instead of reporting an invented (or silently assumed) tag.
+        # Never the UNKNOWN + missing pair: a currency IS known here, just not
+        # stamped on the quote.
+        degraded.append(DEGRADED_QUOTE_CURRENCY_INFERRED)
     provenance = Provenance(
         provider=result.provider,
         as_of=as_of,

@@ -213,6 +213,43 @@ class DataProvenance(BaseModel):
     pe_ttm_lag_quarters: int | None = None
     degraded: list[str] = Field(default_factory=list)  # close_only / ttm_lag / …
 
+    # --- Reader-visible disclosure (2026-10-13) --------------------------------
+    # The audited NVDA report showed "0 conflicts + degraded []" beside a 37%
+    # total_cash divergence, and could not tell a fetch instant from a session
+    # close. The block below is the ONE reader-visible place the run's ACTUAL
+    # degradations, the two instants, and the decision-record coverage are
+    # published. Every field is optional (read-compatible with stored artifacts,
+    # the BUG-038 precedent) and None means "not disclosed on this payload", never
+    # "clean". The block's provider/as_of/period_basis describe the FINANCIALS
+    # canonical; the PRICE canonical's record rides separately as
+    # ``FinancialData.price_authority`` and its degraded markers are merged into
+    # ``degraded`` below — hence the explicit price_* keys so a reader cannot
+    # attribute one object's provenance to the other (the audited brief did).
+
+    # TRUE wall-clock instant the FINANCIALS canonical was fetched. Distinct from
+    # ``as_of`` (the fiscal period end) and from ``session_as_of`` (the quote's
+    # session) — the audited brief rendered a session close as "Fetched".
+    retrieved_at: datetime | None = None
+    # Whether the FINANCIALS canonical was served from the cache (a pre-feature
+    # row carries no reconciliation record; see ``authority_record_missing``).
+    from_cache: bool | None = None
+    # The PRICE canonical's own instant/state (paired with ``price_authority``).
+    price_retrieved_at: datetime | None = None
+    price_from_cache: bool | None = None
+    # The quote/session as-of the snapshot's headline price belongs to (the PRICE
+    # canonical's semantic ``as_of``; equals ``FinancialData.timestamp``).
+    session_as_of: datetime | None = None
+    # Decision-record coverage of the FINANCIALS authority (``data_authority``):
+    # how many metrics were decided, and how many cross-provider compared metrics
+    # were left WITHOUT a record. 0/N with N>0 is the disclosure that the report
+    # has no financial decision record — it can never read as "no conflicts".
+    metrics_decided: int | None = None
+    metrics_without_record: int | None = None
+    # Count of validator cross-validation prose divergences ("Data discrepancy:"
+    # and "Price discrepancy:") that reached this run — a number the ``degraded``
+    # marker list cannot carry because total_cash is a compared (not key) field.
+    divergence_warnings: int | None = None
+
 
 class FinancialData(BaseModel):
     """Structured financial data for a single company.
@@ -270,7 +307,22 @@ class FinancialData(BaseModel):
     """The per-metric selection record (status, selected source, alternatives,
     disagreement) behind this snapshot's numbers. ``None`` on snapshots built
     before reconciliation ran — optional, so this stays read-compatible with
-    stored artifacts (BUG-038 precedent) and needs no schema-version bump."""
+    stored artifacts (BUG-038 precedent) and needs no schema-version bump.
+
+    This is the FINANCIALS canonical's record. ``None`` means NO decision record
+    for the financial metrics — never read it as "no conflicts" (see
+    ``provenance.metrics_without_record``). The PRICE canonical's record rides
+    under :attr:`price_authority` instead; the two are deliberately separate so a
+    price-only record can no longer masquerade as the financials authority (the
+    audited NVDA artifact published the price's ``current_price`` decision here
+    while the financials had no record at all)."""
+
+    price_authority: ReconciliationReport | None = None
+    """The PRICE canonical's decision record (which source's ``current_price`` won,
+    and every alternative with its deviation). Distinct from :attr:`data_authority`
+    (the financials record) so a reader can tell the two objects apart. Optional →
+    read-compatible with stored artifacts; ``None`` when the PRICE canonical
+    carried no record."""
 
     @model_validator(mode="after")
     def _withhold_cross_currency_ratios(self) -> "FinancialData":
@@ -1100,6 +1152,7 @@ class CatalystEvent(BaseModel):
         "acquisition",
         "management",
         "market",
+        "other",
     ]
     headline: str
     sentiment: Literal["positive", "negative", "neutral"]
@@ -1154,9 +1207,33 @@ class CatalystAnalysis(BaseModel):
             "scale (see summarize_catalyst_outlook)."
         ),
     )
-    category_breakdown: dict[str, int] = Field(default_factory=dict)
+    category_breakdown: dict[str, int] = Field(
+        default_factory=dict,
+        description=(
+            "Counts of NEWS items only, by catalyst category. It is NOT a count of "
+            "SEC filings — the SEC 8-K side lives in sec_8k_category_breakdown. The "
+            "two were a single source-blind dict until 2026-10, which let a narrative "
+            "read news-category counts as filing counts (the NVDA report printed "
+            "'2 acquisition-category 8-Ks' from news counts; there was one 8-K)."
+        ),
+    )
     top_positive: list[CatalystEvent] = Field(default_factory=list)
     top_negative: list[CatalystEvent] = Field(default_factory=list)
+    # Coverage windows of the two feeds the catalysts were drawn from. Published so
+    # a reader can see that the news feed is a same-day ~20-item window (the $150B
+    # buyback of 2026-09-28 was structurally invisible to it) and that the SEC 8-K
+    # index's newest filing predates the news window (also missing that buyback).
+    # Shapes match catalyst.build_news_window / build_sec_8k_window:
+    #   news_window:  {count, earliest, latest, provider, sources}
+    #   sec_8k_window: {count, oldest, newest, provider}
+    news_window: dict[str, Any] | None = None
+    sec_8k_window: dict[str, Any] | None = None
+    # SEC 8-K events only, by category — the counterpart to the news-only
+    # category_breakdown above.
+    sec_8k_category_breakdown: dict[str, int] | None = None
+    # Set when the newest fetched 8-K predates the news window's earliest item:
+    # the filing index has no coverage inside the news window.
+    sec_8k_staleness_warning: str | None = None
 
 
 class ValuationMethod(BaseModel):
@@ -1228,6 +1305,21 @@ class CrossCheck(BaseModel):
     note: str = Field(
         description="Says plainly that this is a mean-reversion cross-check excluded "
         "from the published target blend."
+    )
+    band_break_caveat: str | None = Field(
+        default=None,
+        description=(
+            "Caveat for a cross-check whose own-history band spans a structural EBITDA "
+            "break (engine.primitives.historical_valuation.EbitdaStructuralBreak) — e.g. "
+            "a 5-year window that opens on the pre-ramp year, so its P25/P90 blend two "
+            "earnings regimes. A quantile-only cross-check (low/mid/high + basis) cannot "
+            "disclose that, and the 2026-10-13 NVDA auditor read exactly such a row "
+            "($493, +115%, 'CHEAP' off a p25 distorted by the FY2023 EBITDA base) as a "
+            "clean signal. Renderers MUST show this beside the row; None when the window "
+            "holds no break. The SAME string is published as "
+            "technical_analysis.historical_bands.classification_caveat and as "
+            "HistoricalBandSpread.structural_break_caveat, so the surfaces cannot disagree."
+        ),
     )
 
 

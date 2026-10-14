@@ -140,6 +140,28 @@ def _num(value: Any) -> float | None:
     return None
 
 
+#: EODHD ticker exchange suffix → (exchange, quote_currency). Minimal ON PURPOSE:
+#: only the combined US market resolves. EODHD's /eod bar rows carry NO currency,
+#: so the ticker's suffix is the only signal; anything we cannot place stays
+#: ``(None, None)`` so the canonical abstains (UNKNOWN + quote_currency_missing)
+#: rather than asserting a guessed foreign currency against a USD target.
+_EXCHANGE_CURRENCY_BY_SUFFIX: dict[str, tuple[str, str]] = {"US": ("US", "USD")}
+
+
+def _exchange_and_currency(ticker: str) -> tuple[str | None, str | None]:
+    """(exchange, quote_currency) for an EODHD ticker, or ``(None, None)``.
+
+    ``NVDA.US`` → ``("US", "USD")``. A suffix-less symbol is the US case too —
+    the adapter passes the caller's symbol through verbatim, and EODHD's US
+    convention is suffix-optional (mirrors ``normalize.session``'s suffix-less →
+    US default). An unmapped foreign suffix resolves to ``(None, None)``: this
+    provider will not invent a currency it cannot read off the venue.
+    """
+    _, dot, suffix = ticker.rpartition(".")
+    key = suffix.upper() if dot else "US"
+    return _EXCHANGE_CURRENCY_BY_SUFFIX.get(key, (None, None))
+
+
 def _bar(row: dict[str, Any]) -> dict[str, Any] | None:
     """One canonical PRICE bar ({date, open, high, low, close, volume}) on the
     ADJUSTED basis, or None.
@@ -459,7 +481,10 @@ class EODHDProvider(DataProvider):
         Both read the same endpoint: ``quote_only`` shrinks the window to the
         last few sessions. Returns the canonical PRICE shape (``current_price``
         + oldest-first ``price_history`` bars + ``exchange``) so provider-
-        agnostic consumers need no EODHD branch.
+        agnostic consumers need no EODHD branch. ``exchange``/``quote_currency``
+        come from the ticker's exchange suffix (``NVDA.US`` → US / USD) with
+        ``quote_currency_inferred`` marking that the tag was read off the venue,
+        not stamped on the /eod rows (which carry no currency).
         """
         today = datetime.now(tz=timezone.utc).date()
         window = _QUOTE_WINDOW_DAYS if quote_only else _PRICE_HISTORY_DAYS
@@ -484,9 +509,17 @@ class EODHDProvider(DataProvider):
             raise ProviderError(f"EODHD /eod returned no usable price for '{ticker}'")
 
         timestamp = datetime.now(tz=timezone.utc)
+        exchange, quote_currency = _exchange_and_currency(ticker)
+        # ``quote_currency_inferred`` tells normalize_price the tag came off the
+        # ticker's exchange (never the payload — /eod has no currency) so it can
+        # mark the PRICE ``quote_currency_inferred`` instead of ``quote_currency_missing``.
         if quote_only:
             return DataResult(
-                data={"price": current_price, "quote_currency": None},
+                data={
+                    "price": current_price,
+                    "quote_currency": quote_currency,
+                    "quote_currency_inferred": quote_currency is not None,
+                },
                 provider=self.name,
                 ticker=ticker,
                 data_type=DataType.QUOTE,
@@ -496,8 +529,9 @@ class EODHDProvider(DataProvider):
             data={
                 "current_price": current_price,
                 "price_history": bars,
-                "exchange": None,
-                "quote_currency": None,
+                "exchange": exchange,
+                "quote_currency": quote_currency,
+                "quote_currency_inferred": quote_currency is not None,
             },
             provider=self.name,
             ticker=ticker,
