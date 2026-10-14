@@ -24,11 +24,20 @@ The per-flag rows are the human-review payload, shaped like a dbt
 identity + headline/basis snapshot + the clause's own evidence string, grouped
 by clause so a reviewer reads one clause's full catch list at a time.
 
+A third use is the archive half of the design's §9.3 decision: the contradicted
+artifacts in the back catalogue are **left as they are** — no re-run, no delete, no
+in-place edit — and the artifact page derives a badge from the stored payload at read
+time. ``--badge`` prints exactly that derivation, one line per artifact, so the badge's
+input is auditable and so a reviewer can see which stored artifacts a clause set WOULD
+have withheld without touching a single record.
+
 Usage:
     python scripts/scan_artifact_contract.py                # scan all, all clauses
     python scripts/scan_artifact_contract.py --clause C1    # only the C1 catch list
     python scripts/scan_artifact_contract.py --limit 50     # sample the newest 50
     python scripts/scan_artifact_contract.py --proposed     # the STAGED clause set
+    python scripts/scan_artifact_contract.py --badge        # per-artifact read-time badge
+    python scripts/scan_artifact_contract.py --badge --proposed   # … post-promotion
 """
 
 from __future__ import annotations
@@ -70,8 +79,15 @@ class Flag:
     evidence: str
 
 
-async def _enumerate_artifacts(store: ArtifactStore, limit: int | None) -> list[Artifact]:
+async def _enumerate_artifacts(
+    store: ArtifactStore, limit: int | None
+) -> tuple[list[Artifact], dict[str, bool]]:
     """Every persisted artifact, newest first, INCLUDING archived ones.
+
+    Returns the rehydrated artifacts AND the ``id -> archived`` map: ``archive``
+    lives on the SUMMARY (``ArtifactSummary.archived``, a 24h-no-view staleness flag),
+    not on the payload the clauses read, so it has to be carried alongside rather than
+    found on the artifact.
 
     A historical scan must see the full back catalogue, so ``include_archived``
     is always True (archive is a UI-staleness flag, not a deletion — an archived
@@ -93,6 +109,7 @@ async def _enumerate_artifacts(store: ArtifactStore, limit: int | None) -> list[
     )
 
     artifacts: list[Artifact] = []
+    archived: dict[str, bool] = {}
     for summary in summaries:
         artifact = await store.get(summary.id)
         if artifact is None:
@@ -101,7 +118,8 @@ async def _enumerate_artifacts(store: ArtifactStore, limit: int | None) -> list[
             print(f"  [skip] {summary.id}: payload unreadable", file=sys.stderr)
             continue
         artifacts.append(artifact)
-    return artifacts
+        archived[summary.id] = bool(summary.archived)
+    return artifacts, archived
 
 
 def _scan(artifacts: list[Artifact], clauses: list[ContractClause]) -> list[Flag]:
@@ -185,6 +203,65 @@ def _report(total: int, clauses: list[ContractClause], flags: list[Flag]) -> Non
             print(f"      evidence: {flag.evidence}")
 
 
+def _badge_report(artifacts: list[Artifact], flags: list[Flag], archived: dict[str, bool]) -> None:
+    """The read-time badge the artifact page renders, one line per artifact (§9.3).
+
+    The locked decision for the back catalogue is *leave the record, annotate on read;
+    never rewrite*: the contradicted artifacts keep their bytes and the page derives a
+    badge from the payload. This is that derivation, transposed from the per-clause
+    catch lists — because the badge's unit is the ARTIFACT, and because a reader needs
+    to see which stored artifacts the current clause set WOULD have withheld (an `H`
+    clause) as opposed to annotated (`S`), without a re-run, a delete or an edit.
+
+    Order is the enumeration order (newest first), so the archive's shape reads at a
+    glance: the old artifacts carry the badges, the new ones do not.
+    """
+    by_artifact: dict[str, list[Flag]] = {}
+    for flag in flags:
+        by_artifact.setdefault(flag.artifact_id, []).append(flag)
+
+    withheld = sum(
+        1 for art in artifacts if any(f.severity == "H" for f in by_artifact.get(art.id, ()))
+    )
+    annotated = sum(
+        1
+        for art in artifacts
+        if by_artifact.get(art.id) and not any(f.severity == "H" for f in by_artifact[art.id])
+    )
+    print("=" * 78)
+    print("Read-time artifact badge (design §9.3 — annotate on read, never rewrite)")
+    print("=" * 78)
+    print(f"artifacts scanned : {len(artifacts)}")
+    print(f"would withhold    : {withheld}")
+    print(f"would annotate    : {annotated}")
+    print(f"clean             : {len(artifacts) - withheld - annotated}")
+    print()
+    print(f"{'artifact':<52}{'arch':<6}{'verdict':<8}{'badge'}")
+    print("-" * 78)
+    for art in artifacts:
+        found = by_artifact.get(art.id, [])
+        hard = [f.clause_id for f in found if f.severity == "H"]
+        soft = [f.clause_id for f in found if f.severity != "H"]
+        if hard:
+            badge = f"WITHHOLD ({', '.join(hard)})"
+        elif soft:
+            badge = f"REVIEW ({', '.join(soft)})"
+        else:
+            badge = "clean"
+        ticker = f" {art.ticker}" if art.ticker else ""
+        print(
+            f"{art.id[:50]:<52}{'yes' if archived.get(art.id) else 'no':<6}"
+            f"{(extract_verdict(art) or '—'):<8}{badge}{ticker}"
+        )
+    if flags:
+        print()
+        print("Evidence for each badge (the clause's own string, newest first):")
+        for art in artifacts:
+            for flag in by_artifact.get(art.id, ()):
+                print(f"  [{flag.clause_id}] {art.id}")
+                print(f"      {flag.evidence}")
+
+
 def _select_clauses(clause_filter: str | None, proposed: bool) -> list[ContractClause]:
     """The clause universe is either the LIVE set or the staged proposal set.
 
@@ -205,15 +282,23 @@ def _select_clauses(clause_filter: str | None, proposed: bool) -> list[ContractC
     return selected
 
 
-async def _run(clause_filter: str | None, limit: int | None, proposed: bool = False) -> int:
+async def _run(
+    clause_filter: str | None,
+    limit: int | None,
+    proposed: bool = False,
+    badge: bool = False,
+) -> int:
     clauses = _select_clauses(clause_filter, proposed)
     store = ArtifactStore()
     try:
-        artifacts = await _enumerate_artifacts(store, limit)
+        artifacts, archived = await _enumerate_artifacts(store, limit)
     finally:
         await store.close()
     flags = _scan(artifacts, clauses)
-    _report(len(artifacts), clauses, flags)
+    if badge:
+        _badge_report(artifacts, flags, archived)
+    else:
+        _report(len(artifacts), clauses, flags)
     return 0
 
 
@@ -245,10 +330,20 @@ def main() -> int:
             "clauses. Use this to quantify a clause before promoting it into CONTRACT_CLAUSES."
         ),
     )
+    parser.add_argument(
+        "--badge",
+        action="store_true",
+        help=(
+            "Print the read-time artifact badge (design §9.3) instead of the per-clause "
+            "catch lists: one line per artifact naming the clauses that WOULD withhold it "
+            "(severity H) or annotate it (S). Combine with --proposed to preview the badge "
+            "as it would read after promotion."
+        ),
+    )
     args = parser.parse_args()
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be >= 1")
-    return asyncio.run(_run(args.clause, args.limit, args.proposed))
+    return asyncio.run(_run(args.clause, args.limit, args.proposed, args.badge))
 
 
 if __name__ == "__main__":

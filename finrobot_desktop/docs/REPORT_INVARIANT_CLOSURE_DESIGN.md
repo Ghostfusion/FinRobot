@@ -616,6 +616,24 @@ Phase 1 (§7); the archive treatment in §9.3 is the only part that is not a cod
   report, and the artifact page renders a derived `audit_badge` computed at read time from the
   stored payload. New reports are prevented by `C8`; the eight stay as the evidence of the flaw
   that motivated it.
+- **Shipped (2026-10-14):** the report half is `--badge`, which transposes the per-clause catch
+  lists into the artifact's own unit — one line per artifact with the clauses that would withhold
+  it (`H`) or annotate it (`S`), plus the `archived` column read from the summary (archive is a
+  24h-no-view staleness flag and lives on the summary, not on the payload a clause reads). The
+  artifact-page badge itself is not built yet. Two readings, and they are the argument for the
+  whole design:
+
+  | clause set | would withhold | would annotate | clean |
+  |---|---|---|---|
+  | **live** (`C1`–`C7`) | **0** | 0 | 105 |
+  | **staged** (incl. `C8`/`C9`/`C11`) | **70** | 29 | 6 |
+
+  The live row is the finding: the shipped rules would not have withheld a single one of the
+  contradicted artifacts. The staged row is the promotion risk, in the currency the badge uses —
+  and 63 of the 70 withholds are the `C11` non-withheld population (`WITHHOLD (C11)` on ordinary
+  reports that withheld nothing), which is why §4.4's unification must precede its promotion.
+  Note the `archived` column shows `no` everywhere: nothing in the store has aged past the 24h
+  no-view window yet, so the column is exercised but not yet populated.
 - **Why: the domain's own answer to a wrong filed report is an amendment, not an edit.**
   17 CFR 240.12b-15: an amendment is *"filed under cover of the form amended, marked with the
   letter 'A' … '10-K/A'"*, *"must set forth the complete text of each item as amended"*, and
