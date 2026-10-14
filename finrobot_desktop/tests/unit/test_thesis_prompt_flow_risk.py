@@ -20,12 +20,16 @@ from finrobot.engine.compute.operators.valuation_synthesis import (
     synthesize_valuations,
 )
 from finrobot.engine.models.financial import (
+    CatalystAnalysis,
+    CatalystEvent,
+    CompanyFinancials,
     DCFInputs,
     DCFResult,
     FinancialData,
     IncomeStatement,
     MarketData,
     MarketImpliedCheck,
+    PeerComps,
     ThesisResult,
     ValuationMethod,
 )
@@ -248,3 +252,141 @@ class TestPayorReimbursementRisk:
         }
         thesis = self._thesis(company_overview="We sell GPUs to cloud providers.")
         assert ensure_payor_reimbursement_risk(thesis, context) is thesis
+
+
+# ── Narrative-labelled prompt discipline (2026-10-13 NVDA) ────────────────────
+# Four prose defects in the audited artifact traced to what the prompt did NOT
+# say: an insider "purchases" figure back-filled with the DCF target price, the
+# missing peer set blamed on the whitelist instead of the failed fetch, the
+# market's implied growth called "demanding" without the model's own average next
+# to it, and news-category counts read as SEC filing counts.
+
+
+def _catalyst() -> CatalystAnalysis:
+    """One single-source acquisition RUMOUR — the x2 shape the discipline targets."""
+    event = CatalystEvent(
+        category="acquisition",
+        headline="Report: Reflection AI in advanced talks with the company",
+        sentiment="positive",
+        impact_score=4,
+        source_count=1,
+        published=datetime(2026, 9, 28, tzinfo=timezone.utc),
+        reasoning="a single unverified report of talks",
+    )
+    return CatalystAnalysis(
+        events=[event],
+        overall_sentiment="bullish",
+        key_catalysts=["x"],
+        net_sentiment=0.4,
+        category_breakdown={"acquisition": 1, "product_launch": 2},
+        top_positive=[event],
+        top_negative=[],
+    )
+
+
+def _company(ticker: str, market_cap: float) -> CompanyFinancials:
+    return CompanyFinancials(
+        ticker=ticker,
+        name=ticker,
+        revenue=6.2e9,
+        ebitda=1.4e9,
+        net_income=0.8e9,
+        market_cap=market_cap,
+        total_debt=4.0e9,
+        total_cash=0.5e9,
+        gross_margin=0.5,
+        operating_margin=0.2,
+        pe_ratio=15.3,
+        ev_ebitda=11.2,
+    )
+
+
+def _peer_comps() -> PeerComps:
+    return PeerComps(
+        target=_company("EHC", 12.27e9),
+        peers=[_company("UHS", 11.0e9)],
+        median_ev_ebitda=10.5,
+        median_pe=14.0,
+        median_ev_revenue=1.5,
+    )
+
+
+class TestNarrativeLabelDiscipline:
+    def test_zero_insider_purchases_is_stated_and_other_numbers_are_barred(self):
+        """Defect 1: "$259.87 of purchases" — the DCF target pasted in as the
+        purchases figure while the true gross purchases were $0."""
+        prompt = _prompt({"ownership_governance_analysis": _ownership()})
+        assert "INSIDER PURCHASES = $0" in prompt
+        assert "NO open-market insider purchases" in prompt
+        assert "PURCHASE FIGURE RULE" in prompt
+        # The bar must name the DIRECTIONS the model back-filled from.
+        assert "price target" in prompt and "misattribution" in prompt
+
+    def test_purchase_rule_absent_when_there_were_real_purchases(self):
+        ownership = _ownership().model_copy(
+            update={"insider_buy_value": 5_000_000.0, "insider_net_flow": -21_430_022.85}
+        )
+        prompt = _prompt({"ownership_governance_analysis": ownership})
+        assert "INSIDER PURCHASES = $0" not in prompt
+        assert "PURCHASE FIGURE RULE" not in prompt
+
+    def test_peer_absence_names_the_fetch_failure_not_the_whitelist(self):
+        """i6: page 6 blamed "this run's whitelist" for the missing peer table
+        while the run's warning said the data sources had failed."""
+        prompt = _prompt(
+            {
+                "financial_modeling": _dcf(
+                    MarketImpliedCheck(horizon_years=10, implied_growth=0.0123)
+                )
+            }
+        )
+        assert "PEER-SET ABSENCE" in prompt
+        assert "data fetch returned no usable comp set" in prompt
+        assert "peer analysis did not run for this ticker" in prompt
+        assert "Do NOT explain the missing peer multiples by blaming this whitelist" in prompt
+
+    def test_peer_absence_note_dropped_when_a_peer_set_is_present(self):
+        prompt = _prompt({"peer_analysis": _peer_comps()})
+        assert "PEER-SET ABSENCE" not in prompt
+
+    def test_model_average_growth_sits_next_to_the_implied_rate(self):
+        """l4: the market's ~20.8% was called a "demanding bar" while the model's
+        own fade averages ~21.5%/yr — the prose claimed a bar the model clears."""
+        dcf = _dcf(MarketImpliedCheck(horizon_years=10, implied_growth=0.208))
+        prompt = _prompt({"financial_modeling": dcf})
+        # schedule [0.11, 0.09, 0.07, 0.05, 0.03] → endpoints 11.0% / 3.0%, avg 7.0%
+        assert "MODEL's OWN revenue-growth assumption" in prompt
+        assert "11.0%/yr in forecast year 1" in prompt
+        assert "3.0%/yr in year 5" in prompt
+        assert "averaging 7.0%/yr" in prompt
+        assert "FADE schedule" in prompt and "a DECLINING rate, not a flat one" in prompt
+        assert "flat rate vs a " in prompt and "different constructs" in prompt
+        # and it is whitelisted, so a claim checker can match the citation
+        assert "average 7.0%/yr over the 5 forecast fiscal years" in prompt
+
+    def test_period_labeling_rule_is_present(self):
+        """i5: FY margins and TTM tiles were cited unlabelled."""
+        prompt = _prompt()
+        assert "PERIOD LABELING RULE" in prompt
+        assert "never cite a margin without naming its basis" in prompt
+
+    def test_catalyst_category_breakdown_is_labelled_as_news_not_filings(self):
+        """Defect 4 / i6: "2 acquisition-category 8-Ks" read off news counts."""
+        prompt = _prompt({"catalyst_analysis": _catalyst()})
+        assert "News items by category" in prompt
+        assert "acquisition: 1, product_launch: 2" in prompt
+        assert "NOT a count of SEC filings" in prompt
+
+    def test_catalyst_event_lines_carry_source_count_and_date(self):
+        prompt = _prompt({"catalyst_analysis": _catalyst()})
+        assert "source count: 1" in prompt
+        assert "published: 2026-09-28" in prompt
+
+    def test_news_impact_discipline_rule_is_present(self):
+        """x2: a single-source "advanced talks" report shipped as an impact-4
+        acquisition; an already-announced ramp was called a new catalyst."""
+        prompt = _prompt()
+        assert "NEWS-IMPACT DISCIPLINE" in prompt
+        assert "REPORTED / early-stage / unconfirmed" in prompt
+        assert "NOT a new catalyst" in prompt
+        assert "Source count is 1" in prompt

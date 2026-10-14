@@ -416,6 +416,27 @@ def test_lbo_nwc_clamp_degrades_to_marginal_ratio() -> None:
     assert "applied to the 3.0% steady-state revenue growth rate" in prov
 
 
+def test_lbo_growth_provenance_counts_cagr_intervals_not_years() -> None:
+    """The LBO seed's revenue-growth provenance must label the CAGR by INTERVAL count.
+
+    Same defect class as dcf_seed's revenue-growth label (2026-10-13 NVDA): the
+    window read "trailing {len(years)}yr" while ``cagr_revenue`` compounds over
+    ``len(years) - 1`` intervals — a 4-year series is a 3-interval CAGR. The rate
+    itself stays the RAW CAGR (here 3.0%) with the PE-band clamp disclosed, so only
+    the window label changes.
+    """
+    hist = _historical_with_nwc([-14e9, -14e9, -14e9, -14e9], [100e9, 103e9, 106e9, 109e9])
+    hist.years = [2022, 2023, 2024, 2025]
+    hist.cagr_revenue = 0.03
+    inputs = seed_lbo_inputs(_minimal_financials(), hist)
+    prov = inputs.assumption_provenance["revenue_growth_rate"]
+    assert "trailing 3yr revenue CAGR 3.0%" in prov
+    assert "trailing 4yr" not in prov
+    # The raw CAGR and the clamp disclosure are unchanged.
+    assert "clamped to the PE underwriting band 0%-15%" in prov
+    assert inputs.revenue_growth_rate == pytest.approx(0.03)
+
+
 def test_lbo_nwc_in_band_is_byte_identical() -> None:
     """In-band ΔNWC never carries a clamp/degradation disclosure (BACKLOG A6⑤
     reworded the prose to analyst language; this pins the invariant)."""

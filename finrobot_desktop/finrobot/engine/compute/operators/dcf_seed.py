@@ -546,9 +546,34 @@ def seed_dcf_inputs(
             if _ntm_restated
             else ""
         )
+        # Disclose the shared clamp when it bit the consensus itself (a euphoric or
+        # distressed FY1 is clamped to +40%/−20% before it seeds the explicit window),
+        # and ALWAYS state the true trailing CAGR — by INTERVAL count, not year count —
+        # next to the seeded forward rates, so the reader can compare the historical
+        # actual with what the model will run. Same two-defect fix as the CAGR branch
+        # below (NVDA 2026-10-13: "trailing 4yr revenue CAGR 40.0%" for a 3-interval
+        # 100.05% actual).
+        _cap_note = ""
+        if any(g > _GROWTH_CAP for g in seed_rates):
+            _cap_note = (
+                f" (capped to {_GROWTH_CAP:.1%}/yr where the seeded rate — the "
+                "consensus rate, after the Year-1 NTM restatement below — exceeded it)"
+            )
+        elif any(g < _GROWTH_FLOOR for g in seed_rates):
+            _cap_note = (
+                f" (floored to {_GROWTH_FLOOR:.1%}/yr where the seeded rate — the "
+                "consensus rate, after the Year-1 NTM restatement below — fell below it)"
+            )
+        _trailing_ctx = ""
+        if has_real_cagr:
+            assert cagr is not None  # narrowing for mypy
+            _trailing_ctx = (
+                f"; trailing {_cagr_intervals(historical)}yr revenue CAGR {cagr:.1%} "
+                "(the historical actual, not a seeded forward rate)"
+            )
         prov["revenue_growth_rates"] = (
-            f"analyst consensus FY1-{n_consensus} growth {consensus_pct}, "
-            f"then linear fade to terminal {terminal_growth_rate:.1%}{ntm_note}"
+            f"analyst consensus FY1-{n_consensus} growth {consensus_pct}{_cap_note}, "
+            f"then linear fade to terminal {terminal_growth_rate:.1%}{ntm_note}{_trailing_ctx}"
         )
     elif has_real_cagr:
         assert cagr is not None  # narrowing for mypy
@@ -563,18 +588,21 @@ def seed_dcf_inputs(
         growth_schedule = _decay_growth_schedule(
             base_growth, terminal_growth_rate, projection_years
         )
-        n_years = len(historical.years)
+        # The label carries the TRUE trailing CAGR — never the clamped seed — and it
+        # counts year-over-year INTERVALS (a 4-year series is a 3-interval CAGR, since
+        # cagr_revenue is calculate_cagr(revenue[0], revenue[-1], len(years) - 1)).
+        cagr_label = _trailing_cagr_label(historical, cagr)
         if base_growth > terminal_growth_rate:
             prov["revenue_growth_rates"] = (
-                f"trailing {n_years}yr revenue CAGR {base_growth:.1%}, "
-                f"fading linearly to terminal {terminal_growth_rate:.1%} over the next {projection_years}yr"
+                f"{cagr_label}, fading linearly to terminal "
+                f"{terminal_growth_rate:.1%} over the next {projection_years}yr"
             )
         else:
             # base ≤ terminal (mature or declining): held flat across the
             # explicit window — don't claim a decay that doesn't happen.
             prov["revenue_growth_rates"] = (
-                f"trailing {n_years}yr revenue CAGR {base_growth:.1%}, "
-                f"held flat over the next {projection_years}yr (terminal {terminal_growth_rate:.1%})"
+                f"{cagr_label}, held flat over the next {projection_years}yr "
+                f"(terminal {terminal_growth_rate:.1%})"
             )
     else:
         # No reliable historical CAGR (data absent or NaN-polluted).
@@ -1206,6 +1234,44 @@ def dcf_current_actuals(
 # ---------------------------------------------------------------------------
 # Small helpers — last so they stay near caller sites
 # ---------------------------------------------------------------------------
+
+
+def _cagr_intervals(historical: HistoricalMetrics) -> int:
+    """Year-over-year INTERVALS behind ``historical.cagr_revenue``.
+
+    The extractor computes the CAGR as ``calculate_cagr(revenue[0], revenue[-1],
+    len(years) - 1)`` — n annual points are n-1 compounding intervals, so a 4-year
+    series is a 3-interval CAGR. Labelling it "4yr" overstates the span by one and
+    was half of the NVDA 2026-10-13 mislabel. Floored at 1 so a single-point series
+    (defensive; cagr would be None there) can never print "trailing 0yr".
+    """
+    return max(len(historical.years) - 1, 1)
+
+
+def _trailing_cagr_label(historical: HistoricalMetrics, cagr: float) -> str:
+    """Provenance label for the REAL trailing revenue CAGR, clamp disclosed.
+
+    Two defects shipped here (NVDA 2026-10-13, "trailing 4yr revenue CAGR 40.0%"):
+
+      * the label printed the CLAMPED seed growth — 40.0% is ``_GROWTH_CAP`` applied
+        to the first forecast year — as if it were the historical rate, so the capped
+        seed read as the company's actual history, and
+      * it counted YEARS where the CAGR compounds over INTERVALS.
+
+    The true rate (100.05% for NVDA: FY23 $26.97B → FY26 $215.94B over 3 intervals)
+    is what the reader must see; when the shared floor/cap bit, the clamped value is
+    stated explicitly as the seed's first-forecast-year rate instead of silently
+    replacing the actual.
+    """
+    label = f"trailing {_cagr_intervals(historical)}yr revenue CAGR {cagr:.1%}"
+    if cagr > _GROWTH_CAP:
+        return (
+            f"{label}, capped to {_GROWTH_CAP:.1%} for the first forecast year "
+            "(no firm compounds revenue faster than that for a decade)"
+        )
+    if cagr < _GROWTH_FLOOR:
+        return f"{label}, floored to {_GROWTH_FLOOR:.1%} for the first forecast year"
+    return label
 
 
 def _pct_bound(bound: float) -> str:

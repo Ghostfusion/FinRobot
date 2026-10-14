@@ -413,3 +413,108 @@ class TestDownsample:
         # First and last sample must be present so the chart keeps its edges.
         assert band.timeline[0][0] == prices[0].sample_date
         assert band.timeline[-1][0] == prices[-1].sample_date
+
+
+# ---------------------------------------------------------------------------
+# Structural-break disclosure (l1)
+# ---------------------------------------------------------------------------
+
+
+class TestStructuralBreakDisclosure:
+    """A window whose EBITDA base jumps ≥3x blends two regimes.
+
+    Live 2026-10-13 NVDA: the 5-year window opens 2023-01-31, when the trailing FY
+    EBITDA was $5.99B; FY2024's $35.58B is a 5.9x step, so p25 = 37.76x / p90 =
+    183.34x are driven by the pre-ramp base and `classify_band` badged the stock
+    CHEAP (27.06x ≤ 37.76x). The publication is a DISCLOSURE: the quantiles and the
+    classification are unchanged, the break (years + step) is named on the band so
+    the UI can caveat the badge.
+    """
+
+    def _band_with_ramp(self):
+        yearly = [_yearly(2023, ebitda=6), _yearly(2024, ebitda=36), _yearly(2025, ebitda=90)]
+        prices = [
+            _price(date(2024, 6, 1), 100.0),  # FY2023 EBITDA 6  → 16.7x
+            _price(date(2025, 6, 1), 110.0),  # FY2024 EBITDA 36 → 3.1x
+            _price(date(2026, 1, 1), 120.0),  # FY2025 EBITDA 90 → 1.3x
+        ]
+        return compute_historical_band(
+            metric="ev_ebitda", yearly=yearly, prices=prices, shares_outstanding=10
+        )
+
+    def test_structural_ebitda_step_is_published_on_the_band(self):
+        band = self._band_with_ramp()
+        assert band.structural_break is not None
+        step = band.structural_break
+        # The 6x step FY2023 → FY2024 is the dominant regime change (the 2.5x
+        # FY2024 → FY2025 step is below the 3x threshold).
+        assert step.from_fiscal_date == date(2023, 12, 31)
+        assert step.to_fiscal_date == date(2024, 12, 31)
+        assert step.from_ebitda == 6.0
+        assert step.to_ebitda == 36.0
+        assert step.step_multiple == pytest.approx(6.0)
+
+    def test_break_is_disclosed_as_a_warning(self):
+        band = self._band_with_ramp()
+        hits = [w for w in band.warnings if "structural EBITDA break" in w]
+        assert hits, band.warnings
+        assert "2023-12-31" in hits[0] and "2024-12-31" in hits[0]
+        assert "6.0x" in hits[0]
+        assert "quantile method is unchanged" in hits[0]
+
+    def test_quantiles_are_unchanged_by_the_disclosure(self):
+        band = self._band_with_ramp()
+        # The published numbers are exactly the pre-disclosure computation: the
+        # method is a product decision, only the disclosure was added.
+        # multiples: 1000/6, 1100/36, 1200/90 → sorted [13.33, 30.56, 166.67];
+        # inclusive linear interpolation puts p25 halfway between the first two.
+        assert band.median == pytest.approx(1100.0 / 36)
+        assert band.current == pytest.approx(1200.0 / 90)
+        assert band.p25 == pytest.approx(1200.0 / 90 + 0.5 * (1100.0 / 36 - 1200.0 / 90))
+
+    def test_no_break_when_growth_stays_under_three_x(self):
+        yearly = [_yearly(2023, ebitda=20), _yearly(2024, ebitda=25), _yearly(2025, ebitda=30)]
+        prices = [
+            _price(date(2024, 6, 1), 100.0),
+            _price(date(2025, 6, 1), 110.0),
+            _price(date(2026, 1, 1), 120.0),
+        ]
+        band = compute_historical_band(
+            metric="ev_ebitda", yearly=yearly, prices=prices, shares_outstanding=10
+        )
+        assert band.structural_break is None
+        assert not any("structural EBITDA break" in w for w in band.warnings)
+
+    def test_break_in_an_unsampled_fiscal_year_is_not_flagged(self):
+        """Only fiscal years the window's samples actually aligned to count: a step
+        in a year no price point ever used cannot have shaped the quantiles."""
+        yearly = [_yearly(2023, ebitda=1), _yearly(2024, ebitda=6), _yearly(2025, ebitda=90)]
+        # Every price sits after FY2025, so every sample uses the SAME denominator.
+        prices = [_price(date(2026, 1, 1), 100.0), _price(date(2026, 6, 1), 110.0)]
+        band = compute_historical_band(
+            metric="ev_ebitda", yearly=yearly, prices=prices, shares_outstanding=10
+        )
+        assert band.sample_count == 2
+        assert band.structural_break is None
+
+    def test_p_fcf_band_publishes_no_ebitda_break(self):
+        """The break is an EBITDA-denominator signal; a P/FCF band must not claim it."""
+        yearly = [_yearly(2023, ebitda=6, fcf=20), _yearly(2024, ebitda=36, fcf=25)]
+        prices = [_price(date(2024, 6, 1), 100.0), _price(date(2025, 6, 1), 110.0)]
+        band = compute_historical_band(
+            metric="p_fcf", yearly=yearly, prices=prices, shares_outstanding=10
+        )
+        assert band.structural_break is None
+
+    def test_ebitda_collapse_is_disclosed_too(self):
+        """A ≥3x EBITDA COLLAPSE blends regimes exactly as a ramp does: the post-step
+        multiples are computed off a base a third the size, so the same caveat must
+        fire (the step is reported as a magnitude, not a signed ratio)."""
+        yearly = [_yearly(2023, ebitda=90), _yearly(2024, ebitda=6)]
+        prices = [_price(date(2024, 6, 1), 100.0), _price(date(2025, 6, 1), 110.0)]
+        band = compute_historical_band(
+            metric="ev_ebitda", yearly=yearly, prices=prices, shares_outstanding=10
+        )
+        assert band.structural_break is not None
+        assert band.structural_break.step_multiple == pytest.approx(15.0)
+        assert any("structural EBITDA break" in w for w in band.warnings)

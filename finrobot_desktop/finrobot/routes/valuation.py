@@ -24,6 +24,7 @@ from finrobot.engine.compute.operators.multiples import current_ev_ebitda
 from finrobot.engine.compute.operators.valuation_aggregator import aggregate_valuation
 from finrobot.engine.data.cache import cached_fetch
 from finrobot.engine.data.historical_loaders import (
+    band_classification_caveat,
     classify_band,
     compute_bands_via_data_layer,
     fetch_reverse_multiple_band,
@@ -563,6 +564,25 @@ class HistoricalBandTimelinePoint(BaseModel):
     value: float
 
 
+class HistoricalBandBreakPoint(BaseModel):
+    """Structural EBITDA break inside the published window (disclosure only).
+
+    A ≥3x year-over-year EBITDA step changes the EV/EBITDA denominator regime
+    mid-sample, so the P25/P90 quantiles blend two bases (2026-10-13 NVDA: the 5y
+    window opens on the pre-ramp FY2023 base, $5.99B → FY2024 $35.58B, giving p25
+    37.76x / p90 183.34x). The quantiles themselves are unchanged — this only lets a
+    renderer caveat the cheap/fair/expensive badge.
+    """
+
+    from_fiscal_year: str = Field(description="ISO fiscal-year-end date of the pre-step FY.")
+    to_fiscal_year: str = Field(description="ISO fiscal-year-end date of the post-step FY.")
+    from_ebitda: float
+    to_ebitda: float
+    step_multiple: float = Field(
+        description="EBITDA step magnitude >= 3 between the two fiscal years."
+    )
+
+
 class HistoricalBandResponse(BaseModel):
     """``GET /api/valuation/historical-bands/{ticker}`` payload (v5 §6.6)."""
 
@@ -577,6 +597,22 @@ class HistoricalBandResponse(BaseModel):
     sample_count: int
     classification: Literal["expensive", "fair", "cheap", "unknown"] = Field(
         description="UI hint: current vs p75/p90 (spec §6.6)"
+    )
+    structural_break: HistoricalBandBreakPoint | None = Field(
+        default=None,
+        description=(
+            "Structural EBITDA break inside the window, or null. Same disclosure the "
+            "report publishes (technical_analysis.historical_bands.structural_break / "
+            "CrossCheck.band_break_caveat); the badge above must be read as directional "
+            "when this is set."
+        ),
+    )
+    classification_caveat: str | None = Field(
+        default=None,
+        description=(
+            "One-sentence caveat for the badge when a structural break is present "
+            "(null otherwise). Render it next to the classification."
+        ),
     )
     warnings: list[str] = Field(default_factory=list)
 
@@ -639,6 +675,7 @@ async def historical_bands(
             allow_share_fetch=True,
         )
         classification = classify_band(band)
+        band_break = band.structural_break
         payload = HistoricalBandResponse(
             ticker=ticker,
             metric=band.metric,
@@ -650,6 +687,20 @@ async def historical_bands(
             timeline=[HistoricalBandTimelinePoint(date=d, value=v) for d, v in band.timeline],
             sample_count=band.sample_count,
             classification=classification,
+            structural_break=(
+                HistoricalBandBreakPoint(
+                    from_fiscal_year=band_break.from_fiscal_date.isoformat(),
+                    to_fiscal_year=band_break.to_fiscal_date.isoformat(),
+                    from_ebitda=band_break.from_ebitda,
+                    to_ebitda=band_break.to_ebitda,
+                    step_multiple=band_break.step_multiple,
+                )
+                if band_break is not None
+                else None
+            ),
+            # Same string the report publishes (CrossCheck.band_break_caveat /
+            # technical_analysis.historical_bands.classification_caveat).
+            classification_caveat=band_classification_caveat(band),
             warnings=band.warnings,
         )
         return payload.model_dump(mode="json")

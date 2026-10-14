@@ -844,6 +844,26 @@ def _published_band_clause(vs: ValuationSynthesis) -> str:
     return f" Published target band ${vs.target_low:.2f}–${vs.target_high:.2f} ({provenance})."
 
 
+def _blend_label(method_count: int) -> str:
+    """Name the synthesis anchor when no comparability rule picked one.
+
+    A single method is not a blend. NVDA 2026-10-13 published "method-weighted
+    blend of 1 corroborating method(s)" — the plural reads as a corroborated set
+    and overstates what happened (nothing corroborated the lone DCF; the single
+    method IS the point, and the band already says "single-method confidence
+    dial"). State the count, and what the weight means, either way.
+    """
+    if method_count == 1:
+        return (
+            "the single computed method (no second method ran against it, so there is "
+            "no blend; wt = the method's data-quality weight, NOT prediction accuracy)"
+        )
+    return (
+        f"method-weighted blend of {method_count} corroborating methods "
+        "(wt = data-quality weight, NOT prediction accuracy)"
+    )
+
+
 def resolve_canonical_thesis(vs: object, ticker: str) -> CanonicalThesis:
     """Resolve the deterministic headline verdict (+ maybe target) from a synthesis.
 
@@ -1048,8 +1068,7 @@ def resolve_canonical_thesis(vs: object, ticker: str) -> CanonicalThesis:
             f"anchored on {vs.anchor_method} (comparability rule — not a blended "
             f"midpoint of divergent methods)"
             if vs.anchor_method
-            else f"method-weighted blend of {len(vs.methods)} corroborating method(s) "
-            "(wt = data-quality weight, NOT prediction accuracy)"
+            else _blend_label(len(vs.methods))
         )
         basis = (
             f"Confidence={vs.confidence}; {anchor_txt}: {method_breakdown} → "

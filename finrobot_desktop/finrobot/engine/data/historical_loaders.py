@@ -17,6 +17,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Literal
 
 from finrobot.engine.primitives.historical_valuation import (
+    EbitdaStructuralBreak,
     HistoricalBand,
     HistoricalMetricName,
     PricePoint,
@@ -367,6 +368,18 @@ class HistoricalBandSpread:
     # cross-check in the valuation synthesis needs the mid, and it must be the
     # band's measured median rather than a fabricated (p25+p75)/2.
     median: float | None = None
+    # Structural EBITDA break inside the band's window (2026-10-13 NVDA: the 5y
+    # window opens 2023-01-31 on the pre-ramp FY2023 base, $5.99B → FY2024 $35.58B,
+    # so p25 37.76x / p90 183.34x blend two earnings regimes). The band quantiles
+    # alone cannot disclose this: the METHOD row and the own-history CROSS-CHECK row
+    # both read a quantile-only band as a clean distribution, and the auditor read
+    # the resulting $493 (+115%) "CHEAP" row as a clean signal. Additive/optional —
+    # a consumer that only wants the quantiles ignores it.
+    structural_break: EbitdaStructuralBreak | None = None
+    # The reader-facing caveat (the SAME string the technical payload publishes, built
+    # by ``band_classification_caveat``) so no consumer has to rebuild it. None when
+    # the window holds no break.
+    structural_break_caveat: str | None = None
 
 
 async def fetch_reverse_multiple_band(
@@ -428,7 +441,12 @@ async def fetch_reverse_multiple_band(
         )
         return None
     return HistoricalBandSpread(
-        p25=p25, p75=p75, sample_count=band.sample_count, median=band.median
+        p25=p25,
+        p75=p75,
+        sample_count=band.sample_count,
+        median=band.median,
+        structural_break=band.structural_break,
+        structural_break_caveat=band_classification_caveat(band),
     )
 
 
@@ -443,6 +461,39 @@ def classify_band(band: HistoricalBand) -> BandClassification:
     if band.current <= band.p25:
         return "cheap"
     return "fair"
+
+
+def band_classification_caveat(band: HistoricalBand) -> str | None:
+    """Caveat for the band's classification badge, or None when there is none.
+
+    Single source of the badge caveat: the technical payload (``HistoricalBandSnapshot.
+    classification_caveat``) and the reverse-multiple spread that feeds the valuation
+    chapter's ``CrossCheck`` row both render THIS string, so the two surfaces can never
+    disagree about the same band.
+
+    The classification itself is published unchanged — the quantile method is a product
+    decision. What a quantile-only consumer cannot see is that the window contains a
+    structural EBITDA break (``HistoricalBand.structural_break``), which is exactly the
+    2026-10-13 NVDA case: a 5y window opening on the pre-ramp FY2023 base put p25 at
+    37.76x, so a 27.06x current multiple badged CHEAP off a distorted quantile.
+
+    Deliberately does NOT name the classification value: each surface classifies ITS OWN
+    band's ``current`` (the report's cross-check band is trailing-annual while the
+    technical snapshot overrides ``current`` with the canonical TTM multiple), so quoting
+    a value here would let two rendered caveats disagree about the same break. The
+    caveat is a pure function of the break, hence byte-identical on every surface.
+    """
+    break_ = band.structural_break
+    if break_ is None:
+        return None
+    direction = "small-EBITDA" if break_.to_ebitda > break_.from_ebitda else "large-EBITDA"
+    return (
+        "the band's cheap/fair/expensive classification is computed on a window containing "
+        f"a structural EBITDA break (FY{break_.from_fiscal_date.isoformat()} -> "
+        f"FY{break_.to_fiscal_date.isoformat()}, {break_.step_multiple:.1f}x step): the "
+        f"P25/P90 quantiles are driven by the pre-step {direction} base - treat the badge "
+        "as directional only (quantile method unchanged)."
+    )
 
 
 # ---------------------------------------------------------------------------

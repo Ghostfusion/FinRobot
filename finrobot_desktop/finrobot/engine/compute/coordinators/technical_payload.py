@@ -38,6 +38,7 @@ from finrobot.engine.compute.operators.sniper import (
 from finrobot.engine.data.historical_loaders import (
     REPORT_BAND_WINDOW_YEARS,
     BandClassification,
+    band_classification_caveat,
     classify_band,
     compute_bands_via_data_layer,
     load_price_history,
@@ -61,6 +62,28 @@ TECHNICAL_DCF_UNAVAILABLE_MARKER = "technical_analysis skipped: DCF not applicab
 # Default Monte Carlo budget. 10K antithetic simulations finish in ~10ms and
 # are dense enough for a stable 5/95 percentile estimate (Glasserman §4.1).
 _MC_SIMULATIONS = 10_000
+
+
+class HistoricalBandBreakSnapshot(BaseModel):
+    """JSON-friendly mirror of the band's structural EBITDA break disclosure.
+
+    ``from_ebitda`` / ``to_ebitda`` are absolute figures in the financials'
+    reporting currency (the band's multiples currency-cancel per year), so the
+    front end uses them for the label only — never to re-derive a multiple.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    from_fiscal_year: str = Field(description="ISO fiscal-year-end date of the pre-step FY.")
+    to_fiscal_year: str = Field(description="ISO fiscal-year-end date of the post-step FY.")
+    from_ebitda: float
+    to_ebitda: float
+    step_multiple: float = Field(
+        description=(
+            "EBITDA step magnitude >= 3 between the two adjacent fiscal years "
+            "(larger / smaller, so a ramp and a collapse are both >= 1)."
+        )
+    )
 
 
 class HistoricalBandSnapshot(BaseModel):
@@ -93,6 +116,25 @@ class HistoricalBandSnapshot(BaseModel):
             "(e.g. '5y') and, with the valuation-method band on the same window, "
             "makes it explicit the two bands are one window. None on artifacts "
             "written before this field existed."
+        ),
+    )
+    structural_break: HistoricalBandBreakSnapshot | None = Field(
+        default=None,
+        description=(
+            "Largest year-over-year EBITDA step >= 3x between two fiscal years the "
+            "window's samples actually use, or null. The published quantiles are "
+            "UNCHANGED; this disclosure exists so the UI can caveat the "
+            "cheap/fair/expensive badge computed over a window that blends two "
+            "earnings regimes (NVDA FY2023 $5.99B -> FY2024 $35.58B). None on "
+            "artifacts written before this field existed."
+        ),
+    )
+    classification_caveat: str | None = Field(
+        default=None,
+        description=(
+            "One-sentence caveat for the classification badge when the window "
+            "contains a structural EBITDA break — render it next to the badge. "
+            "Null when there is no break."
         ),
     )
     warnings: list[str] = Field(default_factory=list)
@@ -292,6 +334,18 @@ async def _safe_historical_bands(
 
 
 def _snapshot_from_band(band: HistoricalBand, *, window_years: int) -> HistoricalBandSnapshot:
+    classification = classify_band(band)
+    break_snap = (
+        HistoricalBandBreakSnapshot(
+            from_fiscal_year=_iso(band.structural_break.from_fiscal_date),
+            to_fiscal_year=_iso(band.structural_break.to_fiscal_date),
+            from_ebitda=band.structural_break.from_ebitda,
+            to_ebitda=band.structural_break.to_ebitda,
+            step_multiple=band.structural_break.step_multiple,
+        )
+        if band.structural_break is not None
+        else None
+    )
     return HistoricalBandSnapshot(
         metric=band.metric,
         current=band.current,
@@ -301,8 +355,12 @@ def _snapshot_from_band(band: HistoricalBand, *, window_years: int) -> Historica
         p90=band.p90,
         timeline=[(_iso(d), v) for d, v in band.timeline],
         sample_count=band.sample_count,
-        classification=classify_band(band),
+        classification=classification,
         window_years=window_years,
+        structural_break=break_snap,
+        # One caveat source for every surface that badges this band (the valuation
+        # chapter's cross-check row renders the same string via HistoricalBandSpread).
+        classification_caveat=band_classification_caveat(band),
         warnings=list(band.warnings),
     )
 

@@ -303,3 +303,114 @@ async def test_historical_bands_warnings_passthrough_from_band():
     # The warning must NOT be the generic fallback (it should be the compute layer's own text).
     # Any non-empty band.warnings from compute_historical_band are now passed through verbatim.
     assert not all(w == "historical_bands skipped: no valid samples" for w in payload.warnings)
+
+
+# ---------------------------------------------------------------------------
+# Structural-break disclosure carried into the published payload (l1)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_historical_bands_carry_the_structural_break_disclosure(monkeypatch):
+    """The band's EBITDA-regime break must reach the artifact so the UI can caveat
+    the CHEAP/FAIR/EXPENSIVE badge computed over a mixed window.
+
+    Live 2026-10-13 NVDA: the window opened on the pre-ramp FY2023 base
+    ($5.99B EBITDA) and FY2024 stepped 5.9x to $35.58B, so p25 37.76x / p90 183.34x
+    drove a CHEAP badge (current 27.06x). The classification is published unchanged
+    — the caveat travels with it.
+    """
+    from datetime import date as _date
+
+    from finrobot.engine.compute.coordinators import technical_payload as tp
+    from finrobot.engine.primitives.historical_valuation import (
+        EbitdaStructuralBreak,
+        HistoricalBand,
+    )
+
+    band = HistoricalBand(
+        metric="ev_ebitda",
+        current=27.06280742897459,
+        median=58.67400134895877,
+        p25=37.76125330964162,
+        p75=98.53028879769617,
+        p90=183.34108904109593,
+        timeline=[(_date(2023, 1, 31), 79.83875542933512)],
+        sample_count=900,
+        warnings=["band-level warning"],
+        structural_break=EbitdaStructuralBreak(
+            from_fiscal_date=_date(2023, 1, 31),
+            to_fiscal_date=_date(2024, 1, 31),
+            from_ebitda=5.986e9,
+            to_ebitda=35.583e9,
+            step_multiple=5.944,
+        ),
+    )
+
+    async def _fake_bands(ticker, metric, years, data_layer, **kwargs):
+        return band
+
+    monkeypatch.setattr(tp, "compute_bands_via_data_layer", _fake_bands)
+
+    payload = await build_technical_analysis(
+        ticker="NVDA",
+        dcf_inputs=_dcf_inputs(),
+        dcf_target=259.87,
+        current_price=228.52,
+        data_layer=_StubDataLayer(),
+    )
+
+    hb = payload.historical_bands
+    assert hb is not None
+    assert hb.classification == "cheap"  # 27.06x <= p25 37.76x — unchanged
+    assert hb.structural_break is not None
+    assert hb.structural_break.from_fiscal_year == "2023-01-31"
+    assert hb.structural_break.to_fiscal_year == "2024-01-31"
+    assert hb.structural_break.step_multiple == pytest.approx(5.944)
+    assert hb.structural_break.to_ebitda == pytest.approx(35.583e9)
+    # The badge caveat is a STRING the UI renders next to the classification.
+    assert hb.classification_caveat is not None
+    assert hb.classification_caveat.startswith(
+        "the band's cheap/fair/expensive classification is computed on a window"
+    )
+    assert "directional only" in hb.classification_caveat
+    # the band's own warning still rides along
+    assert "band-level warning" in hb.warnings
+
+
+@pytest.mark.asyncio
+async def test_historical_bands_without_a_break_publish_no_caveat(monkeypatch):
+    from datetime import date as _date
+
+    from finrobot.engine.compute.coordinators import technical_payload as tp
+    from finrobot.engine.primitives.historical_valuation import HistoricalBand
+
+    band = HistoricalBand(
+        metric="ev_ebitda",
+        current=20.0,
+        median=18.0,
+        p25=15.0,
+        p75=22.0,
+        p90=25.0,
+        timeline=[(_date(2025, 6, 1), 20.0)],
+        sample_count=900,
+        warnings=[],
+    )
+
+    async def _fake_bands(ticker, metric, years, data_layer, **kwargs):
+        return band
+
+    monkeypatch.setattr(tp, "compute_bands_via_data_layer", _fake_bands)
+
+    payload = await build_technical_analysis(
+        ticker="AAPL",
+        dcf_inputs=_dcf_inputs(),
+        dcf_target=200.0,
+        current_price=162.0,
+        data_layer=_StubDataLayer(),
+    )
+
+    hb = payload.historical_bands
+    assert hb is not None
+    assert hb.structural_break is None
+    assert hb.classification_caveat is None

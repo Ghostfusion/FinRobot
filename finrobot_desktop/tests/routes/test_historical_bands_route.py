@@ -133,6 +133,65 @@ async def test_historical_bands_endpoint_ev_ebitda_returns_quantiles(tmp_path: P
     assert body["current"] is not None
     assert body["median"] is not None
     assert body["classification"] in ("expensive", "fair", "cheap", "unknown")
+    # No break in this fixture's window → no caveat published.
+    assert body["structural_break"] is None
+    assert body["classification_caveat"] is None
+
+
+@pytest.mark.asyncio
+async def test_historical_bands_endpoint_exposes_the_structural_break(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """l1: the standalone band surface must publish the same break disclosure the
+    report does, so the badge on this card cannot read as a clean signal over a
+    window that opens on the pre-ramp EBITDA base (NVDA p25 37.8x / p90 183.3x)."""
+    import finrobot.routes.valuation as route_mod
+    from finrobot.engine.primitives.historical_valuation import (
+        EbitdaStructuralBreak,
+        HistoricalBand,
+    )
+
+    band = HistoricalBand(
+        metric="ev_ebitda",
+        current=27.06280742897459,
+        median=58.67400134895877,
+        p25=37.76125330964162,
+        p75=98.53028879769617,
+        p90=183.34108904109593,
+        timeline=[(date(2023, 1, 31), 79.83875542933512)],
+        sample_count=900,
+        warnings=[],
+        structural_break=EbitdaStructuralBreak(
+            from_fiscal_date=date(2023, 1, 31),
+            to_fiscal_date=date(2024, 1, 31),
+            from_ebitda=5.986e9,
+            to_ebitda=35.583e9,
+            step_multiple=5.944,
+        ),
+    )
+
+    async def _fake_band(ticker: str, metric: str, years: int, data_layer: object, **_: object):
+        return band
+
+    monkeypatch.setattr(route_mod, "compute_bands_via_data_layer", _fake_band)
+
+    app, _layer = _app(tmp_path)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as client:
+        r = await client.get("/api/valuation/historical-bands/NVDA?metric=ev_ebitda&years=5")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["classification"] == "cheap"
+    assert body["structural_break"] == {
+        "from_fiscal_year": "2023-01-31",
+        "to_fiscal_year": "2024-01-31",
+        "from_ebitda": 5.986e9,
+        "to_ebitda": 35.583e9,
+        "step_multiple": 5.944,
+    }
+    assert body["classification_caveat"].startswith(
+        "the band's cheap/fair/expensive classification is computed on a window"
+    )
+    assert "directional only" in body["classification_caveat"]
 
 
 @pytest.mark.asyncio

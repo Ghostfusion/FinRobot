@@ -474,6 +474,78 @@ class TestDecliningFirmGrowth:
         assert "fading" in inputs.assumption_provenance["revenue_growth_rates"]
 
 
+class TestTrailingCagrLabel:
+    """The assumption-provenance label must report the TRUE trailing CAGR.
+
+    Defect 6 (2026-10-13 NVDA): the label read "trailing 4yr revenue CAGR 40.0%" —
+    40% is `_GROWTH_CAP` applied to the DCF's first forecast year, while the real
+    trailing CAGR was 100.05% (FY23 $26.97B → FY26 $215.94B), and the window counted
+    YEARS where the CAGR compounds over (years − 1) intervals. Both halves of that
+    mislabel are pinned here, on both seeding branches.
+    """
+
+    def _nvda_history(self) -> HistoricalMetrics:
+        return _aapl_historical().model_copy(
+            update={
+                "years": [2023, 2024, 2025, 2026],
+                "revenue": [26_974e6, 60_922e6, 130_497e6, 215_938e6],
+                "cagr_revenue": 1.0004509499443963,  # the real 3-interval CAGR
+            }
+        )
+
+    def test_cagr_branch_reports_true_rate_intervals_and_cap(self):
+        inputs = seed_dcf_inputs(_aapl_financials(), self._nvda_history())
+        prov = inputs.assumption_provenance["revenue_growth_rates"]
+        # The TRUE trailing CAGR, not the clamped seed.
+        assert "trailing 3yr revenue CAGR 100.0%" in prov
+        # The clamp is stated for what it is: the first forecast year's rate.
+        assert "capped to 40.0% for the first forecast year" in prov
+        # Years, not intervals, is the bug. NVDA's 4 fiscal years = 3 intervals.
+        assert "trailing 4yr" not in prov
+        # The schedule itself still starts at the cap.
+        assert inputs.revenue_growth_rates[0] == pytest.approx(0.40)
+
+    def test_cagr_branch_omits_cap_note_when_in_band(self):
+        hist = _aapl_historical().model_copy(
+            update={
+                "years": [2021, 2022, 2023, 2024, 2025],
+                "cagr_revenue": 0.10,
+            }
+        )
+        prov = seed_dcf_inputs(_aapl_financials(), hist).assumption_provenance[
+            "revenue_growth_rates"
+        ]
+        assert "trailing 4yr revenue CAGR 10.0%" in prov
+        assert "capped" not in prov
+
+    def test_cagr_branch_discloses_the_floor(self):
+        hist = _aapl_historical().model_copy(update={"cagr_revenue": -0.50})
+        prov = seed_dcf_inputs(_aapl_financials(), hist).assumption_provenance[
+            "revenue_growth_rates"
+        ]
+        assert "trailing 3yr revenue CAGR -50.0%" in prov
+        assert "floored to -20.0% for the first forecast year" in prov
+
+    def test_consensus_branch_also_carries_the_true_trailing_cagr(self):
+        # The explicit-consensus branch seeds off forward rates, so it previously
+        # carried no historical context at all — the reader could not compare the
+        # seeded forward rate with the company's actual trailing growth.
+        inputs = seed_dcf_inputs(
+            _aapl_financials(), self._nvda_history(), forward_growth=[0.06, 0.05]
+        )
+        prov = inputs.assumption_provenance["revenue_growth_rates"]
+        assert "trailing 3yr revenue CAGR 100.0%" in prov
+        assert "the historical actual, not a seeded forward rate" in prov
+
+    def test_consensus_branch_discloses_the_cap_it_applied(self):
+        # No annual anchor → the raw FY1 rate rides the TTM base and exceeds the cap;
+        # the provenance must say the cap bit rather than printing a bare 40.0%.
+        hist_no_annual = _aapl_historical().model_copy(update={"revenue": [], "years": []})
+        inputs = seed_dcf_inputs(_aapl_financials(), hist_no_annual, forward_growth=[0.55])
+        prov = inputs.assumption_provenance["revenue_growth_rates"]
+        assert "capped to 40.0%/yr where the seeded rate" in prov
+
+
 # ---------------------------------------------------------------------------
 # Effective tax rate (B) — company rate from income_tax_expense vs industry
 # ---------------------------------------------------------------------------

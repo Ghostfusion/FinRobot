@@ -240,6 +240,7 @@ def ev_ebitda_band_cross_check(
     noncontrolling_interest: float | None,
     window_years: int | None,
     sample_count: int | None,
+    band_break_caveat: str | None = None,
 ) -> CrossCheck | None:
     """Own-history EV/EBITDA band × TTM EBITDA → a per-share CROSS-CHECK row.
 
@@ -249,6 +250,11 @@ def ev_ebitda_band_cross_check(
     5-year EV/EBITDA p90 of 12.2x and nothing in the report triangulated against
     it). ``p25 → low``, ``median → mid``, ``p75 → high``, each through the same
     EV→equity bridge (net debt, preferred, NCI) over shares outstanding.
+
+    ``band_break_caveat`` (additive, optional): the band's structural-EBITDA-break
+    caveat. It is copied onto the row field AND appended to ``basis`` so the row
+    cannot read as a clean distribution even for a consumer that ignores the field.
+    The per-share values themselves are untouched.
 
     Returns None when any input is missing or non-positive — a cross-check is
     dropped, never fabricated as a 0 band (a fabricated comparison is worse than
@@ -293,6 +299,12 @@ def ev_ebitda_band_cross_check(
         "Mean-reversion cross-check only — excluded from the published target blend, "
         "which keeps its existing method weighting."
     )
+    if band_break_caveat:
+        # The caveat must survive even for a consumer that ignores the structured
+        # field below: a reader of ``basis`` alone would otherwise take these quantiles
+        # as one clean distribution (2026-10-13 NVDA: $493 / +115% / "CHEAP" read as a
+        # clean signal while p90 was 183x, driven by the pre-ramp FY2023 EBITDA base).
+        basis = f"{basis} {band_break_caveat}"
     return CrossCheck(
         name="ev_ebitda_band",
         label=f"Own {window_txt} EV/EBITDA",
@@ -301,6 +313,7 @@ def ev_ebitda_band_cross_check(
         high=high,
         basis=basis,
         note=note,
+        band_break_caveat=band_break_caveat,
     )
 
 
@@ -329,6 +342,12 @@ def aggregate_valuation(
     # is absent the cross-check is dropped (never a fabricated mid).
     historical_ev_ebitda_median: float | None = None,
     historical_ev_ebitda_window_years: int | None = None,
+    # The band's structural-EBITDA-break caveat (``HistoricalBandSpread.
+    # structural_break_caveat`` → ``CrossCheck.band_break_caveat``). Threaded as its own
+    # input because the band reaches this function as bare quantiles; None = the window
+    # holds no break, or the caller only carries the quantiles — either way the
+    # cross-check row publishes no caveat rather than a fabricated one.
+    historical_ev_ebitda_break_caveat: str | None = None,
     historical_p_fcf_band: tuple[float, float] | None = None,
     cyclical: bool = False,
     financial_sector: bool = False,
@@ -544,6 +563,7 @@ def aggregate_valuation(
             noncontrolling_interest=noncontrolling_interest,
             window_years=historical_ev_ebitda_window_years,
             sample_count=historical_ev_ebitda_sample_n,
+            band_break_caveat=historical_ev_ebitda_break_caveat,
         )
         if cross_check is not None:
             cross_checks.append(cross_check)

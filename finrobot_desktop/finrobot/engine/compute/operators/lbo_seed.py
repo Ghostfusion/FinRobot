@@ -27,6 +27,7 @@ from __future__ import annotations
 from typing import Final
 
 from finrobot.engine.compute.operators.dcf_seed import (
+    _cagr_intervals,
     _cost_of_debt,
     _disclose_construction_clamp,
     _median_ratio,
@@ -140,9 +141,15 @@ def seed_lbo_inputs(
     if historical.cagr_revenue is not None:
         raw_growth = historical.cagr_revenue
         revenue_growth_rate = max(0.0, min(0.15, raw_growth))
-        n_years = len(historical.years)
+        # The window is the CAGR's INTERVAL count (n annual points = n-1 compounding
+        # intervals; the extractor computes it as calculate_cagr(revenue[0],
+        # revenue[-1], len(years) - 1)). Counting years overstated the span by one —
+        # the same defect dcf_seed's revenue-growth provenance was fixed for
+        # (2026-10-13 NVDA). The rate itself stays the RAW CAGR with the PE-band clamp
+        # disclosed.
         prov["revenue_growth_rate"] = (
-            f"{revenue_growth_rate:.1%} (trailing {n_years}yr revenue CAGR {raw_growth:.1%}, "
+            f"{revenue_growth_rate:.1%} (trailing {_cagr_intervals(historical)}yr "
+            f"revenue CAGR {raw_growth:.1%}, "
             f"clamped to the PE underwriting band 0%-15%)"
         )
     else:

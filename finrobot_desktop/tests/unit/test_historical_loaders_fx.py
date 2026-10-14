@@ -337,3 +337,102 @@ async def test_fetch_reverse_multiple_band_none_layer_returns_none():
     from finrobot.engine.data import historical_loaders as hl
 
     assert await hl.fetch_reverse_multiple_band("X", "ev_ebitda", None) is None
+
+
+# ---------------------------------------------------------------------------
+# Structural-break disclosure carried on the reverse-multiple spread (l1)
+# ---------------------------------------------------------------------------
+
+
+def _break_band():
+    """NVDA-shaped band: quantiles blended by the pre-ramp FY2023 EBITDA base."""
+    from dataclasses import replace
+    from datetime import date
+
+    from finrobot.engine.primitives.historical_valuation import EbitdaStructuralBreak
+
+    return replace(
+        _band(
+            p25=37.76125330964162,
+            p75=98.53028879769617,
+            sample_count=900,
+            current=27.06280742897459,
+        ),
+        median=58.67400134895877,
+        structural_break=EbitdaStructuralBreak(
+            from_fiscal_date=date(2023, 1, 31),
+            to_fiscal_date=date(2024, 1, 31),
+            from_ebitda=5.986e9,
+            to_ebitda=35.583e9,
+            step_multiple=5.944,
+        ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_fetch_reverse_multiple_band_carries_the_structural_break(monkeypatch):
+    """The spread must hand the break on to the cross-check row: quantiles alone
+    cannot disclose that the window blends two earnings regimes."""
+    from finrobot.engine.data import historical_loaders as hl
+
+    band = _break_band()
+
+    async def _fake(ticker, metric, years, data_layer, *, current_override=None):
+        return band
+
+    monkeypatch.setattr(hl, "compute_bands_via_data_layer", _fake)
+    spread = await hl.fetch_reverse_multiple_band("NVDA", "ev_ebitda", object())
+    assert spread is not None
+    assert spread.structural_break is band.structural_break
+    assert spread.structural_break_caveat == hl.band_classification_caveat(band)
+    assert spread.structural_break_caveat is not None
+    assert "cheap/fair/expensive classification" in spread.structural_break_caveat
+    assert "directional only" in spread.structural_break_caveat
+    # quantiles unchanged by the disclosure
+    assert (spread.p25, spread.p75) == (37.76125330964162, 98.53028879769617)
+
+
+@pytest.mark.asyncio
+async def test_fetch_reverse_multiple_band_without_a_break_carries_no_caveat(monkeypatch):
+    from finrobot.engine.data import historical_loaders as hl
+
+    async def _fake(ticker, metric, years, data_layer, *, current_override=None):
+        return _band(p25=20.0, p75=30.0, sample_count=900)
+
+    monkeypatch.setattr(hl, "compute_bands_via_data_layer", _fake)
+    spread = await hl.fetch_reverse_multiple_band("AAPL", "ev_ebitda", object())
+    assert spread is not None
+    assert spread.structural_break is None
+    assert spread.structural_break_caveat is None
+
+
+def test_caveat_is_classification_independent_and_absent_without_a_break():
+    """The caveat is a pure function of the BREAK, not of the band's `current`.
+
+    Each surface classifies its own band's current multiple (the report's cross-check
+    band is trailing-annual; the technical snapshot overrides current with the canonical
+    TTM multiple), so a caveat naming a classification value could render two different
+    sentences about the same break. This pins that the string cannot vary that way —
+    which is what lets the badge never contradict the caveat beside it.
+    """
+    from dataclasses import replace
+
+    from finrobot.engine.data import historical_loaders as hl
+
+    band = _break_band()
+    caveat = hl.band_classification_caveat(band)
+    assert caveat is not None
+    # The generic badge triple is named; no specific value is baked in.
+    assert "cheap/fair/expensive classification" in caveat
+    assert "'cheap'" not in caveat and "'expensive'" not in caveat
+    assert "FY2023-01-31 -> FY2024-01-31" in caveat
+    assert "5.9x step" in caveat
+
+    # Same break, opposite classifications (current far below p25 vs far above p90) →
+    # byte-identical caveat.
+    assert hl.classify_band(band) == "cheap"
+    expensive = replace(band, current=999.0)
+    assert hl.classify_band(expensive) == "expensive"
+    assert hl.band_classification_caveat(expensive) == caveat
+
+    assert hl.band_classification_caveat(replace(band, structural_break=None)) is None

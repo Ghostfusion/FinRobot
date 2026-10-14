@@ -843,6 +843,11 @@ def build_valuation_synthesis(
     # absent median drops the cross-check rather than inventing a mid.
     historical_ev_ebitda_median: float | None = None,
     historical_ev_ebitda_window_years: int | None = None,
+    # The band's structural-EBITDA-break caveat (``HistoricalBandSpread.
+    # structural_break_caveat``). Own-history quantiles alone cannot disclose that the
+    # window opens on a pre-ramp EBITDA base, so the cross-check row must carry it;
+    # None = no break (or a caller that only holds the quantiles).
+    historical_ev_ebitda_break_caveat: str | None = None,
     preferred_stock: float | None = None,
     noncontrolling_interest: float | None = None,
 ) -> ValuationSynthesis | None:
@@ -979,6 +984,7 @@ def build_valuation_synthesis(
         historical_ev_ebitda_sample_n=historical_ev_ebitda_sample_n,
         historical_ev_ebitda_median=historical_ev_ebitda_median,
         historical_ev_ebitda_window_years=historical_ev_ebitda_window_years,
+        historical_ev_ebitda_break_caveat=historical_ev_ebitda_break_caveat,
         preferred_stock=preferred_stock,
         noncontrolling_interest=noncontrolling_interest,
         cyclical=cyclical,

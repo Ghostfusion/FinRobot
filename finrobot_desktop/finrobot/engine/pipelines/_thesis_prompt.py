@@ -19,6 +19,7 @@ from finrobot.engine.compute.operators.audit import compute_momentum_context, is
 from finrobot.engine.compute.operators.valuation_synthesis import CanonicalThesis
 from finrobot.engine.models.financial import (
     CatalystAnalysis,
+    CatalystEvent,
     DCFResult,
     FinancialData,
     PeerComps,
@@ -28,6 +29,55 @@ from finrobot.engine.models.financial import (
 )
 from finrobot.engine.models.sec import OwnershipGovernanceAnalysis
 from finrobot.engine.pipelines._helpers import fmt_market_cap, fmt_multiple
+
+
+def _model_growth_comparison(dcf_ctx: DCFResult) -> str:
+    """The model's OWN revenue-growth schedule, injected next to the implied rate.
+
+    2026-10-13 NVDA: the prompt supplied the market-implied 20.8% but not the
+    model's own fade schedule, so the narrative framed the market's bar as
+    "demanding"/aggressive while the model itself averages ~21.5%/yr over the same
+    ten years ((40% + 3%) / 2). Both constructs must be on the page, labelled: the
+    implied rate is ONE FLAT rate held for the whole window; the model's schedule
+    DECAYS from the first forecast year to the last. Empty string when the seeded
+    schedule is absent, so the caller can concatenate unconditionally.
+    """
+    rates = dcf_ctx.inputs.revenue_growth_rates
+    if not rates:
+        return ""
+    first, last = rates[0], rates[-1]
+    n = len(rates)
+    average = sum(rates) / n
+    return (
+        f" For comparison, the MODEL's OWN revenue-growth assumption over the same "
+        f"window is a FADE schedule (a DECLINING rate, not a flat one): {first:.1%}/yr in "
+        f"forecast year 1 falling linearly to {last:.1%}/yr in year {n} of the {n} forecast "
+        f"fiscal years, averaging {average:.1%}/yr across them. State this model average "
+        f"next to the market-implied rate and compare the two EXPLICITLY (a flat rate vs a "
+        f"fade schedule are different constructs) — do NOT call the market's growth "
+        f"demanding, aggressive or unreachable on the model's behalf without that "
+        f"comparison."
+    )
+
+
+def _catalyst_event_line(event: CatalystEvent) -> str:
+    """One injected catalyst line: sanitized untrusted headline + the fields the
+    news-impact rules key on.
+
+    ``source count`` and ``published`` are rendered so NEWS-IMPACT DISCIPLINE is
+    checkable rather than rhetorical: a singleton-source item must be narrated as
+    reported / early-stage, and an item whose milestone predates its own publication
+    is not a new catalyst. (2026-10-13 NVDA: a single unverified report of
+    "advanced talks" shipped as an impact-4 acquisition, and an already-announced
+    production ramp was called a new catalyst.)
+    """
+    headline = sanitize_untrusted_text(event.headline)
+    published = f", published: {event.published.date().isoformat()}" if event.published else ""
+    return (
+        f"  - <untrusted_news_headline>{headline}</untrusted_news_headline> "
+        f"(impact: {event.impact_score}, {event.category}, "
+        f"source count: {event.source_count}{published})"
+    )
 
 
 def build_thesis_prompt(
@@ -68,24 +118,55 @@ def build_thesis_prompt(
         if catalyst_data.top_positive:
             cat_lines.append("Key positive catalysts:")
             for e in catalyst_data.top_positive[:3]:
-                headline = sanitize_untrusted_text(e.headline)
-                cat_lines.append(
-                    f"  - <untrusted_news_headline>{headline}</untrusted_news_headline> "
-                    f"(impact: {e.impact_score}, {e.category})"
-                )
+                cat_lines.append(_catalyst_event_line(e))
         if catalyst_data.top_negative:
             cat_lines.append("Key negative catalysts:")
             for e in catalyst_data.top_negative[:3]:
-                headline = sanitize_untrusted_text(e.headline)
-                cat_lines.append(
-                    f"  - <untrusted_news_headline>{headline}</untrusted_news_headline> "
-                    f"(impact: {e.impact_score}, {e.category})"
-                )
+                cat_lines.append(_catalyst_event_line(e))
         if catalyst_data.category_breakdown:
+            # NEWS items only. The 2026-10-13 NVDA narrative read this breakdown as
+            # SEC 8-K counts ("2 acquisition-category 8-Ks" for the one 8-K present)
+            # and miscounted the filings. The breakdown counts news items by
+            # category; SEC filings are a DIFFERENT source, so the label has to say
+            # so — the artifact's filings summary is never this dict.
             breakdown = ", ".join(
                 f"{cat}: {cnt}" for cat, cnt in catalyst_data.category_breakdown.items()
             )
-            cat_lines.append(f"Category breakdown: {breakdown}")
+            cat_lines.append(
+                "News items by category (NEWS FEED items only — this is NOT a count "
+                "of SEC filings / 8-Ks; one filing can carry several item codes and "
+                f"one news item can cover several filings): {breakdown}"
+            )
+        if catalyst_data.sec_8k_category_breakdown:
+            filings_breakdown = ", ".join(
+                f"{cat}: {cnt}" for cat, cnt in catalyst_data.sec_8k_category_breakdown.items()
+            )
+            cat_lines.append(
+                "SEC 8-K filings by category (SEC filings only — a separate source "
+                f"from the news items above): {filings_breakdown}"
+            )
+        # Feed coverage windows. The news feed is a same-day ~20-item window and the
+        # 8-K index can end BEFORE the news window starts, so both must be stated:
+        # the 2026-10-13 NVDA report never disclosed that a 2026-09-28 buyback was
+        # structurally outside both feeds.
+        news_window = catalyst_data.news_window
+        if news_window:
+            cat_lines.append(
+                "News feed coverage: "
+                f"{news_window.get('count')} items, earliest {news_window.get('earliest')}, "
+                f"latest {news_window.get('latest')}, provider {news_window.get('provider')} "
+                "— items outside this window were NOT fetched and their absence is not "
+                "evidence that nothing happened."
+            )
+        sec_window = catalyst_data.sec_8k_window
+        if sec_window:
+            cat_lines.append(
+                "SEC 8-K index coverage: "
+                f"{sec_window.get('count')} filings, oldest {sec_window.get('oldest')}, "
+                f"newest {sec_window.get('newest')}, provider {sec_window.get('provider')}."
+            )
+        if catalyst_data.sec_8k_staleness_warning:
+            cat_lines.append(f"SEC 8-K IMPORTANT: {catalyst_data.sec_8k_staleness_warning}")
         catalyst_section = "\n".join(cat_lines)
 
     # Reverse-DCF reality check, threaded into the thesis as an AUTHORITATIVE
@@ -155,10 +236,18 @@ def build_thesis_prompt(
                 if mi.implied_wacc is not None
                 else ""
             )
+            # "perpetual" was wrong: the reverse solver fits a FLAT constant
+            # growth over mi.horizon_years (see MarketImpliedCheck — "constant
+            # annual revenue growth ... over horizon_years"), while the Gordon
+            # perpetuity is the terminal value INSIDE the forward DCF. The
+            # narrative cited the prompt verbatim, so NVDA 2026-10-13 read
+            # "~20.8% perpetual revenue growth over ten years" — a rate held for
+            # ten years, not in perpetuity.
             growth_solve = (
                 f"Holding the model's {dcf_ctx.wacc:.2%} WACC fixed, the current price "
-                f"implies ~{mi.implied_growth:.1%}/yr perpetual revenue growth over "
-                f"{mi.horizon_years}y."
+                f"implies ~{mi.implied_growth:.1%}/yr revenue growth held CONSTANT for "
+                f"{mi.horizon_years}y (one flat growth rate over the {mi.horizon_years} "
+                f"forecast fiscal years — not a perpetuity)."
             )
             market_implied_line = (
                 "\nAUTHORITATIVE MARKET-IMPLIED REVERSE-DCF SOLVES (computed, cite "
@@ -166,7 +255,8 @@ def build_thesis_prompt(
                 "NOT a joint market forecast: "
                 + wacc_solve
                 + growth_solve
-                + " State whether that growth is plausible for this company as the "
+                + _model_growth_comparison(dcf_ctx)
+                + " State whether the market's growth is plausible for this company as the "
                 "reader's reality check on the gap between price and fair value." + cyclical_clause
             )
 
@@ -445,6 +535,23 @@ def build_thesis_prompt(
                 f"ev_ebitda={fmt_multiple(p.ev_ebitda)}, pe_ratio={fmt_multiple(p.pe_ratio)}, "
                 f"market_cap={fmt_market_cap(p.market_cap)}"
             )
+    else:
+        # No peer set was computed for this run. The 2026-10-13 NVDA page 6 explained
+        # away the missing peer multiples by blaming "this run's whitelist"; the real
+        # cause was a FAILED peer-candidate fetch ("peer analysis did not run… all data
+        # sources failed and no cache is available"). That run-level failure message
+        # lives on the artifact warnings, not in this step's structured_context, so the
+        # prompt names the failure CATEGORY and forbids the whitelist attribution —
+        # the whitelist lists every computed number and restricts nothing that exists.
+        _whitelist_parts.append(
+            "  - PEER-SET ABSENCE: no peer analysis was produced for this ticker in this "
+            "run — the peer-screen / peer-financials data fetch returned no usable comp "
+            "set (peer analysis did not run for this ticker). Do NOT explain the missing "
+            "peer multiples by blaming this whitelist or any restriction in these "
+            "instructions: the whitelist lists every number that WAS computed and "
+            "restricts none of them. If you mention the gap, name it as a data-fetch / "
+            "coverage gap for this run."
+        )
     if isinstance(fm_for_prompt, DCFResult):
         dcf_for_prompt: DCFResult = fm_for_prompt
         _whitelist_parts.append(
@@ -453,8 +560,23 @@ def build_thesis_prompt(
         _whitelist_parts.append(f"  - financial_modeling.wacc: {dcf_for_prompt.wacc:.4f}")
         _whitelist_parts.append(
             f"  - financial_modeling.terminal_growth_rate: "
-            f"{dcf_for_prompt.inputs.terminal_growth_rate:.4f}"
+            f"{dcf_for_prompt.inputs.terminal_growth_rate:.4f} (the perpetuity growth "
+            "rate applied AFTER the explicit forecast window)"
         )
+        # The model's own growth schedule is injected next to the market-implied rate
+        # (the "demanding bar" fix) — whitelist its endpoints and average so a
+        # prompt-fidelity audit does not read them as invented figures. Basis is
+        # labelled: these are FORECAST fiscal years (FY), not the TTM run-rate.
+        _model_rates = dcf_for_prompt.inputs.revenue_growth_rates
+        if _model_rates:
+            _rates_txt = "/".join(f"{g:.1%}" for g in _model_rates)
+            _whitelist_parts.append(
+                "  - financial_modeling.inputs.revenue_growth_rates (the model's OWN "
+                f"forecast revenue growth by fiscal year, FY1..FY{len(_model_rates)}): "
+                f"{_rates_txt} → average "
+                f"{sum(_model_rates) / len(_model_rates):.1%}/yr over the "
+                f"{len(_model_rates)} forecast fiscal years"
+            )
         # The reverse-DCF figures are injected above as AUTHORITATIVE numbers
         # (market_implied_line) and the point-withheld narrative cites them ("the
         # market prices in 44%/yr"). Whitelist them here too, symmetric with that
@@ -552,7 +674,69 @@ def build_thesis_prompt(
             "holder concentration (the 13F index is incomplete for the period) — "
             "describe the holders on file and their coverage instead."
         )
+        # The worst prose defect of the 2026-10-13 NVDA artifact: its Key Takeaways
+        # read "$967.6M over 90 days ($259.87 of purchases vs $967.6M of sales)" —
+        # $259.87 is the DCF TARGET PRICE, back-filled by the model because the real
+        # gross purchases figure was a bare $0 it would not write; the report's own
+        # Risks section said $0 in the same artifact. State the zero explicitly and
+        # forbid every other number from being repurposed as a purchase.
+        if ownership.insider_buy_value is not None and ownership.insider_buy_value == 0:
+            _whitelist_parts.append(
+                f"  - INSIDER PURCHASES = ${ownership.insider_buy_value:,.0f} over the "
+                f"{window_txt} window: there were NO open-market insider purchases. Say "
+                "that explicitly (e.g. 'no open-market purchases') — never leave the "
+                "purchases side blank and never imply buying."
+            )
+            _whitelist_parts.append(
+                "  - PURCHASE FIGURE RULE: the ONLY permitted insider-purchases figure is "
+                f"the supplied gross value above (${ownership.insider_buy_value:,.0f}). "
+                "Every other number in this whitelist — the price target, a method value, "
+                "the current market price, the largest single sale — belongs to a "
+                "DIFFERENT field; quoting one of them as a purchase amount is a "
+                "misattribution and a task failure."
+            )
+    # The CURRENT figures the narrative reasons about (tiles, margins, growth on the
+    # run's own snapshot) carry the run's period basis — name it so the rule below is
+    # concrete instead of generic. Basis comes from the same provenance the seed reads
+    # (dcf_seed._basis_*), never a guess.
+    _run_financials = structured_context.get("data_collection")
+    _current_basis = ""
+    if isinstance(_run_financials, FinancialData) and _run_financials.provenance is not None:
+        _current_basis = _run_financials.provenance.period_basis or ""
+    _current_basis_note = (
+        f" This run's current financial figures are on the {_current_basis.upper()} basis."
+        if _current_basis
+        else ""
+    )
     _whitelist_parts += [
+        # Period labeling (2026-10-13 NVDA: the narrative mixed FY margins 71.1% /
+        # 60.4% with TTM tiles 74.7% / 65.2% and neither was labelled, so a reader
+        # cannot tell which basis a margin is on). Every margin/growth figure this
+        # prompt supplies carries its own basis in its label; the rule makes the
+        # narrative keep that discipline when it re-states them.
+        "PERIOD LABELING RULE: state the period basis of EVERY margin and growth rate "
+        "you cite. The model's revenue_growth_rates (and their average) are FORECAST "
+        "fiscal-year (FY) rates over the projection window; financial_modeling."
+        "terminal_growth_rate is a perpetuity rate applied after that window; the "
+        "historical margins/ratios named in the model provenance are ANNUAL (FY) "
+        "history; the report's current-run-rate tiles and the comps/technical chapters "
+        "carry the latest TTM basis. Never present an FY figure and a TTM figure as if "
+        "they were the same number, and never cite a margin without naming its basis."
+        + _current_basis_note,
+        # News-impact discipline (x2, 2026-10-13): an unverified single-source report of
+        # "advanced talks" was narrated as an impact-4 acquisition, and an
+        # already-announced production ramp was called a new catalyst. Both are visible
+        # from the supplied event fields (source_count / published), so the guard is
+        # deterministic here.
+        "NEWS-IMPACT DISCIPLINE: an event whose Source count is 1 that reports talks, "
+        "negotiations, discussions, exploration or a rumour MUST be described as "
+        "REPORTED / early-stage / unconfirmed — never as agreed, signed, completed or a "
+        "done deal, and never above the impact shown. An event in the acquisition "
+        "category that came from the NEWS FEED is at most a REPORTED deal: never write "
+        "that an acquisition is agreed or completed unless a supplied SEC filing says "
+        "so. An event whose milestone was already announced before that item's own "
+        "Published date is NOT a new catalyst — describe it as an existing ongoing "
+        "programme, not a fresh event.",
         "FORBIDDEN: any P/E, PEG, PB, yield, market cap, or growth rate you 'remember' — "
         "these MUST come from the fields above.",
         "Violation check: every number appearing in the narrative and all LLM narrative "

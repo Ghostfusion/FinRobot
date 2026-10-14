@@ -215,6 +215,118 @@ class TestBasisWordingDistinguishesTheThreeBands:
         assert "method-weighted blend" in basis
 
 
+_BREAK_CAVEAT = (
+    "the band's cheap/fair/expensive classification is computed on a window containing "
+    "a structural EBITDA break (FY2023-01-31 -> FY2024-01-31, 5.9x step): the P25/P90 "
+    "quantiles are driven by the pre-step small-EBITDA base - treat the badge as "
+    "directional only (quantile method unchanged)."
+)
+
+
+class TestCrossCheckBreakCaveat:
+    """l1: a quantile-only row read as a clean "$493 (+115%) CHEAP" signal.
+
+    2026-10-13 NVDA: the own-history cross-check row is derived from a 5-year window
+    that opens on the pre-ramp FY2023 EBITDA base, so its p25/p90 blend two earnings
+    regimes. The row must carry the band's caveat — in a dedicated field AND in its
+    basis text, so no consumer can read it as clean.
+    """
+
+    def test_caveat_lands_on_the_row_and_in_its_basis(self):
+        checks = _band_cross_check(historical_ev_ebitda_break_caveat=_BREAK_CAVEAT)
+        assert len(checks) == 1
+        check = checks[0]
+        assert check.band_break_caveat == _BREAK_CAVEAT
+        assert check.basis.endswith(_BREAK_CAVEAT)
+
+    def test_caveat_does_not_move_the_per_share_values(self):
+        plain = _band_cross_check()[0]
+        annotated = _band_cross_check(historical_ev_ebitda_break_caveat=_BREAK_CAVEAT)[0]
+        assert (annotated.low, annotated.mid, annotated.high) == (
+            plain.low,
+            plain.mid,
+            plain.high,
+        )
+
+    def test_absent_caveat_leaves_the_row_clean(self):
+        check = _band_cross_check()[0]
+        assert check.band_break_caveat is None
+        assert "structural EBITDA break" not in check.basis
+
+    def test_band_break_caveat_appears_in_the_serialized_row(self):
+        """Whatever the artifact serializes must carry it (the frontend keys on it)."""
+        check = _band_cross_check(historical_ev_ebitda_break_caveat=_BREAK_CAVEAT)[0]
+        assert check.model_dump()["band_break_caveat"] == _BREAK_CAVEAT
+
+
+class TestReportPathForwardsTheBreakCaveat:
+    """The report's own-history row is built through ``_helpers.build_valuation_synthesis``
+    (equity_research → the band spread), so the caveat has to survive that seam."""
+
+    def _financials(self):
+        from datetime import datetime, timezone
+
+        from finrobot.engine.models.financial import (
+            BalanceSheet,
+            FinancialData,
+            IncomeStatement,
+            MarketData,
+            ValuationMetrics,
+        )
+
+        return FinancialData(
+            ticker="EHC",
+            timestamp=datetime(2026, 10, 13, tzinfo=timezone.utc),
+            income=IncomeStatement(revenue=6.2e9, ebitda=_EHC["ttm_ebitda"]),
+            balance=BalanceSheet(total_debt=2_842_299_904.0, total_cash=107_700_000.0),
+            market=MarketData(
+                market_cap=12.27e9,
+                shares_outstanding=_EHC["shares"],
+                current_price=124.42,
+            ),
+            # Non-None EV is the extractor's "both debt and cash were reported" gate;
+            # without it the fallback chain leaves net debt None and the cross-check
+            # would be dropped (see build_valuation_synthesis).
+            valuation=ValuationMetrics(enterprise_value=1.0),
+        )
+
+    def test_row_carries_the_caveat_through_the_report_path(self):
+        from finrobot.engine.pipelines._helpers import build_valuation_synthesis
+
+        vs = build_valuation_synthesis(
+            {"data_collection": self._financials()},
+            124.42,
+            ticker="EHC",
+            historical_ev_ebitda_band=(_EHC["p25"], _EHC["p75"]),
+            historical_ev_ebitda_sample_n=947,
+            historical_ev_ebitda_median=_EHC["median"],
+            historical_ev_ebitda_window_years=5,
+            historical_ev_ebitda_break_caveat=_BREAK_CAVEAT,
+        )
+        assert vs is not None
+        rows = [c for c in vs.cross_checks if c.name == "ev_ebitda_band"]
+        assert len(rows) == 1
+        assert rows[0].band_break_caveat == _BREAK_CAVEAT
+        assert rows[0].basis.endswith(_BREAK_CAVEAT)
+
+    def test_row_without_the_kwarg_stays_clean(self):
+        from finrobot.engine.pipelines._helpers import build_valuation_synthesis
+
+        vs = build_valuation_synthesis(
+            {"data_collection": self._financials()},
+            124.42,
+            ticker="EHC",
+            historical_ev_ebitda_band=(_EHC["p25"], _EHC["p75"]),
+            historical_ev_ebitda_sample_n=947,
+            historical_ev_ebitda_median=_EHC["median"],
+            historical_ev_ebitda_window_years=5,
+        )
+        assert vs is not None
+        rows = [c for c in vs.cross_checks if c.name == "ev_ebitda_band"]
+        assert len(rows) == 1
+        assert rows[0].band_break_caveat is None
+
+
 class TestCrossCheckDropIsDisclosed:
     def test_missing_median_names_the_gap_instead_of_dropping_silently(self):
         """The row exists to put the target beside the issuer's own band — a

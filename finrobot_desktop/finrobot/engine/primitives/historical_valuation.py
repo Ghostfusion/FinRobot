@@ -34,6 +34,46 @@ _MAX_TIMELINE_POINTS = 120
 that keeps the JSON payload small while preserving variation when callers
 ask for higher-resolution windows."""
 
+_STRUCTURAL_BREAK_STEP_MULTIPLE = 3.0
+"""A year-over-year EBITDA step at or above this multiple is a structural break.
+
+EBITDA is the EV/EBITDA denominator, so a 3x annual step means the window's
+multiples changed regime mid-sample: the quantiles then average a small-base
+regime with a large-base one. 3x is the same order-of-magnitude threshold the
+project already uses to flag a base that is not comparable across a window
+(a 2x step is ordinary growth / a cyclical swing)."""
+
+
+@dataclass(frozen=True)
+class EbitdaStructuralBreak:
+    """A structural step in the window's EBITDA base (a regime change).
+
+    The whole 5-year sample is reduced to P25/P75/P90, so ONE year-over-year EBITDA
+    step ≥ ``_STRUCTURAL_BREAK_STEP_MULTIPLE`` makes the quantiles a blend of two
+    regimes. NVDA 2026-10-13: FY2023 EBITDA $5.99B → FY2024 $35.58B (5.9x), so the
+    window's p90 = 183.3x and p25 = 37.8x are driven by the pre-ramp small-EBITDA
+    base, and ``classify_band`` badged the stock CHEAP (27.06x ≤ 37.76x) off it.
+
+    The quantile METHOD is a product decision and is NOT changed here — this object
+    only DISCLOSES the break so the UI can caveat the badge.
+    """
+
+    from_fiscal_date: date
+    """Fiscal-year-end date of the pre-step year (annual basis)."""
+
+    to_fiscal_date: date
+    """Fiscal-year-end date of the post-step year."""
+
+    from_ebitda: float
+    """EBITDA of the pre-step fiscal year (absolute, reporting currency)."""
+
+    to_ebitda: float
+    """EBITDA of the post-step fiscal year."""
+
+    step_multiple: float
+    """The step magnitude (≥ 1): the larger of ``to_ebitda`` / ``from_ebitda`` and its
+    reciprocal, so a ≥3x ramp and a ≥3x collapse are both reported as ≥ 3."""
+
 
 @dataclass(frozen=True)
 class YearlyFinancials:
@@ -80,6 +120,14 @@ class HistoricalBand:
     timeline: list[tuple[date, float]]
     sample_count: int
     warnings: list[str]
+    structural_break: EbitdaStructuralBreak | None = None
+    """The largest year-over-year EBITDA step ≥ ``_STRUCTURAL_BREAK_STEP_MULTIPLE``
+    between two fiscal years the window's samples actually use, or None.
+
+    A disclosure, not a method change: the published quantiles/current/timeline are
+    byte-identical to before this field existed. Consumers (the technical payload,
+    the UI) must caveat a cheap/fair/expensive badge derived from a window whose
+    quantiles blend two earnings regimes."""
 
 
 def compute_historical_band(
@@ -122,6 +170,11 @@ def compute_historical_band(
 
     samples: list[tuple[date, float]] = []
     skipped_no_financial = 0
+    # Fiscal years the window's samples actually use. The structural-break check
+    # below runs over THESE only: a break in a fiscal year no price point ever
+    # aligned to cannot have shaped the published quantiles, and flagging it would
+    # be a caveat about a regime the band does not contain.
+    sampled_fiscal_dates: set[date] = set()
     for point in prices:
         fy = _financial_for_date(point.sample_date, fiscal_dates, fiscals)
         if fy is None:
@@ -135,6 +188,7 @@ def compute_historical_band(
         if multiple is None or not math.isfinite(multiple) or multiple <= 0:
             continue
         samples.append((point.sample_date, multiple))
+        sampled_fiscal_dates.add(fy.fiscal_date)
 
     if not samples:
         # Name WHICH input is missing instead of guessing "EBITDA / FCF": the live
@@ -163,6 +217,21 @@ def compute_historical_band(
         warnings.append(
             f"{skipped_no_financial} price point(s) predate the earliest fiscal year — skipped"
         )
+
+    # Structural-break disclosure (NOT a method change): the quantiles below reduce
+    # the whole window to a few order statistics, so a ≥3x year-over-year EBITDA step
+    # makes them a blend of two regimes. NVDA 2026-10-13 windowed 2023-01-31 onward,
+    # where FY2023 EBITDA $5.99B → FY2024 $35.58B (5.9x) put p25 at 37.76x / p90 at
+    # 183.34x and badged the stock CHEAP against a distorted p25. The published
+    # numbers stay exactly as computed; the break and which years it spans are named
+    # so the consumer can caveat the badge.
+    structural_break = (
+        _detect_structural_break([fy for fy in fiscals if fy.fiscal_date in sampled_fiscal_dates])
+        if metric == "ev_ebitda"
+        else None
+    )
+    if structural_break is not None:
+        warnings.append(_structural_break_warning(structural_break))
 
     values = [v for _, v in samples]
     timeline = _downsample(samples, _MAX_TIMELINE_POINTS)
@@ -204,6 +273,7 @@ def compute_historical_band(
         timeline=timeline,
         sample_count=len(values),
         warnings=warnings,
+        structural_break=structural_break,
     )
 
 
@@ -264,6 +334,58 @@ def _compute_multiple(
     return market_cap / fy.free_cash_flow
 
 
+def _detect_structural_break(fiscals: list[YearlyFinancials]) -> EbitdaStructuralBreak | None:
+    """Largest ≥``_STRUCTURAL_BREAK_STEP_MULTIPLE`` EBITDA step between adjacent years.
+
+    ``fiscals`` must be the sampled fiscal years in ascending order. Only positive
+    EBITDA pairs are comparable (a loss-making year has no meaningful ratio and its
+    multiple is dropped upstream anyway); non-finite legs are ignored. The step is
+    measured as a magnitude ≥ 1 in EITHER direction — a 3x collapse blends regimes
+    exactly as a 3x ramp does — and the LARGEST step is returned so the disclosure
+    names the dominant regime change, or None.
+    """
+    largest: EbitdaStructuralBreak | None = None
+    for prev, curr in zip(fiscals, fiscals[1:]):
+        if prev.ebitda is None or curr.ebitda is None:
+            continue
+        if not (math.isfinite(prev.ebitda) and math.isfinite(curr.ebitda)):
+            continue
+        if prev.ebitda <= 0 or curr.ebitda <= 0:
+            continue
+        ratio = curr.ebitda / prev.ebitda
+        step = ratio if ratio >= 1.0 else 1.0 / ratio
+        if step < _STRUCTURAL_BREAK_STEP_MULTIPLE:
+            continue
+        if largest is None or step > largest.step_multiple:
+            largest = EbitdaStructuralBreak(
+                from_fiscal_date=prev.fiscal_date,
+                to_fiscal_date=curr.fiscal_date,
+                from_ebitda=prev.ebitda,
+                to_ebitda=curr.ebitda,
+                step_multiple=step,
+            )
+    return largest
+
+
+def _structural_break_warning(break_: EbitdaStructuralBreak) -> str:
+    """Reader-facing warning for a window whose quantiles blend two regimes.
+
+    Names the years, the step and the direction of the distortion, and states that
+    the quantile method itself is unchanged — the disclaimer is about HOW the
+    published P25/P75/P90 should be read, not a silent re-computation.
+    """
+    direction = "small-EBITDA" if break_.to_ebitda > break_.from_ebitda else "large-EBITDA"
+    return (
+        "the historical band spans a structural EBITDA break: "
+        f"FY{break_.from_fiscal_date.isoformat()}→FY{break_.to_fiscal_date.isoformat()} "
+        f"EBITDA stepped {break_.step_multiple:.1f}x "
+        f"(${break_.from_ebitda / 1e9:.2f}B→${break_.to_ebitda / 1e9:.2f}B, annual basis), "
+        f"so the P25/P75/P90 quantiles blend the pre-step ({direction}) base with the "
+        "post-step base and the cheap/fair/expensive classification is on a mixed "
+        "regime — treat the badge as directional only. The quantile method is unchanged."
+    )
+
+
 def _quantile(values: list[float], q: float) -> float:
     """Inclusive linear-interpolation quantile (matches numpy default)."""
     if not values:
@@ -298,6 +420,7 @@ def _downsample(
 # Re-export the runtime sentinel for type checkers — kept for parity with the
 # rest of compute/* which expose Literal aliases at module scope.
 __all__ = [
+    "EbitdaStructuralBreak",
     "HistoricalBand",
     "HistoricalMetricName",
     "PricePoint",
