@@ -92,6 +92,9 @@ def _decision_to_dict(decision: MetricDecision) -> dict[str, object]:
         "currency": decision.currency,
         "selected_source": decision.selected_source,
         "is_authoritative": decision.is_authoritative,
+        # The typed measurement (design §6): what kind of provenance this value has, so a
+        # consumer switches on `kind` instead of re-inferring it from `is_authoritative`.
+        "measure": decision.measure.model_dump(mode="json") if decision.measure else None,
         "reason_code": decision.reason_code,
         "policy_version": decision.policy_version,
         "definition_version": decision.definition_version,

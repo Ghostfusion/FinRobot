@@ -9,6 +9,7 @@ pin the absence too (a key the payload cannot resolve keeps its findings and rep
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 
 from finrobot.artifact.models import (
@@ -231,6 +232,71 @@ class TestDeclaredProvenance:
         assert claim.value is None
         assert claim.is_proxy is False
         assert claim.derivation == []
+
+    def test_a_declared_proxy_is_read_through_the_declaration(self, caplog):
+        """The typed declaration wins over the legacy inference: the claim is a proxy, its basis
+        IS the disclosure the reader is owed, and its value is taken through ``use_proxy`` — so
+        the acknowledgement is logged rather than assumed."""
+        art = _artifact(
+            structured={
+                "numeric_audit": {
+                    "artifact_status": "caveated",
+                    "findings": [
+                        {
+                            "field_key": "data_authority.ebitda",
+                            "check": "x",
+                            "severity": "review",
+                            "evidence": "e",
+                        }
+                    ],
+                }
+            },
+            raw_data=_with_decisions(
+                [
+                    _decision(
+                        "ebitda",
+                        is_authoritative=False,
+                        measure={
+                            "kind": "proxy",
+                            "value": 302_293_000.0,
+                            "proxy_of": "ebitda",
+                            "disclosure": "published from yfinance although no wired source owns ebitda",
+                        },
+                    )
+                ]
+            ),
+        )
+        with caplog.at_level(logging.WARNING):
+            claim = {c.field_key: c for c in build_numeric_ledger(art)}["data_authority.ebitda"]
+
+        assert claim.is_proxy is True
+        assert claim.basis == "published from yfinance although no wired source owns ebitda"
+        assert claim.value == 302_293_000.0
+        assert "artifact.numeric_ledger" in caplog.text  # the acknowledgement
+
+    def test_a_legacy_decision_without_a_measure_still_reads_the_same_proxy(
+        self,
+    ):
+        """Decisions stored before the measure shipped carry none, so the same signal is read
+        from ``is_authoritative`` — the archive is never rewritten (§9.3)."""
+        art = _artifact(
+            structured={
+                "numeric_audit": {
+                    "artifact_status": "caveated",
+                    "findings": [
+                        {
+                            "field_key": "data_authority.ebitda",
+                            "check": "x",
+                            "severity": "review",
+                            "evidence": "e",
+                        }
+                    ],
+                }
+            },
+            raw_data=_with_decisions([_decision("ebitda", is_authoritative=False)]),
+        )
+        claim = {c.field_key: c for c in build_numeric_ledger(art)}["data_authority.ebitda"]
+        assert claim.is_proxy is True
 
     def test_nothing_declared_leaves_the_provenance_empty_rather_than_invented(self):
         art = _artifact(

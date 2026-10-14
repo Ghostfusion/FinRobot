@@ -20,6 +20,9 @@ from __future__ import annotations
 import dataclasses
 import importlib
 import math
+import re
+
+from finrobot.engine.models.measurement import Present, Proxy, Unavailable, Withheld
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
@@ -584,6 +587,64 @@ def _obs(**overrides: object) -> MetricObservation:
 
 def _clock() -> datetime:
     return datetime(2026, 1, 20, tzinfo=_UTC)
+
+
+def test_the_owner_selection_is_a_present_measurement() -> None:
+    """``fmp`` owns revenue, so the value is a Present — measured, with its source named. The
+    typed twin of the decision's provenance, for a consumer that switches on ``kind``."""
+    decision = resolve_metric_observations("revenue", [_obs()], clock=_clock())
+    assert decision.is_authoritative is True
+    assert isinstance(decision.measure, Present)
+    assert decision.measure.value == 100.0
+    assert decision.measure.source == "fmp"
+    assert decision.measure.period == "ttm"
+
+
+def test_a_non_owner_selection_is_a_proxy_carrying_its_disclosure() -> None:
+    """The live margin shape: no wired source owns the metric, an alternative is selected and
+    published. That is a stand-in — a Proxy — and the disclosure says so in the record's own
+    terms rather than leaving the reader to infer it from ``is_authoritative``."""
+    decision = resolve_metric_observations(
+        "revenue",
+        [_obs(source="yfinance", value=100.0), _obs(source="sec_edgar", value=101.0)],
+        clock=_clock(),
+    )
+    assert decision.status == "accepted"
+    assert isinstance(decision.measure, Proxy)
+    assert decision.measure.proxy_of == "revenue"
+    assert decision.measure.value == decision.value
+    assert "no wired source owns revenue" in decision.measure.disclosure
+    # The disclosure names the source the value actually came from — the selected one, not
+    # whichever candidate happened to be listed first.
+    assert decision.selected_source in decision.measure.disclosure
+
+
+def test_no_eligible_observation_is_unavailable_with_the_records_own_code() -> None:
+    decision = resolve_metric_observations("not_a_metric", [_obs(source="anyone")], clock=_clock())
+    assert isinstance(decision.measure, Unavailable)
+    assert decision.measure.reason_code == "no_eligible_observation"
+
+
+def test_a_declined_row_is_withheld_not_unavailable() -> None:
+    """A declined row is a real number FinRobot chooses not to state, which is a different fact
+    from never having obtained one — and the registry row is where the record already says
+    which. The decision's own ``status`` is untouched: this is provenance, not a re-decision."""
+    decision = resolve_metric_observations("sec_xbrl_preferred_stock_fill", [], clock=_clock())
+    assert decision.status == "unavailable"  # unchanged for every existing reader
+    assert isinstance(decision.measure, Withheld)
+    assert decision.measure.reason_code == "owner_decision_unwired"
+    assert decision.measure.reason_code in DECLINED_REASON_CODES
+    assert decision.measure.evidence  # the row's own definition of what it would fill
+
+
+def test_a_measure_code_is_the_registrys_own_spelling() -> None:
+    """A code is carried VERBATIM, never re-spelled at the measure site. §9.6 fixes
+    UPPER_SNAKE_CASE, but today's live vocabulary is lower_snake — so upper-casing here would
+    mint a second code for one cause, and a reader's lookup table would need two keys. The
+    normalization is §9.6's to make, in one pass over the whole vocabulary."""
+    decision = resolve_metric_observations("not_a_metric", [], clock=_clock())
+    assert decision.measure.reason_code == "no_eligible_observation"
+    assert not re.search(r"[A-Z]", decision.measure.reason_code)
 
 
 def test_unknown_and_declined_metrics_are_unavailable_never_a_value() -> None:

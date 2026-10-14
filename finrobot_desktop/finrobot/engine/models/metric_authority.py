@@ -54,6 +54,8 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Literal, Mapping, Sequence
 
+from finrobot.engine.models.measurement import Measure, Present, Proxy, Unavailable, Withheld
+
 MetricKind = Literal["computed", "vendor"]
 """How the number is produced: by a deterministic operator, or read from a vendor
 statement. Both are legitimate producers; the distinction matters because a vendor
@@ -1009,6 +1011,14 @@ class MetricDecision:
     candidates: tuple[MetricCandidate, ...]
     reconciled_at: datetime
 
+    #: The typed twin of this decision's provenance (design §6): ``Present`` when the producer
+    #: of record selected the value, ``Proxy`` when the published value is a STAND-IN selected
+    #: without an owner, ``Withheld`` when the record refused the number, ``Unavailable`` when
+    #: nothing eligible existed. ``None`` for a decision that is not a measurement. Serialised
+    #: into ``data_authority.decisions[].measure`` — one vocabulary, switchable by ``kind`` —
+    #: so a consumer reads the KIND rather than re-inferring it from ``is_authoritative``.
+    measure: Measure | None = None
+
 
 @dataclass(frozen=True)
 class ReconciliationReport:
@@ -1264,10 +1274,74 @@ def _key_order(key: tuple[object, ...]) -> tuple[str, ...]:
     return tuple("" if part is None else str(part) for part in key)
 
 
+def _measure(
+    *,
+    metric: str,
+    status: str,
+    value: float | None,
+    selected_source: str | None,
+    is_authoritative: bool,
+    reason_code: str,
+    basis: str,
+    comparability: str,
+    period_basis: str | None,
+    row: MetricRow | None,
+) -> Measure:
+    """The typed twin of a decision's provenance (design §6) — see ``MetricDecision.measure``.
+
+    Derived from the record's own statements and nothing else: an accepted value from the
+    producer of record is ``Present``; the same acceptance WITHOUT an owner is ``Proxy`` — the
+    report publishes a stand-in for a metric no wired source owns, and the disclosure is what
+    the record itself says about it; a DECLINED row is ``Withheld``; anything else with no value
+    is ``Unavailable``.
+
+    Withheld and Unavailable are different facts and the registry is where the record already
+    draws the line: a declined row is a real number FinRobot chooses not to state
+    (``sec_xbrl_preferred_stock_fill``: a fact can be years stale, so wiring it needs an owner
+    decision first), while unavailable means nothing eligible was ever obtained. The decision's
+    own ``status`` stays what it was — this is the provenance, not a re-decision.
+
+    Reason codes are carried VERBATIM from the record, never re-spelled here. §9.6 fixes
+    UPPER_SNAKE_CASE for a code, but today's live vocabulary is lower_snake
+    (``owner_decision_unwired``, ``owner_absent_alternative_selected``) — so upper-casing at this
+    one site would mint the second spelling of every code, which is the lossiness §9.6 exists to
+    end. The migration is §9.6's to make, in one pass over the whole vocabulary.
+    """
+    if status == "accepted" and value is not None:
+        if is_authoritative and selected_source:
+            return Present(value=float(value), source=selected_source, period=period_basis)
+        disclosure = (
+            f"published from {selected_source or 'an unnamed source'} although no wired source "
+            f"owns {metric}"
+            + (f"; comparability {comparability}" if comparability else "")
+            + (f" ({basis})" if basis else "")
+        )
+        return Proxy(value=float(value), proxy_of=metric, disclosure=disclosure)
+    if row is not None and row.status == "declined":
+        return Withheld(
+            reason_code=row.reason_code or "declined_by_policy",
+            evidence=row.definition or basis or "declined by policy",
+        )
+    return Unavailable(reason_code=reason_code)
+
+
 def _unavailable_decision(metric: str, row: MetricRow | None, *, clock: datetime) -> MetricDecision:
     """The fail-closed answer when there is no row (or it is declined): never a
     fabricated value, never ``0``."""
+    reason_code = "no_eligible_observation"
     return MetricDecision(
+        measure=_measure(
+            metric=metric,
+            status="unavailable",
+            value=None,
+            selected_source=None,
+            is_authoritative=False,
+            reason_code=reason_code,
+            basis=(row.basis or "") if row is not None else "",
+            comparability=row.comparability if row is not None else "",
+            period_basis=None,
+            row=row,
+        ),
         metric=metric,
         status="unavailable",
         value=None,
@@ -1275,7 +1349,7 @@ def _unavailable_decision(metric: str, row: MetricRow | None, *, clock: datetime
         currency=None,
         selected_source=None,
         is_authoritative=False,
-        reason_code="no_eligible_observation",
+        reason_code=reason_code,
         policy_version=POLICY_VERSION,
         definition_version=row.definition_version if row is not None else "",
         basis=(row.basis or "") if row is not None else "",
@@ -1490,6 +1564,18 @@ def resolve_metric_observations(
         metric=metric,
         status=status,
         value=selected_value,
+        measure=_measure(
+            metric=metric,
+            status=status,
+            value=selected_value,
+            selected_source=selected_source,
+            is_authoritative=selected is not None and selected.is_owner,
+            reason_code=reason_code,
+            basis=row.basis or "",
+            comparability=row.comparability,
+            period_basis=reference_obs.period_basis,
+            row=row,
+        ),
         unit=row.unit,
         currency=reference_obs.currency,
         selected_source=selected_source,

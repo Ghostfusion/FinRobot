@@ -3634,6 +3634,15 @@ export interface components {
        * Format: date-time
        */
       reconciled_at: string
+      /** Measure */
+      measure?:
+        | (
+            | components['schemas']['Present']
+            | components['schemas']['Proxy']
+            | components['schemas']['Withheld']
+            | components['schemas']['Unavailable']
+          )
+        | null
     }
     /**
      * MonteCarloRequest
@@ -3793,6 +3802,36 @@ export interface components {
       owned: boolean
     }
     /**
+     * Present
+     * @description The number was measured, and the measurement named its source.
+     */
+    Present: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: 'present'
+      /** Value */
+      value: number
+      /**
+       * Source
+       * @description Who produced it, in the reader's words (not a vendor id alone).
+       */
+      source: string
+      /**
+       * Period
+       * @description TTM / NTM / FY — None when not stated.
+       */
+      period?: string | null
+      /** As Of */
+      as_of?: string | null
+      /**
+       * Derivation
+       * @description The inputs it was computed from, in order. Empty when none are declared.
+       */
+      derivation?: string[]
+    }
+    /**
      * ProviderConfig
      * @description One LLM provider in the model registry.
      *
@@ -3895,6 +3934,33 @@ export interface components {
       declared: boolean
       /** Binding */
       binding: boolean
+    }
+    /**
+     * Proxy
+     * @description The number STANDS IN for the thing the report names — a sector multiple, an industry
+     *     beta, a provider scalar computed on a basis the statement rows do not share.
+     *
+     *     ``disclosure`` is the sentence a reader is owed; ``proxy_of`` names the field it stands in
+     *     for. A consumer must read the value through :func:`use_proxy`, which records both.
+     */
+    Proxy: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: 'proxy'
+      /** Value */
+      value: number
+      /**
+       * Proxy Of
+       * @description The field this stands in for (e.g. ``gross_margin``).
+       */
+      proxy_of: string
+      /**
+       * Disclosure
+       * @description Plain-language statement of the substitution, for the reader.
+       */
+      disclosure: string
     }
     /** QuotesWarmedStatus */
     QuotesWarmedStatus: {
@@ -4491,6 +4557,22 @@ export interface components {
         [key: string]: unknown
       }
     }
+    /**
+     * Unavailable
+     * @description The number was never obtained, and the reason is named.
+     */
+    Unavailable: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: 'unavailable'
+      /**
+       * Reason Code
+       * @description The record's own code, verbatim — as above.
+       */
+      reason_code: string
+    }
     /** ValidationError */
     ValidationError: {
       /** Location */
@@ -4635,6 +4717,30 @@ export interface components {
       cost_of_equity: number
       /** Wacc */
       wacc: number
+    }
+    /**
+     * Withheld
+     * @description The number is knowably not publishable, and the reason is named.
+     *
+     *     Not the same as a missing value: a withheld number was considered and refused, and the
+     *     reason is what a reader needs to know whether to trust the rest of the block.
+     */
+    Withheld: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: 'withheld'
+      /**
+       * Reason Code
+       * @description The code from the schema's one vocabulary, VERBATIM (design §9.6 fixes the shape; the live registry is lower_snake, and re-spelling it here would mint a second code for one cause — the normalization is §9.6's, in one pass over the vocabulary).
+       */
+      reason_code: string
+      /**
+       * Evidence
+       * @description The reader-facing sentence behind the code.
+       */
+      evidence: string
     }
   }
   responses: never

@@ -523,6 +523,29 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
   - the field vocabulary is itself the work. Turning a rule subject into a measurable claim (which
     payload path backs `enterprise_value`, `pe_ratio`, `thesis.narrative`) is a producer-side
     change, not a ledger change — which is why the ledger ships first and the routing follows.
+  **Shipped 2026-10-14 — the typed `Measure`, with a producer for every member.**
+  `engine/models/measurement.py` holds the union (§6's four facts) plus `use_proxy()`, which is
+  the type's whole point: a consumer cannot get a Proxy's number without naming itself, so a
+  substitution leaves a trail instead of being a missing warning. The producer is the
+  **data-authority decision** — §6's own "runtime half" — whose `measure` is now serialised into
+  the payload beside the basis it types, and the mapping is derived from the record's own
+  statements: an accepted value from the producer of record is `Present`, the SAME acceptance
+  without an owner is `Proxy` (the measured margin shape: `yfinance` selected while the registry
+  names another source as owner, `comparability caliber_divergent`), a **declined row** is
+  `Withheld` (`sec_xbrl_preferred_stock_fill`: a real number FinRobot chooses not to state, which
+  the decision's own `status` already flattened to `unavailable` — two different facts the type
+  now keeps apart), and no eligible observation is `Unavailable`. The ledger reads the
+  declaration rather than re-inferring it, and takes a proxied value through `use_proxy()`.
+  Two honest limits, both measured:
+  - the **provider's** finer fact — a margin taken from a scalar rather than the statement row it
+    sits beside — still travels only as a warning string: the token (`provider_scalar`) exists in
+    `yfinance_provider` and nowhere else, so typing it needs the provider → `NormalizedFinancials`
+    → `FinancialData` hop, which is the next producer to convert (it is the one §6's own list
+    of hand-written precursors names);
+  - a measure's `reason_code` is carried **verbatim**, never re-spelled. §9.6 fixes
+    UPPER_SNAKE_CASE, but the live vocabulary is lower_snake (`owner_decision_unwired`), so
+    upper-casing at the measure site would mint the second spelling of every code — the lossiness
+    §9.6 exists to end. That normalization is §9.6's, in one pass over the whole vocabulary.
 - A consumer needing a *measurement* cannot accept a `Proxy` without an explicit
   `use_proxy()` that records the disclosure string — so "silent substitution" becomes a type
   error rather than a missing warning. The fixes already shipped (`None ≠ 0`, "industry levered

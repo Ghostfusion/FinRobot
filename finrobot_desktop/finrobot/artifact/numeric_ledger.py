@@ -28,8 +28,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from pydantic import TypeAdapter
+
 from finrobot.artifact.contract import CONTRACT_CLAUSES
 from finrobot.artifact.field_registry import REGISTRY, FieldCaliber
+from finrobot.engine.models.measurement import Measure, Proxy, Withheld, use_proxy
 from finrobot.engine.models.numeric_claim import Finding, NumericClaim
 
 if TYPE_CHECKING:
@@ -108,6 +111,34 @@ def _caliber(field_key: str) -> FieldCaliber | None:
     return caliber if isinstance(caliber, FieldCaliber) else None
 
 
+def _declared_measure(decision: dict[str, Any] | None) -> Measure | None:
+    """The decision's own typed measurement (design §6), when the payload carries one."""
+    if decision is None:
+        return None
+    row = decision.get("measure")
+    if not isinstance(row, dict):
+        return None
+    try:
+        return TypeAdapter(Measure).validate_python(row)
+    except ValueError:  # pragma: no cover - defensive on a future member
+        return None
+
+
+def _is_proxy(decision: dict[str, Any] | None) -> bool:
+    """Whether the record DECLARES this value a stand-in (design §6).
+
+    The typed declaration is authoritative whenever it is present. Decisions stored before the
+    measure shipped carry none, and for those the same signal is read from ``is_authoritative``
+    — the archive is never rewritten (§9.3), so a legacy payload keeps its legacy reading.
+    """
+    if decision is None:
+        return False
+    declared = _declared_measure(decision)
+    if declared is not None:
+        return isinstance(declared, Proxy)
+    return decision.get("is_authoritative") is False
+
+
 def _resolve(artifact: Artifact, field_key: str) -> float | None:
     """The number the payload publishes at ``field_key``, read as a dotted path.
 
@@ -130,6 +161,11 @@ def _basis(artifact: Artifact, field_key: str, decision: dict[str, Any] | None) 
     """The report's own words for how the number was produced, when it declares them: the
     decision's ``basis``, else the field's ``*_basis`` sibling (``thesis.price_target`` →
     ``thesis.price_target_basis`` — the same string the cover prints)."""
+    measure = _declared_measure(decision)
+    if isinstance(measure, Proxy):
+        return measure.disclosure
+    if isinstance(measure, Withheld):
+        return measure.evidence
     if decision is not None:
         declared = decision.get("basis")
         if isinstance(declared, str) and declared:
@@ -192,6 +228,11 @@ def _claim(artifact: Artifact, field_key: str, findings: list[Finding]) -> Numer
     if value is None and decision is not None:
         decided = decision.get("value")
         value = float(decided) if isinstance(decided, int | float) else None
+    measure = _declared_measure(decision)
+    if isinstance(measure, Proxy):
+        # A proxied number is read THROUGH the declaration (§6): it carries the value, and
+        # use_proxy records which consumer took the substitution.
+        value = use_proxy(measure, consumer="artifact.numeric_ledger")
     source = None
     if decision is not None and isinstance(decision.get("selected_source"), str):
         source = decision["selected_source"]
@@ -207,6 +248,6 @@ def _claim(artifact: Artifact, field_key: str, findings: list[Finding]) -> Numer
         as_of=as_of if isinstance(as_of, str) else None,
         findings=findings,
         basis=_basis(artifact, field_key, decision),
-        is_proxy=decision is not None and decision.get("is_authoritative") is False,
+        is_proxy=_is_proxy(decision),
         derivation=_derivation(decision),
     )
