@@ -546,6 +546,29 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
     UPPER_SNAKE_CASE, but the live vocabulary is lower_snake (`owner_decision_unwired`), so
     upper-casing at the measure site would mint the second spelling of every code — the lossiness
     §9.6 exists to end. That normalization is §9.6's, in one pass over the whole vocabulary.
+- **`SelectionPolicy` — audited 2026-10-14; the audit is the deliverable.** The item asks that
+  every library default crossing into the domain be re-expressed as an explicit, tested policy,
+  with the FY2010 fact as the named precedent. Read against HEAD, the crossings are:
+  - edgartools' getters rank a concept's facts by `(filing_date, period_end)` — filing date
+    FIRST, which let THC's re-filed FY2010 net income out-rank FY2025 and ship as "latest
+    annual" → `_concept_facts` / `_newest_usd_fact` / `_select_latest_fact` rank by **period_end
+    first**, and the FY2010 case is a regression test;
+  - `Ticker.history`'s adjusted-vs-unadjusted default (it changed across yfinance 1.x, silently
+    rewriting every price series) → `auto_adjust=True` is passed at the call site with the reason
+    in its docstring;
+  - the vendor `info` margin scalars (computed on the provider's own basis, not the statement
+    rows beside them) → the frame's own rows win, and a scalar is a declared `provider_scalar`
+    (typing that token is the provider hop named above, still open);
+  - edgartools' fund / N-PORT resolution (which report period counts as "latest") → the provider
+    bounds it explicitly (a capped candidate list, its own timeout) and publishes the period it
+    used.
+  One arm was still silent, and it is closed here: when the multi-fact query API is unavailable,
+  the selector falls back to edgartools' single-fact getters and thereby inherits their
+  filing-date-first order. It now **warns, once per call**, naming the library's ordering — the
+  arm is reachable only for a degraded build (production always has the query API), which is
+  exactly when a different ordering would otherwise be invisible in the number a reader sees.
+  That is the item's shape: not a new abstraction over four explicit sites, but the removal of the
+  one crossing that no reader could have detected.
 - A consumer needing a *measurement* cannot accept a `Proxy` without an explicit
   `use_proxy()` that records the disclosure string — so "silent substitution" becomes a type
   error rather than a missing warning. The fixes already shipped (`None ≠ 0`, "industry levered

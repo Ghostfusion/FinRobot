@@ -699,6 +699,9 @@ def _select_latest_fact(
     best: dict[str, Any] | None = None
     best_pe: date | None = None
     best_rank = len(concepts)
+    #: Warn ONCE per call when the degraded arm lets the library's ordering pick the fact (a
+    #: per-variant warning would repeat for every taxonomy prefix tried).
+    library_order_warned = False
     try:
         for rank, concept in enumerate(concepts):
             for variant in (concept, f"us-gaap:{concept}", f"ifrs-full:{concept}"):
@@ -719,6 +722,20 @@ def _select_latest_fact(
                     except _ADAPTER_CATCH:
                         continue
                     candidates = [] if fact is None else [fact]
+                    if candidates and not library_order_warned and warnings is not None:
+                        # A LIBRARY DEFAULT is deciding a domain fact here, so it gets said out
+                        # loud. These getters rank by ``(filing_date, period_end)`` — filing date
+                        # FIRST — which is exactly the defect the multi-fact path above exists to
+                        # avoid (THC's re-filed FY2010 net income beat FY2025 and became "latest
+                        # annual"). The arm is reachable only when the query API is missing (test
+                        # doubles, a degraded edgartools build), and a silently different ordering
+                        # is the one thing a reader would never suspect from the number alone.
+                        warnings.append(
+                            "XBRL fact ranked by the LIBRARY's (filing_date, period_end) order — "
+                            "the multi-fact query API was unavailable, and that order lets a "
+                            "late-filed fact for an old fiscal period out-rank a newer one"
+                        )
+                        library_order_warned = True
                 elif annual:
                     # Replicate ``get_annual_fact``'s FY filter over the full
                     # fact set, then rank by period_end (newest period wins).

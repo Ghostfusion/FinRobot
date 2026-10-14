@@ -917,6 +917,48 @@ def test_select_latest_fact_revenue_recency_beats_rank() -> None:
     assert "RevenueFromContractWithCustomer" in out["concept"]
 
 
+def test_the_degraded_arm_names_the_librarys_ordering_in_the_warnings() -> None:
+    """Without the multi-fact query API the LIBRARY's single-fact getters pick the number, and
+    their order is ``(filing_date, period_end)`` — filing date FIRST — which is the defect the
+    multi-fact path exists to avoid (THC's re-filed FY2010 net income out-ranked FY2025). The arm
+    is reachable when the query API is missing (a degraded edgartools build), and a silently
+    different ordering is the one thing a reader could never suspect from the number alone, so it
+    says so once, in the warnings the artifact carries."""
+    from finrobot.engine.data.providers.edgar_provider import (
+        _LATEST_REVENUE_CONCEPTS,
+        _select_latest_fact,
+    )
+
+    facts = _FakeLatestFacts(
+        annual={
+            "us-gaap:Revenues": _FakeFinancialFact("us-gaap:Revenues", 100.0, date(2025, 12, 31))
+        }
+    )
+    warnings: list[str] = []
+
+    out = _select_latest_fact(
+        facts, _LATEST_REVENUE_CONCEPTS, annual=True, prefer_recent=True, warnings=warnings
+    )
+
+    assert out is not None
+    assert len(warnings) == 1  # once per call, not once per taxonomy variant tried
+    assert "LIBRARY's (filing_date, period_end) order" in warnings[0]
+
+    # The multi-fact path — the one production takes — leaves no such warning: it ranks by
+    # period_end first and needs no caveat.
+    multi = _FakeMultiFactFacts(
+        [_FakeFinancialFact("us-gaap:Revenues", 100.0, date(2025, 12, 31), fiscal_period="FY")]
+    )
+    clean: list[str] = []
+    assert (
+        _select_latest_fact(
+            multi, _LATEST_REVENUE_CONCEPTS, annual=True, prefer_recent=True, warnings=clean
+        )
+        is not None
+    )
+    assert clean == []
+
+
 def test_select_latest_fact_period_end_beats_filing_date_within_concept() -> None:
     """F1 (THC): edgartools' getters key a concept's facts on
     ``(filing_date, period_end)`` — filing date FIRST — so a late-filed fact for
