@@ -31,7 +31,7 @@ all types):
 | findings emitted, by severity | `review` **171**, `blocked_field` **0** |
 | payloads that contain the string `blocked_field` anywhere | **0** |
 | contract clauses that have ever fired in the corpus | `C1` ×2, `C7` ×31 |
-| equity_research artifacts carrying the single-method "no cross-validation" note | 59 |
+| equity_research artifacts carrying the single-method "no cross-validation" note — `valuation_synthesis.degradation_note` (the same artifacts carry it in `thesis.price_target_basis`; searching the whole `structured` block reads 65) | **62** |
 | `withhold_valuation=True` reached via `blocked_field` | 0 (every withhold came from the synthesis' own rule or `C7`) |
 | **artifacts that published a BUY/SELL whose own published cross-check band sits entirely against the call** | **8** (HMY ×3, NFLX, SKM, THC ×2, UTHR) |
 | findings named `insider_flow_amount_corrected` — the narrative wrote another metric's number into the insider-flow sentence and the pipeline silently repaired it afterwards | **21** |
