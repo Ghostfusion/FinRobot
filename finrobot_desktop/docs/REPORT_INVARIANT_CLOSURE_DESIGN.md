@@ -222,12 +222,15 @@ exact payload paths (verified against stored artifacts, not guessed). IDs `C8+` 
 - **reads** the mirrored slots (`outputs.structured.valuation_withheld` vs
   `outputs.structured.valuation_synthesis.valuation_withheld`; `…target_low/high` vs
   `…methods[].low/high`; `inputs.raw_data.market.shares_outstanding` vs
-  `…financial_modeling.inputs.shares_outstanding` vs `assumptions.parameters.shares_outstanding`)
-  and, in the frontend, any client-side arithmetic on `valuation.*`.
+  `…financial_modeling.inputs.shares_outstanding`) and, in the frontend, any client-side
+  arithmetic on `valuation.*`.
 - **predicate** mirrored slots must be equal, or one of them must be absent. Divergence is a
   finding; the duplicate is removed in favour of a single writer.
-- **pinned instance** the three `shares_outstanding` slots in every THC artifact; the two
-  `valuation_withheld` slots; the +174% the frontend computed from a withheld point.
+- **pinned instance** the two `shares_outstanding` slots in every THC artifact; the two
+  `valuation_withheld` slots; the +174% the frontend computed from a withheld point. Measured
+  catch list: **0** over the corpus — neither slot has diverged. `financial_modeling.assumptions`
+  is `null` in every artifact, so the third slot an earlier draft named does not exist; the
+  clause ships as prevention, with the divergence it would catch as its justification.
 
 ### 4.5 `C12` — recency and window closure
 - **severity** two-threshold (§9.7, locked): `error_if` when the stale or undated item carried a
@@ -252,7 +255,10 @@ exact payload paths (verified against stored artifacts, not guessed). IDs `C8+` 
   `outputs.structured.technical_analysis.monte_carlo.assumptions_used.{centered_on, independent}`.
 - **predicate** `market_cap` must not equal `shares × price` unless labelled as a derived
   fallback; a Monte Carlo whose `centered_on` is the same base case it validates must publish
-  `independent: false` (it does — keep it a gate).
+  `independent: false` (it does — keep it a gate). **Measured:** the tautology holds for
+  **97 of 97** artifacts, so this clause cannot be a per-artifact finding — it is a rule about
+  the `basis`/`independent` labels, and a `C13a` that flags every artifact is the over-broad case
+  §7.1 exists to catch.
 - **pinned instance** instance A: 21,491,326,290 ÷ 266.91 = 80,519,000.6 = the published count.
 
 ### 4.7 `C14` — prose grounding on direction, not just on digits
@@ -362,16 +368,46 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
    back catalogue is over-broad and gets re-calibrated first. The scanner is read-only by
    construction; use it as the promotion gate.
 
-   **Measured 2026-10-14** (read-only, 97 `equity_research` artifacts; 44 carry `cross_checks`,
-   23 BUY/SELL artifacts carry none at all and are out of `C8`'s scope by construction):
+   **Measured 2026-10-14** — read-only, over the 97 stored `equity_research` artifacts (the
+   corpus tail is `…20:37:52_THC_…`); 44 carry `cross_checks` and 23 BUY/SELL artifacts carry
+   none at all, so they are out of `C8`'s scope by construction. **Live** = the shape is still
+   produced by HEAD's code; **historical** = it stops at a timestamp, i.e. a shipped fix already
+   closed it and the clause's value there is regression protection.
 
-   | Clause | Catch list | Note |
-   |---|---|---|
-   | `C8` | **8** — HMY ×3, NFLX, SKM, THC ×2, UTHR | the exact list §1.1 names; each carries exactly one cross-check entry |
-   | `C8` with a "≥2 must agree" guard | **0** | the guard is why §4.1 keeps the veto-only rule |
-   | `C9` | **1** — SKM (`low ≤ 0`) | HMY's band is positive/monotone/948 samples → `C8`, not `C9` |
+   | Clause | Catch list | Span | Reading |
+   |---|---|---|---|
+   | `C6` | **27** / 12 tickers | …20:27:40 | a single-method report printing a cross-check while the note claims none — **live**; the last instance *is* instance B |
+   | `C8` | **8** | — | the list §1.1 names; each carries exactly one cross-check entry |
+   | `C8` + "≥2 must agree" | **0** | — | why §4.1 keeps the veto-only rule |
+   | `C9` | **1** (SKM) | — | HMY's band is positive/monotone/948 samples → `C8`, not `C9` |
+   | `C10a` ratio with a null numerator | **72** / 25 tickers | 10-10T21:58 … **10-14T16:44** | **historical**: `yfinance_provider.py:1110` already withholds the margin; every artifact from 19:18 on carries both operands |
+   | `C10c` DQC_0004 identity | **73** / 24 tickers | 10-10T21:45 … **10-14T19:59** | `Assets`/`Liabilities`/`StockholdersEquity` present with `_equity_identity` **absent** — the identity is computed on one path only |
+   | `C10d` caliber-divergent accepted | **33** artifacts / 96 decisions / 18 tickers | 10-13T22:53 … **20:37:52** | **live**: decisions accepted while `comparability = "caliber_divergent"`, several whose `basis` text names a provider other than `selected_source` |
+   | `C10b` cross-provider operands | **0** | — | one `selected_source` per artifact (34 yfinance, 4 eodhd); no ratio pair crosses sources today |
+   | `C11` mirrored slots | **0** | — | neither slot has ever diverged — preventive, no catch to quote |
+   | `C12a` 8-K in the window | **9** / 5 tickers | 10-14T06:21 … **20:37:52** | **live**, and already *disclosed* as a warning string in two shapes; `C12` turns the disclosure into a gate |
+   | `C12b` `news_window.count = 0` | **14** / 8 tickers | 10-14T00:23 … **20:37:52** | **live** — the empty feed is not THC-specific |
+   | `C13a` `market_cap = shares × price` | **97 / 97** | all | universal, so it cannot be a per-artifact finding — only a rule about the `basis` label |
+   | `C13b` self-centred Monte Carlo | **47** / 20 tickers | 10-13T20:18 … **20:37:52** | **live**: `centered_on: "base-case DCF assumptions"` with `independent: false` (44 more leave both null) |
+   | `C13c` `agreement_is_independent: false` | **0** | — | the flag has never been false; `C13`'s corroboration count is what gives it a consumer |
+   | `C14` core, direction vs sign | **0** | — | no direction word contradicts its leaf — the shipped fix holds |
+   | `C14` unresolved placeholder | **33** / 19 tickers | 10-12T16:46 … **10-14T19:59** | prose still carries `[target withheld]` (AFRM: *"insiders were net sellers of [target withheld]"*) — the GMED class, still live |
 
-   The numbers are the clause's justification and go into its docstring (§7.5).
+   Two calibration consequences the table forces, beyond §4.1/§4.2:
+   `C13a` **cannot** be a per-artifact finding (97/97 — it would flag the whole catalogue, which
+   is the over-broad case §7.1 exists to catch), so it becomes a rule about whether the `basis`
+   label declares the derivation; and `C11`/`C13c` ship with **no** catch list, i.e. as
+   preventive clauses whose justification is the divergence they would detect, not one they have.
+
+   The corpus also re-confirms §1's table at HEAD: **170** `review` findings, **0**
+   `blocked_field`, `withhold_valuation` never true, `withheld_reason` = `contract_C7` ×31 / null
+   ×66, `artifact_status` = `caveated` ×90 / `publishable` ×7; findings
+   `ev_bridge_unverified` ×105, `target_multiple_outside_band` ×23,
+   `insider_flow_amount_corrected` ×21, `metric_authority_unavailable` ×11,
+   `insider_flow_amount_mismatch` ×7, `foreign_issuer_usd_tags` ×2,
+   `net_income_exceeds_operating_income` ×1.
+
+   The numbers are each clause's justification and go into its docstring (§7.5).
 2. **Golden fixtures.** The pinned instances (§1.1) plus the GMED pair become fixtures in
    `tests/artifact/`, stored as payloads, not as hand-built objects — so a clause is tested
    against the artifact that produced the defect, including the `99cdca` ordering case.
