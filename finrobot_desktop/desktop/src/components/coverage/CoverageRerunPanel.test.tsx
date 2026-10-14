@@ -201,3 +201,26 @@ describe('CoverageRerunPanel', () => {
     await waitFor(() => expect(onCompleted).toHaveBeenCalledTimes(1))
   })
 })
+
+describe('CoverageRerunPanel watching a caller-started batch', () => {
+  it('names the explicit set and drops the filter UI, which cannot express it', () => {
+    hooks.batch = { data: PROGRESS, isError: false }
+    render(
+      <CoverageRerunPanel
+        groupId="cov_ab"
+        rows={ROWS}
+        onClose={vi.fn()}
+        startedBatch={{ batchId: 'cb_ab12', tickers: ['AAPL', 'MSFT'] }}
+      />,
+    )
+    // No filters, no submit: "re-run selected" already fired the batch on click.
+    expect(screen.queryByTestId('coverage-rerun-submit')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Owned only')).not.toBeInTheDocument()
+    // The set is named before the first poll lands, and the readout renders.
+    const set = screen.getByTestId('coverage-rerun-selected-set')
+    expect(set).toHaveTextContent('Submitted 2 tickers')
+    expect(set).toHaveTextContent('AAPL · MSFT')
+    expect(screen.getByTestId('coverage-rerun-counts')).toHaveTextContent('1 queued')
+    expect(screen.getByTestId('coverage-rerun-item-AAPL')).toHaveTextContent('running')
+  })
+})

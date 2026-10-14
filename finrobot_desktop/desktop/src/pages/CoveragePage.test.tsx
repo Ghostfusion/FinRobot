@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
@@ -51,6 +51,51 @@ vi.mock('../hooks/useCoverage', () => ({
 }))
 
 import { CoveragePage } from './CoveragePage'
+
+// A full CoverageRow for the page fixtures below (the wall renders every field).
+function pageRow(ticker: string) {
+  return {
+    ticker,
+    owned: false,
+    company: null,
+    price: null,
+    change_pct_1d: null,
+    price_as_of: null,
+    session_state: null,
+    market_cap: null,
+    revenue_ttm: null,
+    ev_ebitda: null,
+    pe: null,
+    currency: null,
+    latest_verdict: null,
+    target_price: null,
+    target_date: null,
+    entry_price: null,
+    upside_to_target_live: null,
+    signal: null,
+    artifact_count: 0,
+    research_count: 0,
+    latest_artifact_id: null,
+    latest_type: null,
+    latest_at: null,
+    run_status: null,
+    run_error: null,
+    market_implied: null,
+    market_stale: false,
+    needs_refresh: [],
+    warnings: [],
+    sources: {
+      price: null,
+      change_pct_1d: null,
+      market_cap: null,
+      revenue_ttm: null,
+      ev_ebitda: null,
+      pe: null,
+      upside_to_target_live: null,
+      market_implied: null,
+    },
+  }
+}
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -293,5 +338,89 @@ describe('CoveragePage delete ticker', () => {
     expect(hooks.deleteGroupId).toBe('g1')
     expect(hooks.deleteTicker.mutate).toHaveBeenCalledTimes(1)
     expect(hooks.deleteTicker.mutate).toHaveBeenCalledWith('AAPL')
+  })
+})
+
+describe('CoveragePage re-run selected', () => {
+  beforeEach(() => {
+    hooks.groups = {
+      data: [{ id: 'g1', name: 'Studied Tickers', member_count: 2, is_system: true }],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    }
+    hooks.overview = {
+      ...makeOverview(),
+      data: {
+        group_id: 'g1',
+        group_name: 'Studied Tickers',
+        rows: [pageRow('AAPL'), pageRow('KGC')],
+        generated_at: '2026-06-08T09:00:00Z',
+        partial: false,
+        cache_only: false,
+        refresh_noop: false,
+      },
+    }
+    hooks.rerun = { mutate: vi.fn(), isPending: false, isError: false }
+    hooks.batch = { data: undefined, isError: false }
+  })
+
+  it('starts at zero ticks, and the button says so', () => {
+    renderPage()
+    const btn = screen.getByTestId('coverage-rerun-selected')
+    expect(btn).toBeDisabled()
+    expect(btn).toHaveTextContent('Re-run selected (0)')
+  })
+
+  it('re-runs ONLY the ticked cards, then hands that batch to the panel', () => {
+    renderPage()
+    fireEvent.click(screen.getByLabelText('Select KGC to re-run'))
+    const btn = screen.getByTestId('coverage-rerun-selected')
+    expect(btn).not.toBeDisabled()
+    expect(btn).toHaveTextContent('Re-run selected (1)')
+
+    fireEvent.click(btn)
+    expect(hooks.rerun.mutate).toHaveBeenCalledTimes(1)
+    const [body, opts] = hooks.rerun.mutate.mock.calls[0]
+    // The tick set IS the selection: no filter rides along that could widen it to
+    // the whole wall, and the count the user saw is the count that was sent.
+    expect(body).toEqual({
+      tickers: ['KGC'],
+      owned: null,
+      ratings: null,
+      pipeline_type: 'research',
+      language: null,
+    })
+    // The panel opens on the batch the POST returned, naming the explicit set.
+    act(() => opts.onSuccess({ batch_id: 'cb_1' }))
+    expect(screen.getByTestId('coverage-rerun-panel')).toBeInTheDocument()
+    expect(screen.getByTestId('coverage-rerun-selected-set')).toHaveTextContent('KGC')
+  })
+
+  it('drops a tick whose card left the wall (no phantom count it cannot re-run)', () => {
+    renderPage()
+    fireEvent.click(screen.getByLabelText('Select KGC to re-run'))
+    expect(screen.getByTestId('coverage-rerun-selected')).toHaveTextContent('Re-run selected (1)')
+
+    // KGC leaves the group (deleted here, or removed from another window). The
+    // hook mock only takes effect on a render, so nudge the page with a
+    // page-owned state write — the same render the overview refetch would cause.
+    hooks.overview = {
+      ...hooks.overview,
+      data: { ...(hooks.overview.data as { rows: unknown[] }), rows: [pageRow('AAPL')] },
+    }
+    fireEvent.click(screen.getByTestId('coverage-sort-dir'))
+
+    expect(screen.getByTestId('coverage-rerun-selected')).toHaveTextContent('Re-run selected (0)')
+    expect(screen.getByTestId('coverage-rerun-selected')).toBeDisabled()
+  })
+
+  it('spends the ticks once the batch is accepted (no second identical fan-out)', () => {
+    renderPage()
+    fireEvent.click(screen.getByLabelText('Select KGC to re-run'))
+    fireEvent.click(screen.getByTestId('coverage-rerun-selected'))
+    act(() => hooks.rerun.mutate.mock.calls[0][1].onSuccess({ batch_id: 'cb_1' }))
+    expect(screen.getByTestId('coverage-rerun-selected')).toBeDisabled()
+    expect(screen.getByTestId('coverage-card-KGC')).not.toHaveAttribute('data-selected')
   })
 })

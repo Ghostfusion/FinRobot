@@ -7170,6 +7170,38 @@ body.app-bg .cosmic-stars.cosmic-stars-fast {
   transform: translateY(-2px);
 }
 
+/* Ticked for batch re-run (the footer's "Re-run" checkbox). An OUTLINE, not a
+   border-color: the slab's border already encodes the verdict (data-signal) and
+   the hover glow, so overloading it would erase which of the three is in effect.
+   The outline also survives :hover, so a ticked card stays visibly ticked while
+   the pointer is on it. */
+.coverage-card[data-selected='true'] {
+  outline: 1px solid var(--accent-cyan);
+  outline-offset: -1px;
+  box-shadow:
+    0 0 0 3px var(--accent-cyan-glow-soft),
+    0 18px 42px var(--bg-overlay);
+}
+
+/* Footer "re-run" tick — the card's bottom row. Muted at rest, cyan once ticked,
+   matching the owned chip's language so the two read as the same kind of control. */
+.coverage-card__select {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.coverage-card__select--on {
+  color: var(--accent-cyan);
+}
+
 .coverage-card__header {
   display: flex;
   align-items: flex-start;

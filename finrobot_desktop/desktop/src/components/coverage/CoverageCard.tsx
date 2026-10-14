@@ -42,6 +42,12 @@ interface Props {
   // Destructive: remove the ticker from the desk AND delete its stored artifacts.
   // Optional (mirrors onSetOwned) so card-only tests render without the mutation.
   onDelete?: (ticker: string) => void
+  // "Re-run selected": this card is ticked in the page's selection set, which the
+  // rail's "Re-run selected (n)" button then re-runs as one batch. The page owns
+  // the set (it fires the batch), so the card only reports the tick. Optional so
+  // the many card-only tests/uses render without the batch control.
+  selected?: boolean
+  onToggleSelect?: (ticker: string, selected: boolean) => void
 }
 
 // Badge text + dot ride the bright signal hue (matches the card's top hairline);
@@ -108,6 +114,8 @@ export const CoverageCard = memo(function CoverageCard({
   onSetOwned,
   ownedPending = false,
   onDelete,
+  selected = false,
+  onToggleSelect,
 }: Props): React.ReactElement {
   const { t, locale } = useI18n()
   // The "X" arms a local confirm before anything is deleted; the card is a
@@ -172,6 +180,9 @@ export const CoverageCard = memo(function CoverageCard({
       data-ticker={row.ticker}
       data-testid={`coverage-card-${row.ticker}`}
       data-signal={signal}
+      // Ticked for batch re-run — the wall's accent ring, so the rail button's
+      // count is visibly accounted for on the cards themselves.
+      data-selected={selected ? 'true' : undefined}
       role="link"
       tabIndex={0}
       aria-label={t('coverage.card.open', { ticker: row.ticker })}
@@ -425,6 +436,9 @@ export const CoverageCard = memo(function CoverageCard({
             onSetOwned={onSetOwned}
           />
         </span>
+        {onToggleSelect && (
+          <SelectToggle ticker={row.ticker} selected={selected} onToggle={onToggleSelect} />
+        )}
       </footer>
 
       {/* Portaled to <body>: the card is overflow:hidden and translates on hover
@@ -598,6 +612,51 @@ function OwnedToggle({
         }}
       />
       {t('coverage.owned.label')}
+    </label>
+  )
+}
+
+// Footer "re-run" tick — the third footer row, the card's bottom line. Ticking it
+// adds the ticker to the page's selection set; the rail's "re-run selected" button
+// then re-runs exactly that set as one throttled batch. Like OwnedToggle it MUST
+// swallow its own click + keydown (the card is a role=link that opens the ticker
+// workspace) and carry its own aria-label (the visible label is terse; the card's
+// own label is "Open NFLX").
+function SelectToggle({
+  ticker,
+  selected,
+  onToggle,
+}: {
+  ticker: string
+  selected: boolean
+  onToggle: (ticker: string, selected: boolean) => void
+}): React.ReactElement {
+  const { t } = useI18n()
+  return (
+    <label
+      className={`coverage-card__select${selected ? ' coverage-card__select--on' : ''}`}
+      data-testid={`coverage-select-${ticker}`}
+      data-selected={selected ? 'true' : undefined}
+      title={t('coverage.select.hint')}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      <input
+        type="checkbox"
+        checked={selected}
+        aria-label={t('coverage.select.aria', { ticker })}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+        onChange={(e) => onToggle(ticker, e.target.checked)}
+        style={{
+          margin: 0,
+          width: 13,
+          height: 13,
+          accentColor: 'var(--accent-cyan)',
+          cursor: 'pointer',
+        }}
+      />
+      {t('coverage.select.label')}
     </label>
   )
 }

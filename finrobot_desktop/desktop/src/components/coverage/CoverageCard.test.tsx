@@ -399,3 +399,51 @@ describe('CoverageCard footer layout', () => {
     expect(meta?.querySelector('input[type="checkbox"]')).not.toBeNull()
   })
 })
+
+describe('CoverageCard re-run tick', () => {
+  function renderSelectable(over: Partial<CoverageRow>, selected = false) {
+    const onOpen = vi.fn()
+    const onToggleSelect = vi.fn()
+    render(
+      <MemoryRouter>
+        <CoverageCard
+          row={row(over)}
+          density="comfort"
+          onOpen={onOpen}
+          selected={selected}
+          onToggleSelect={onToggleSelect}
+        />
+      </MemoryRouter>,
+    )
+    return { onOpen, onToggleSelect }
+  }
+
+  it('ticks without opening the ticker workspace (the card is a link)', () => {
+    const { onOpen, onToggleSelect } = renderSelectable({ ticker: 'KGC' })
+    fireEvent.click(screen.getByLabelText('Select KGC to re-run'))
+    expect(onToggleSelect).toHaveBeenCalledWith('KGC', true)
+    // The card's own click handler opens the ticker; the tick must swallow it.
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('unticking reports false, so the page can drop the name', () => {
+    const { onToggleSelect } = renderSelectable({ ticker: 'KGC' }, true)
+    fireEvent.click(screen.getByLabelText('Select KGC to re-run'))
+    expect(onToggleSelect).toHaveBeenCalledWith('KGC', false)
+  })
+
+  it('renders the control only when the page offers a selection', () => {
+    renderCard({ ticker: 'KGC' })
+    expect(screen.queryByTestId('coverage-select-KGC')).not.toBeInTheDocument()
+  })
+
+  it('marks the ticked card for the wall (data-selected)', () => {
+    renderSelectable({ ticker: 'KGC' }, true)
+    expect(screen.getByTestId('coverage-card-KGC')).toHaveAttribute('data-selected', 'true')
+  })
+
+  it('leaves an unticked card unmarked', () => {
+    renderSelectable({ ticker: 'KGC' })
+    expect(screen.getByTestId('coverage-card-KGC')).not.toHaveAttribute('data-selected')
+  })
+})

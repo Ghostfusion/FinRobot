@@ -3,10 +3,15 @@
 // desk: a wall of ticker cards plus a slim header rail. The whole studied
 // universe is always shown, but the rail now carries the controls the owner
 // asked for: a sort box (needs-attention / name / rating + a direction toggle),
-// a "re-run all" button, and the manual refresh. The cards self-report verdict,
-// freshness, and an amber edge when one needs attention. There is ONE surfaced
-// list — Studied Tickers (the system coverage group); multi-group machinery stays
-// backend-only. Card click opens `/stocks/:ticker`, where research runs and
+// a "re-run all" button, a "re-run selected" button fed by the per-card "re-run"
+// tick at the bottom of each slab, and the manual refresh. Both re-run buttons
+// fire the SAME throttled batch (POST …/rerun, then a polled progress readout):
+// "all" selects by filter over the wall, "selected" posts the explicit tick set,
+// and this page owns that set so it can prune it against the rows it renders. The
+// cards self-report verdict, freshness, and an amber edge when one needs
+// attention. There is ONE surfaced list — Studied Tickers (the system coverage
+// group); multi-group machinery stays backend-only. Card click opens
+// `/stocks/:ticker`, where research runs and
 // artifact history live.
 //
 // A ticker is the primary object: a live market snapshot AND many research
@@ -17,11 +22,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useI18n } from '../i18n'
 import { useCoverageStore } from '../stores/coverageStore'
+import { useToastStore } from '../stores/toastStore'
+import { mapErrorToUserMessage } from '../utils/errorMessage'
 import {
   useCoverageGroups,
   useCoverageOverview,
   useSetOwned,
   useDeleteCoverageTicker,
+  useRerunAll,
 } from '../hooks/useCoverage'
 import { CoverageEmptyState } from '../components/coverage/CoverageEmptyState'
 import { CoverageCardGrid } from '../components/coverage/CoverageCardGrid'
@@ -106,6 +114,73 @@ export function CoveragePage(): React.ReactElement {
   // urgent-first) for a stable, useful wall.
   const visibleRows = useMemo(() => sortCoverageRows(rows, sort), [rows, sort])
 
+  // ── "Re-run selected" ────────────────────────────────────────────────────
+  // The per-card ticks feed ONE batch, so the page owns the selection and the
+  // batch and the cards only report ticks. Keyed by TICKER, never row index: an
+  // overview refetch replaces and re-orders the rows, and an index-keyed
+  // selection would silently re-point at other names.
+  const [selectedTickers, setSelectedTickers] = useState<ReadonlySet<string>>(() => new Set())
+  // The batch the rail button already started, handed to the progress panel.
+  // Cleared with the panel so reopening "re-run all" never shows a stale readout.
+  const [selectedBatch, setSelectedBatch] = useState<{
+    batchId: string
+    tickers: string[]
+  } | null>(null)
+  const rerunSelected = useRerunAll(activeGroupId ?? '')
+  const addToast = useToastStore((s) => s.addToast)
+
+  // A selection must not outlive its cards: a deleted ticker (or a group switch)
+  // would otherwise keep inflating the button's count with a name that can't be
+  // re-run. Pruned against the rows we render, returning the SAME set when
+  // nothing went stale — `rows` is a fresh array on every refetch, so a
+  // new-set-every-time version would re-render the wall for nothing.
+  useEffect(() => {
+    setSelectedTickers((prev) => {
+      if (prev.size === 0) return prev
+      const live = new Set(rows.map((r) => r.ticker))
+      const next = new Set<string>()
+      for (const ticker of prev) if (live.has(ticker)) next.add(ticker)
+      return next.size === prev.size ? prev : next
+    })
+  }, [rows])
+
+  const toggleSelected = (ticker: string, selected: boolean) => {
+    setSelectedTickers((prev) => {
+      const next = new Set(prev)
+      if (selected) next.add(ticker)
+      else next.delete(ticker)
+      return next
+    })
+  }
+
+  // Fire ONE batch for exactly the ticked cards. The tick set IS the selection —
+  // no filters ride along, so nothing can widen it — and the server intersects it
+  // with the group's rows, so a stale tick can never re-run a name off the wall.
+  const handleRerunSelected = () => {
+    const tickers = [...selectedTickers]
+    if (tickers.length === 0 || rerunSelected.isPending) return
+    rerunSelected.mutate(
+      { tickers, owned: null, ratings: null, pipeline_type: 'research', language: null },
+      {
+        onSuccess: (progress) => {
+          setSelectedBatch({ batchId: progress.batch_id, tickers })
+          // The selection is spent: its batch is the live object now, and leaving
+          // the ticks on would invite a second identical fan-out.
+          setSelectedTickers(new Set())
+        },
+        onError: (err: Error) => {
+          // Keep the selection so the click is retryable, and say why it failed —
+          // a silent no-op here reads as "the button does nothing".
+          addToast({
+            type: 'error',
+            title: t('coverage.rerunSelected.failed'),
+            description: mapErrorToUserMessage(err),
+          })
+        },
+      },
+    )
+  }
+
   // Re-arm the market-degraded retry bar on each fresh failure: when marketError
   // flips false→true (e.g. a retry failed again, or a new group's revalidate
   // fails), clear a prior dismissal so the user sees it again.
@@ -174,6 +249,41 @@ export function CoveragePage(): React.ReactElement {
         <CoverageSortControl sort={sort} onChange={(next) => setSort(next)} />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Re-run exactly the ticked cards (the per-card "Re-run" checkboxes at
+              the bottom of each slab). One click starts the batch — the modal that
+              follows is the live readout, not a second confirmation — and the
+              button carries the count so "how many" is never ambiguous. Disabled
+              at zero ticks: there is no such thing as "re-run nothing", and the
+              server would answer with an empty batch. */}
+          <button
+            type="button"
+            data-testid="coverage-rerun-selected"
+            onClick={handleRerunSelected}
+            disabled={selectedTickers.size === 0 || rerunSelected.isPending}
+            aria-label={t('coverage.rerunSelected.aria')}
+            className="coverage-hover-btn"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              padding: '6px 13px',
+              borderRadius: 'var(--radius-pill)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11.5,
+              fontWeight: 500,
+              letterSpacing: '0.04em',
+              background: 'var(--bg-card-overlay)',
+              color: selectedTickers.size > 0 ? 'var(--accent-cyan)' : 'var(--text-muted)',
+              border: '1px solid',
+              borderColor: selectedTickers.size > 0 ? 'var(--accent-cyan)' : 'var(--border-soft)',
+              cursor: selectedTickers.size === 0 ? 'default' : 'pointer',
+              opacity: rerunSelected.isPending ? 0.6 : 1,
+            }}
+          >
+            {rerunSelected.isPending
+              ? t('coverage.rerunSelected.starting')
+              : t('coverage.rerunSelected.button', { n: selectedTickers.size })}
+          </button>
           <button
             type="button"
             data-testid="coverage-rerun-open"
@@ -246,15 +356,24 @@ export function CoveragePage(): React.ReactElement {
             onSetOwned={(ticker, owned) => setOwned.mutate({ ticker, owned })}
             ownedPendingTicker={ownedPendingTicker}
             onDelete={(ticker) => deleteTicker.mutate(ticker)}
+            selectedTickers={selectedTickers}
+            onToggleSelect={toggleSelected}
           />
         )}
       </div>
 
-      {rerunOpen && activeGroupId && (
+      {(rerunOpen || selectedBatch) && activeGroupId && (
         <CoverageRerunPanel
           groupId={activeGroupId}
           rows={rows}
-          onClose={() => setRerunOpen(false)}
+          // "Re-run selected" starts its batch on click, so the panel opens with a
+          // batch already in flight: it shows that batch's explicit ticker set +
+          // readout and drops the filter UI, which could not describe a set.
+          startedBatch={selectedBatch}
+          onClose={() => {
+            setRerunOpen(false)
+            setSelectedBatch(null)
+          }}
           // The batch flipped the rows' run_state server-side; refetch so the
           // cards pick up the new status instead of the pre-run snapshot.
           onCompleted={() => overviewQuery.refetch()}

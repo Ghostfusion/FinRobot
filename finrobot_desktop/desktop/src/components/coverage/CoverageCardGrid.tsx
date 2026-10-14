@@ -21,6 +21,9 @@ interface Props {
   ownedPendingTicker?: string | null
   // Destructive: remove the ticker from the desk AND delete its stored artifacts.
   onDelete?: (ticker: string) => void
+  // The tickers ticked for a batch re-run (the page owns the set and the batch).
+  selectedTickers?: ReadonlySet<string>
+  onToggleSelect?: (ticker: string, selected: boolean) => void
 }
 
 export function CoverageCardGrid({
@@ -31,6 +34,8 @@ export function CoverageCardGrid({
   onSetOwned,
   ownedPendingTicker = null,
   onDelete,
+  selectedTickers,
+  onToggleSelect,
 }: Props): React.ReactElement {
   const { t } = useI18n()
   const compact = density === 'compact'
@@ -82,6 +87,8 @@ export function CoverageCardGrid({
           onSetOwned={onSetOwned}
           ownedPending={ownedPendingTicker === row.ticker}
           onDelete={onDelete}
+          selected={selectedTickers?.has(row.ticker) ?? false}
+          onToggleSelect={onToggleSelect}
         />
       ))}
     </div>

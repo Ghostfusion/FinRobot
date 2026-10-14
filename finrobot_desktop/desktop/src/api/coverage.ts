@@ -191,6 +191,11 @@ export interface CoverageRerunRequest {
   owned: boolean | null
   // null / empty = no rating filter; all four = no filter (equivalent).
   ratings: CoverageRating[] | null
+  // The per-card "re-run selected" axis: an explicit ticker set, intersected with
+  // the group's rows server-side. Omitted/null = no set filter; `[]` selects
+  // NOTHING (never "everything") — the backend keys off `is not None`, so a
+  // cleared selection can't degrade into a whole-group re-run.
+  tickers?: string[] | null
   pipeline_type: string
   language?: 'en' | 'zh' | null
 }

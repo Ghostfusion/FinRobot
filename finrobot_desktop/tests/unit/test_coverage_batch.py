@@ -81,6 +81,41 @@ def test_select_targets_combines_owned_and_rating() -> None:
     assert select_targets(rows, owned=True, ratings=["BUY"]) == ["AAPL"]
 
 
+def test_select_targets_ticker_set_keeps_those_rows_in_row_order() -> None:
+    """The "re-run selected" axis: an explicit set intersects the rows. Order
+    follows the WALL (row order), not the request body, so the queue drains in the
+    order the user is looking at."""
+    rows = [_row("AAPL"), _row("MSFT", verdict="BUY"), _row("TSLA", owned=True)]
+    assert select_targets(rows, owned=None, ratings=None, tickers=["TSLA", "AAPL"]) == [
+        "AAPL",
+        "TSLA",
+    ]
+
+
+def test_select_targets_empty_ticker_set_selects_nothing() -> None:
+    """The load-bearing distinction: an empty selection means "run nothing", never
+    "no filter" — a truthiness check here would re-run the entire group."""
+    rows = [_row("AAPL"), _row("MSFT")]
+    assert select_targets(rows, owned=None, ratings=None, tickers=[]) == []
+    # ...while None really is "no set filter".
+    assert select_targets(rows, owned=None, ratings=None, tickers=None) == ["AAPL", "MSFT"]
+
+
+def test_select_targets_ticker_set_is_case_insensitive_and_drops_non_members() -> None:
+    rows = [_row("AAPL"), _row("MSFT")]
+    # A lowercase ask selects the name it meant; a non-member selects nothing (the
+    # route only ever re-runs cards the group actually shows).
+    assert select_targets(rows, owned=None, ratings=None, tickers=["aapl ", "ZZZZ"]) == ["AAPL"]
+
+
+def test_select_targets_ticker_set_combines_with_the_filters() -> None:
+    rows = [
+        _row("AAPL", owned=True, verdict="BUY"),
+        _row("MSFT", owned=False, verdict="BUY"),
+    ]
+    assert select_targets(rows, owned=True, ratings=["BUY"], tickers=["AAPL", "MSFT"]) == ["AAPL"]
+
+
 # ── CoverageBatch: the queue ─────────────────────────────────────────────────
 
 

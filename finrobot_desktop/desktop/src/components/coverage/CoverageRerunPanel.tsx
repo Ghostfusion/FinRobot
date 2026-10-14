@@ -1,5 +1,7 @@
-// CoverageRerunPanel — "re-run all reports" with filters (owned + rating) and a
-// live batch-progress readout. Opened from the CoveragePage header rail.
+// CoverageRerunPanel — the coverage desk's re-run surface: "re-run all reports"
+// with filters (owned + rating), or the readout for a batch the caller already
+// started from the per-card "Re-run" ticks ("re-run selected"), plus a live
+// batch-progress readout either way. Opened from the CoveragePage header rail.
 //
 // The filter predicate here is the ONE definition the submit count and the POST
 // body both use, and it mirrors the backend's `select_targets` exactly:
@@ -74,6 +76,15 @@ const STATE_LABEL_KEY: Record<CoverageBatchItemState, string> = {
   failed: 'coverage.rerun.state.failed',
 }
 
+// A batch the CALLER already started (the rail's "re-run selected" fires on click
+// rather than from this panel's submit). The ticker set rides along because the
+// progress payload only lands after the first poll — the panel must be able to say
+// what it is watching before then.
+export interface StartedBatch {
+  batchId: string
+  tickers: string[]
+}
+
 interface Props {
   groupId: string
   // The rows the cards currently show — the count is computed from these, so the
@@ -83,6 +94,10 @@ interface Props {
   // Fired once when the polled batch reaches `completed` — the page refetches
   // the overview so the cards pick up the new run status.
   onCompleted?: () => void
+  // Already-started batch to watch (see StartedBatch). Present → the filter UI is
+  // replaced by the explicit ticker set: `owned`/`ratings` describe a predicate
+  // over the wall, which cannot express "these three cards".
+  startedBatch?: StartedBatch | null
 }
 
 export function CoverageRerunPanel({
@@ -90,6 +105,7 @@ export function CoverageRerunPanel({
   rows,
   onClose,
   onCompleted,
+  startedBatch = null,
 }: Props): React.ReactElement {
   const { t } = useI18n()
   const [ownedOnly, setOwnedOnly] = useState(false)
@@ -100,8 +116,11 @@ export function CoverageRerunPanel({
   const [batchId, setBatchId] = useState<string | null>(null)
 
   const rerun = useRerunAll(groupId)
-  const batchQuery = useCoverageBatch(batchId)
+  // The batch to poll: the one the caller started, else the one submit started.
+  const watchedBatchId = startedBatch?.batchId ?? batchId
+  const batchQuery = useCoverageBatch(watchedBatchId)
   const batch = batchQuery.data
+  const title = startedBatch ? t('coverage.rerunSelected.title') : t('coverage.rerun.title')
 
   const filters = useMemo(() => rerunFilters(ownedOnly, selected), [ownedOnly, selected])
   const matchCount = useMemo(() => countRerunTargets(rows, filters), [rows, filters])
@@ -152,7 +171,7 @@ export function CoverageRerunPanel({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={t('coverage.rerun.title')}
+        aria-label={title}
         data-testid="coverage-rerun-panel"
         // Clicks inside the panel must not reach the backdrop's close handler.
         onClick={(e) => e.stopPropagation()}
@@ -185,7 +204,7 @@ export function CoverageRerunPanel({
               color: 'var(--text-primary)',
             }}
           >
-            {t('coverage.rerun.title')}
+            {title}
           </span>
           <button
             type="button"
@@ -207,45 +226,17 @@ export function CoverageRerunPanel({
           </button>
         </header>
 
-        {/* Filters */}
-        <label
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            marginBottom: 12,
-            fontSize: 12,
-            color: 'var(--text-secondary)',
-            cursor: 'pointer',
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={ownedOnly}
-            onChange={(e) => setOwnedOnly(e.target.checked)}
-            style={{ margin: 0, width: 13, height: 13, accentColor: 'var(--accent-cyan)' }}
-          />
-          {t('coverage.rerun.ownedOnly')}
-        </label>
-
-        <div style={{ marginBottom: 8, fontSize: 11, color: 'var(--text-muted)' }}>
-          {t('coverage.rerun.ratings')}
-        </div>
-        <div
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '8px 16px',
-            marginBottom: 18,
-          }}
-        >
-          {RERUN_RATINGS.map((rating) => (
+        {/* Filters + submit — the "re-run all" mode. A caller-started batch is an
+            explicit SET, which no predicate can express, so this whole block gives
+            way to the ticker list below it. */}
+        {!startedBatch && (
+          <>
             <label
-              key={rating}
               style={{
-                display: 'inline-flex',
+                display: 'flex',
                 alignItems: 'center',
-                gap: 6,
+                gap: 8,
+                marginBottom: 12,
                 fontSize: 12,
                 color: 'var(--text-secondary)',
                 cursor: 'pointer',
@@ -253,45 +244,100 @@ export function CoverageRerunPanel({
             >
               <input
                 type="checkbox"
-                checked={selected.has(rating)}
-                onChange={() => toggleRating(rating)}
+                checked={ownedOnly}
+                onChange={(e) => setOwnedOnly(e.target.checked)}
                 style={{ margin: 0, width: 13, height: 13, accentColor: 'var(--accent-cyan)' }}
               />
-              {t(RATING_LABEL_KEY[rating])}
+              {t('coverage.rerun.ownedOnly')}
             </label>
-          ))}
-        </div>
 
-        <button
-          type="button"
-          data-testid="coverage-rerun-submit"
-          onClick={handleSubmit}
-          disabled={rerun.isPending || matchCount === 0}
-          className="btn-shimmer"
-          style={{
-            width: '100%',
-            padding: '8px 16px',
-            fontSize: 12,
-            opacity: rerun.isPending || matchCount === 0 ? 0.55 : 1,
-            cursor: rerun.isPending || matchCount === 0 ? 'default' : 'pointer',
-          }}
-        >
-          {rerun.isPending
-            ? t('coverage.rerun.submitting')
-            : t('coverage.rerun.submit', { n: matchCount })}
-        </button>
+            <div style={{ marginBottom: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+              {t('coverage.rerun.ratings')}
+            </div>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: '8px 16px',
+                marginBottom: 18,
+              }}
+            >
+              {RERUN_RATINGS.map((rating) => (
+                <label
+                  key={rating}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 12,
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected.has(rating)}
+                    onChange={() => toggleRating(rating)}
+                    style={{ margin: 0, width: 13, height: 13, accentColor: 'var(--accent-cyan)' }}
+                  />
+                  {t(RATING_LABEL_KEY[rating])}
+                </label>
+              ))}
+            </div>
 
-        {rerun.isError && (
-          <div
-            data-testid="coverage-rerun-start-error"
-            style={{ marginTop: 10, color: 'var(--danger)', fontSize: 11 }}
-          >
-            {t('coverage.rerun.startFailed')}
+            <button
+              type="button"
+              data-testid="coverage-rerun-submit"
+              onClick={handleSubmit}
+              disabled={rerun.isPending || matchCount === 0}
+              className="btn-shimmer"
+              style={{
+                width: '100%',
+                padding: '8px 16px',
+                fontSize: 12,
+                opacity: rerun.isPending || matchCount === 0 ? 0.55 : 1,
+                cursor: rerun.isPending || matchCount === 0 ? 'default' : 'pointer',
+              }}
+            >
+              {rerun.isPending
+                ? t('coverage.rerun.submitting')
+                : t('coverage.rerun.submit', { n: matchCount })}
+            </button>
+
+            {rerun.isError && (
+              <div
+                data-testid="coverage-rerun-start-error"
+                style={{ marginTop: 10, color: 'var(--danger)', fontSize: 11 }}
+              >
+                {t('coverage.rerun.startFailed')}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* The explicit set a caller-started batch is running: what the readout
+            below is counting, before the first poll lands. */}
+        {startedBatch && (
+          <div data-testid="coverage-rerun-selected-set" style={{ marginBottom: 4 }}>
+            <div style={{ fontSize: 11.5, color: 'var(--text-secondary)' }}>
+              {t('coverage.rerunSelected.set', { n: startedBatch.tickers.length })}
+            </div>
+            <div
+              style={{
+                marginTop: 4,
+                fontFamily: 'var(--font-mono)',
+                fontSize: 11.5,
+                color: 'var(--text-muted)',
+                wordBreak: 'break-word',
+              }}
+            >
+              {startedBatch.tickers.join(' · ')}
+            </div>
           </div>
         )}
 
         {batch && <BatchProgress progress={batch} />}
-        {batchQuery.isError && batchId && (
+        {batchQuery.isError && watchedBatchId && (
           <div
             data-testid="coverage-rerun-progress-error"
             style={{ marginTop: 12, color: 'var(--danger)', fontSize: 11 }}

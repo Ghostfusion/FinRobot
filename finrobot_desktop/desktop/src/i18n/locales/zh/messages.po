@@ -3353,6 +3353,42 @@ msgid "coverage.rerun.state.failed"
 msgstr "失败"
 
 #. js-lingui-explicit-id
+msgid "coverage.rerunSelected.button"
+msgstr "重跑选中（{n}）"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerunSelected.aria"
+msgstr "重跑勾选的研报"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerunSelected.title"
+msgstr "重跑选中研报"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerunSelected.starting"
+msgstr "正在启动…"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerunSelected.set"
+msgstr "已提交 {n} 个标的"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerunSelected.failed"
+msgstr "无法启动重跑批次。"
+
+#. js-lingui-explicit-id
+msgid "coverage.select.label"
+msgstr "重跑"
+
+#. js-lingui-explicit-id
+msgid "coverage.select.aria"
+msgstr "选择 {ticker} 加入重跑"
+
+#. js-lingui-explicit-id
+msgid "coverage.select.hint"
+msgstr "勾选需要重跑的研报，再点「重跑选中」"
+
+#. js-lingui-explicit-id
 msgid "runs.error.alreadyActive"
 msgstr "{ticker} 已有任务正在运行。"
 

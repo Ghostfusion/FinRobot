@@ -68,6 +68,7 @@ def select_targets(
     *,
     owned: bool | None,
     ratings: Sequence[str] | None,
+    tickers: Sequence[str] | None = None,
 ) -> list[str]:
     """The ONE filter predicate the re-run-all route and its UI agree on.
 
@@ -78,10 +79,23 @@ def select_targets(
     ``UNRATED`` token selects exactly the rows that carry no verdict yet, and a
     ``BUY``/``HOLD``/``SELL`` token matches the uppercase verdicts the artifact
     store records. Input order is preserved so the queue drains predictably.
+
+    ``tickers`` is the per-card "re-run selected" axis (the only one whose
+    selection is an explicit set rather than a filter). ``None`` applies no set
+    filter; a list — INCLUDING an empty one — keeps only the rows whose ticker is
+    in it, because "nothing is selected" must mean "run nothing", never "run
+    everything" (the two are indistinguishable to a truthiness check, so the test
+    is ``is not None``). Comparison uppercases both sides, so a lowercase caller
+    selects the name it meant instead of silently matching nothing. A ticker that
+    isn't a row of this group selects nothing — the route only ever re-runs the
+    cards it shows.
     """
+    ticker_set = {t.strip().upper() for t in tickers} if tickers is not None else None
     rating_set = {r.strip().upper() for r in ratings} if ratings else None
     selected: list[str] = []
     for row in rows:
+        if ticker_set is not None and row.ticker.upper() not in ticker_set:
+            continue
         if owned is not None and row.owned != owned:
             continue
         if rating_set is not None:

@@ -130,10 +130,16 @@ class RerunRequest(BaseModel):
     ``None`` means "no filter on this axis". ``ratings`` tokens are the verdicts
     the artifact store records (uppercase) plus ``UNRATED`` for names with no
     verdict yet.
+
+    ``tickers`` is the card-level "re-run selected" axis: an explicit set from the
+    per-card checkboxes, intersected with the group's rows. ``None`` = no set
+    filter; an empty list selects NOTHING (never "no filter") — see
+    :func:`finrobot.coverage.batch.select_targets`.
     """
 
     owned: bool | None = None
     ratings: list[Literal["BUY", "HOLD", "SELL", "UNRATED"]] | None = None
+    tickers: list[str] | None = None
     pipeline_type: str = "research"
     language: Literal["en", "zh"] | None = None
 
@@ -453,11 +459,13 @@ async def rerun_group(group_id: str, request: Request, body: RerunRequest) -> Co
     Selection runs over the SAME rows the cards show (the instant cache-only
     overview, which already carries the global owned flags) through the shared
     :func:`select_targets` predicate, so "what you filtered" and "what re-runs"
-    never disagree. The batch runs in the background at the concurrency the LIVE
-    provider chain allows (see :func:`resolve_run_concurrency`); the rest wait in
-    its queue. Returns the batch's initial progress (poll
-    ``GET /batches/{batch_id}`` for live counts).
-    """
+    never disagree. Two axes reach that predicate: the filter triple
+    (``owned``/``ratings``/``tickers``) from the body — where ``tickers`` is the
+    per-card checkbox selection and ``None`` means "no filter" — and the group's
+    membership, which bounds both. The batch runs in the background at the
+    concurrency the LIVE provider chain allows (see
+    :func:`resolve_run_concurrency`); the rest wait in its queue. Returns the
+    batch's initial progress (poll ``GET /batches/{batch_id}`` for live counts)."""
     from finrobot.routes.runs import spawn_run
 
     store = _store(request)
@@ -488,7 +496,9 @@ async def rerun_group(group_id: str, request: Request, body: RerunRequest) -> Co
         cache_only=True,
         owned_tickers=await store.owned_tickers(),
     )
-    selected = select_targets(overview.rows, owned=body.owned, ratings=body.ratings)
+    selected = select_targets(
+        overview.rows, owned=body.owned, ratings=body.ratings, tickers=body.tickers
+    )
 
     # Inbound rate-limit guard (BUG-043), same shape as the per-ticker batch
     # route: charge the WHOLE selection atomically (one token per run) so a

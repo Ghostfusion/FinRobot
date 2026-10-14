@@ -3353,6 +3353,42 @@ msgid "coverage.rerun.state.failed"
 msgstr "failed"
 
 #. js-lingui-explicit-id
+msgid "coverage.rerunSelected.button"
+msgstr "Re-run selected ({n})"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerunSelected.aria"
+msgstr "Re-run the ticked reports"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerunSelected.title"
+msgstr "Re-running selected"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerunSelected.starting"
+msgstr "Starting…"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerunSelected.set"
+msgstr "Submitted {n} tickers"
+
+#. js-lingui-explicit-id
+msgid "coverage.rerunSelected.failed"
+msgstr "Could not start the re-run."
+
+#. js-lingui-explicit-id
+msgid "coverage.select.label"
+msgstr "Re-run"
+
+#. js-lingui-explicit-id
+msgid "coverage.select.aria"
+msgstr "Select {ticker} to re-run"
+
+#. js-lingui-explicit-id
+msgid "coverage.select.hint"
+msgstr "Tick the reports to re-run, then use “Re-run selected”"
+
+#. js-lingui-explicit-id
 msgid "runs.error.alreadyActive"
 msgstr "A run for {ticker} is already in progress."
 

@@ -312,6 +312,37 @@ async def test_rerun_owned_filter_selects_owned_rows(client: AsyncClient, fake_s
     await _drain(client)
 
 
+async def test_rerun_ticker_set_runs_only_the_selected_cards(
+    client: AsyncClient, fake_spawn
+) -> None:
+    gid = await _seed_studied_group(client, "AAPL", "MSFT", "TSLA")
+    r = await client.post(f"/api/coverage/groups/{gid}/rerun", json={"tickers": ["AAPL", "TSLA"]})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 2
+    assert {item["ticker"] for item in body["items"]} == {"AAPL", "TSLA"}
+    await _drain(client)
+
+
+async def test_rerun_empty_ticker_set_is_total_zero_not_the_whole_group(
+    client: AsyncClient, fake_spawn
+) -> None:
+    """A cleared selection must never degrade into "re-run everything"."""
+    gid = await _seed_studied_group(client, "AAPL", "MSFT")
+    r = await client.post(f"/api/coverage/groups/{gid}/rerun", json={"tickers": []})
+    assert r.status_code == 200
+    assert r.json()["total"] == 0
+    await _drain(client)
+
+
+async def test_rerun_ticker_set_drops_non_members(client: AsyncClient, fake_spawn) -> None:
+    gid = await _seed_studied_group(client, "AAPL")
+    r = await client.post(f"/api/coverage/groups/{gid}/rerun", json={"tickers": ["AAPL", "ZZZZ"]})
+    assert r.status_code == 200
+    assert [item["ticker"] for item in r.json()["items"]] == ["AAPL"]
+    await _drain(client)
+
+
 async def test_get_unknown_batch_404(client: AsyncClient) -> None:
     assert (await client.get("/api/coverage/batches/cb_nope")).status_code == 404
 
