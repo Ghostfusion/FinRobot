@@ -414,7 +414,8 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
 - `NumericClaim` (`engine/models/numeric_claim.py`) already carries `value, currency, period,
   source, as_of, findings` — it is missing exactly `basis`, `is_proxy`, `derivation`. Adding
   those three turns it into the ledger entry the clauses read, instead of clauses reading raw
-  dict paths.
+  dict paths. **Measured 2026-10-14:** it carries them and *nothing in `finrobot/` builds or
+  reads it*, so the fields have to arrive with the ledger itself — see §9.5's amendment.
 - `FieldCaliber` (`artifact/field_registry.py`) is the static half and stays static;
   `data_authority.decisions[]` is the runtime half and stays in the data layer.
 - A consumer needing a *measurement* cannot accept a `Proxy` without an explicit
@@ -694,6 +695,19 @@ Phase 1 (§7); the archive treatment in §9.3 is the only part that is not a cod
 - **Explicitly rejected:** adopting the type everywhere now. The numeric core would have to
   change in the same release as the gate, which makes the gate's own effect on the corpus
   unmeasurable — the property §7 item 1 depends on.
+- **Measured against HEAD (2026-10-14) — the first step was mis-stated by one level, and the
+  correction matters.** `Finding` is the live vocabulary: the ten-odd audit verifiers,
+  `artifact/contract.py` and every staged clause import it. `NumericClaim` is imported by
+  **nothing under `finrobot/` except its own module** — the only importer in the tree is
+  `tests/unit/test_numeric_claim.py`. So this is not a ledger that lacks three fields; it is a
+  model with no producer and no consumer. Adding `basis`/`is_proxy`/`derivation` today would be
+  unobservable: nothing constructs a claim, so nothing could populate or read them, and the exit
+  criterion ("0 claims with an empty `basis`") would be measured over an empty set — a green
+  number that means nothing. The real first step is therefore **build the ledger**: join the
+  verifiers' findings with `field_registry` caliber at the artifact layer, route the clauses
+  through the result, and add the three fields as part of that join. The decision's sequencing
+  (expand → migrate → contract) and its exit criterion are unchanged; only the first mover is
+  named correctly here.
 
 ### 9.6 Reason-code registry — **one enumerated vocabulary keyed by `(reason_code, domain)`**
 
