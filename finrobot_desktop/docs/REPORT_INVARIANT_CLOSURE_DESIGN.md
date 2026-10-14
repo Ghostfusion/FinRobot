@@ -634,6 +634,21 @@ Phase 1 (§7); the archive treatment in §9.3 is the only part that is not a cod
   reports that withheld nothing), which is why §4.4's unification must precede its promotion.
   Note the `archived` column shows `no` everywhere: nothing in the store has aged past the 24h
   no-view window yet, so the column is exercised but not yet populated.
+- **The page badge is gated on the promotion, not on the plumbing.** Reading the viewer settles
+  where the badge's input would come from: `ChapterAuditBanner` renders
+  `outputs.structured.numeric_audit` plus the `[CONTRACT/*]` findings it parses out of
+  `outputs.warnings` — i.e. the persist gate ALREADY surfaces contract findings to the page. The
+  back catalogue has none of those warnings because the clauses were not armed when those
+  artifacts were written, which is exactly why §9.3 asks for a *read-time* derivation: it has to
+  re-run the clause registry over the stored payload. Two consequences follow, and both are
+  reasons not to build the page half yet:
+  - the derivation belongs in **Python** (the clauses are Python; a TypeScript re-implementation
+    would be a second definition of every rule, doctrine 1) — a small read-time module reusing
+    `CONTRACT_CLAUSES`/`PROPOSED_CLAUSES` behind the artifact-detail route;
+  - its content is *"would-flag under the live clause set"*, and under the live set the reading
+    above is **0 of 105**. The badge is therefore empty until clauses are promoted, and promoting
+    `C11` first would make it scream `WITHHOLD` on 60% of ordinary reports (§4.4). The page half
+    lands with the promotion, not before it.
 - **Why: the domain's own answer to a wrong filed report is an amendment, not an edit.**
   17 CFR 240.12b-15: an amendment is *"filed under cover of the form amended, marked with the
   letter 'A' … '10-K/A'"*, *"must set forth the complete text of each item as amended"*, and
