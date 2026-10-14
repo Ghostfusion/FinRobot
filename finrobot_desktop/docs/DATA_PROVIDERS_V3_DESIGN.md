@@ -211,6 +211,51 @@ are kept as the owner's table (the runtime skips them, so the effect is drift in
 this documentation rather than a misroute), but nothing should treat those rows as a
 working fallback without first adding the capability to the provider.
 
+**`fundamental_data` line-item coverage and the paywall boundary (probed
+2026-10-14).** Every registered provider was called live for NFLX (plus AAPL for
+the Tiingo gate) to answer "which income-statement line items can we actually
+get, and where is the wall a plan rather than a bug". The six lines in question
+are operating income, income tax expense, D&A, R&D, SG&A and interest expense —
+the set the report renders and the set `extractor` needs for both EBITDA
+calibers (`primitives/ebitda`).
+
+| Provider | Line items | Live verdict |
+|---|---|---|
+| `fmp` | full set (it already emits operating income, tax, D&A and declares R&D/SG&A/interest) | **HTTP 429** on financials, quote, price, peers and estimates — the free quota is exhausted. A paid tier is the only fix; until then FMP is unreachable, not merely deprioritised |
+| `yfinance` | full set, off `ttm_income_stmt` + `ttm_cashflow` | **free, no key** — see the note below |
+| `tiingo` | full set (`opinc`/`taxExp`/`intexp`/`depamor`/`rnd`/`sga` in its canonical map) | **HTTP 400 outside the DOW 30**: *"Free and Power plans are limited to the DOW 30 … to get the Fundamental Data API added as an add-on service"*. AAPL serves HTTP 200 and returns all six, so the arm works and the wall is a paid add-on. This is a plan wall in the real sense — the code path is complete |
+| `alpha_vantage` | none (its `FUNDAMENTAL_DATA` maps to `OVERVIEW` ratios only) | **premium endpoint**: *"This is a premium endpoint … subscribe to any of the premium plans"* — paid |
+| `eodhd` | none (`price`/`quote`/`news`/`sentiment`/`dividends`/`fund_profile` only) | its Fundamentals feed is 403 on this plan (same gate as `fund_data` below) |
+| `moomoo` | none — `fundamental_data` is deliberately absent | local OpenD gateway; `moomoo-api` not installed here |
+| `finnhub` | none — *"It does NOT serve FINANCIALS"* (removed 2026-06-08) | — |
+| `sec_edgar` (`XBRL_FACTS`) | authoritative us-gaap tags, keyless | **free and working**: `OperatingIncomeLoss`, `IncomeTaxExpenseBenefit`, `DepreciationDepletionAndAmortization`, `ResearchAndDevelopmentExpense` and `InterestExpenseNonoperating` all present in NFLX's companyfacts. Wired today: TTM revenue/net income + latest operating income. Tax/D&A/R&D/interest are not read yet; note NFLX reports `SellingAndMarketingExpense` + `GeneralAndAdministrativeExpense` rather than a combined SG&A tag, so any XBRL SG&A read needs a two-tag sum |
+
+So the honest answer for a yfinance-served snapshot is **not** "the data needs
+payment": the six lines are free from the provider already serving the report.
+The flat `info` snapshot simply never carried them (it maps `totalRevenue`,
+`ebitda`, `netIncomeToCommon`, the margins and the TTM cash-flow pair, and
+nothing else), while Yahoo's own `ttm_income_stmt` frame — the same frame family
+the yearly builder reads — has all six on the TTM basis that snapshot already
+claims. `_ttm_statement_lines` now reads them, and the annual frames are
+deliberately NOT a fallback (an annual leg inside a statement the canonical
+labels `ttm` is the period-mixing defect the report contract exists to prevent).
+The TTM frame also fixed two adjacent defects on that path: `capital_expenditure`
+(derived from `info.freeCashflow`, which is not always net of capex — NFLX's was
+larger than its own OCF, publishing -$13.4B for a real -$0.82B, sign-inverted and
+16x too large, which handed `multiples` an FCF of +$25.4B) and `beta` (free in
+`info`, never mapped, so the canonical's beta was null on every yfinance run).
+Finally, the payload now declares `period_basis: "ttm"`, which is what it always
+was — without the declaration `normalize_financials` stamped
+`period_basis_unknown` on every yfinance run while still publishing "ttm".
+
+**`peer_candidates` has no free source.** The category routes through
+`fundamental_data`, but only FMP declares `PEER_CANDIDATES`, and it 429s — so the
+peer step fails outright ("all data sources failed and no cache is available"),
+which is what withholds the point target in a report whose peer leg is
+load-bearing. No other provider offers a peer set; deriving one from
+sector/industry (both free from yfinance) is the only free path and is not
+implemented.
+
 Single-vendor (no fallback):
 
 | Category | Provider |

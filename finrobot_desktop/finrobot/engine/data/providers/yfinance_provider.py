@@ -19,6 +19,7 @@ from finrobot.engine.data.interface import (
     RateLimitedProviderError,
 )
 from finrobot.engine.data.types import DataType
+from finrobot.engine.primitives.ebitda import calculate_ebitda_operating
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,11 @@ _EBITDA_NAMES = ["EBITDA", "Normalized EBITDA"]
 # issuer, which is worse than an absent band.
 _TOTAL_DEBT_NAMES = ["Total Debt", "Total Debt And Capital Lease Obligation"]
 _CASH_NAMES = ["Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments"]
-_OPERATING_INCOME_NAMES = ["Operating Income", "Total Operating Profit Loss"]
+_OPERATING_INCOME_NAMES = [
+    "Operating Income",
+    "Total Operating Profit Loss",
+    "Total Operating Income As Reported",
+]
 _NET_INCOME_NAMES = [
     "Net Income",
     "Net Income Common Stockholders",
@@ -141,6 +146,26 @@ _TOTAL_EQUITY_NAMES = ["Stockholders Equity", "Common Stock Equity", "Total Stoc
 _PREFERRED_STOCK_NAMES = ["Preferred Stock", "Preferred Stock Equity"]
 _MINORITY_INTEREST_NAMES = ["Minority Interest"]
 
+# Income-statement rows the flat ``info`` snapshot omits ENTIRELY. Live probe
+# 2026-10-14 (NFLX): ``info`` carries no operatingIncome / incomeTaxExpense /
+# depreciation / researchDevelopment / sellingGeneralAdministrative /
+# interestExpense key AT ALL, so the canonical published ``null (not provided)``
+# for six standard income-statement lines while Yahoo's own ``ttm_income_stmt``
+# frame — the same frame family ``_build_yearly_financials`` already reads per
+# fiscal year — carried every one of them on the TTM basis the flat snapshot
+# already claims. Rows are read from the TTM frames ONLY: the annual
+# ``income_stmt`` never substitutes, because an annual leg inside a statement the
+# canonical labels ``ttm`` is exactly the period-mixing defect the report
+# contract exists to prevent. A row the issuer does not report stays None.
+#
+# These are not completeness cosmetics: ``compute/coordinators/extractor``
+# recomputes BOTH EBITDA calibers from absolute line items and falls back to the
+# provider's opaque ``ebitda`` scalar only "when components are absent (e.g.
+# yfinance-sourced snapshots)" — which is what every yfinance run used to force.
+_TAX_NAMES = ["Tax Provision", "Income Tax Expense", "Provision For Income Taxes"]
+_RD_NAMES = ["Research And Development", "Research And Development Expense"]
+_INTEREST_EXPENSE_NAMES = ["Interest Expense", "Interest Expense Non Operating"]
+
 
 def _make_ticker(symbol: str) -> yf.Ticker:
     """Create a Ticker. Let yfinance use its internal curl_cffi session."""
@@ -212,6 +237,37 @@ def _epoch_iso_date(value: Any) -> str | None:
         return datetime.fromtimestamp(value, tz=timezone.utc).date().isoformat()
     except (OverflowError, OSError, ValueError):
         return None
+
+
+def _ttm_capex(info: dict[str, Any], from_frame: float | None) -> float | None:
+    """TTM CapEx as a POSITIVE magnitude — the statement frame first, else the
+    ``OCF − freeCashflow`` derivation, and only while that derivation is
+    self-consistent (``0 <= OCF − FCF``).
+
+    Sign: positive magnitude is this module's one convention (the yearly builder
+    emits ``abs(capex_raw)``) and it is what the consumers assume —
+    ``compute/operators/multiples`` documents "``capital_expenditure`` is a
+    positive magnitude" and computes ``fcf = operating_cash_flow −
+    capital_expenditure``; ``dcf_seed``'s TTM ratio requires ``0 < capex/revenue``.
+
+    Why the frame wins (live probe 2026-10-14, NFLX): ``info.freeCashflow`` was
+    25,387,552,768 against an ``operatingCashflow`` of 11,970,833,408 — Yahoo's own
+    flat FCF is incoherent (larger than the OCF it is supposedly net of), so
+    ``OCF − FCF`` published CapEx of **-13,416,719,360**. That number then (a)
+    inverted the sign convention, so ``multiples`` computed an FCF of +25.4B, and
+    (b) made ``dcf_seed`` reject the TTM ratio and fall back to the historical
+    median. ``ttm_cashflow`` carries ``Capital Expenditure`` -818,828,000 →
+    +818.8M, and OCF − that = 11.15B, matching the frame's own ``Free Cash Flow``
+    row (11,152,005,000) to 0.00%.
+    """
+    if from_frame is not None:
+        return from_frame
+    ocf = info.get("operatingCashflow")
+    fcf = info.get("freeCashflow")
+    if not isinstance(ocf, int | float) or not isinstance(fcf, int | float):
+        return None
+    derived = float(ocf) - float(fcf)
+    return derived if derived >= 0 else None
 
 
 def _build_yearly_financials(
@@ -582,9 +638,7 @@ class YFinanceProvider(DataProvider):
             if years_kwarg and years_kwarg > 1:
                 result = await self._fetch_historical_financials(ticker, info, t, years_kwarg)
             else:
-                result = self._fetch_financials(
-                    ticker, info, await self._ttm_snapshot_meta(ticker, t, info)
-                )
+                result = await self._flat_financials(ticker, info, t)
         elif data_type == DataType.PRICE:
             await asyncio.sleep(_CALL_DELAY)
             result = await self._fetch_price(ticker, t, info)
@@ -845,13 +899,106 @@ class YFinanceProvider(DataProvider):
             "ttm_quarter_ends": [d for d in quarter_ends if d is not None],
         }
 
+    async def _ttm_statement_lines(self, ticker: str, t: yf.Ticker) -> dict[str, Any]:
+        """The income/cash-flow lines the flat ``info`` snapshot cannot supply.
+
+        Six income-statement lines off ``ttm_income_stmt`` (operating income, tax,
+        D&A, R&D, SG&A, interest expense) plus TTM CapEx off ``ttm_cashflow``. TTM
+        frames ONLY — see ``_TAX_NAMES`` for why the annual frames may not
+        substitute. Each statement read is independently best-effort, so a
+        rate-limited or missing frame leaves its fields None (the report then shows
+        an honest gap) instead of failing the whole FINANCIALS fetch.
+        """
+        frames: dict[str, Any] = {
+            "operating_income": None,
+            "income_tax_expense": None,
+            "depreciation_amortization": None,
+            "rd_expense": None,
+            "sga_expense": None,
+            "interest_expense": None,
+            "capital_expenditure": None,
+        }
+        income = await self._read_statement(ticker, t, "ttm_income_stmt")
+        if income is not None and not income.empty:
+            col = income.columns[0]  # newest-first, like every other read here
+            frames.update(
+                {
+                    "operating_income": _cell(_get_row(income, _OPERATING_INCOME_NAMES), col),
+                    "income_tax_expense": _cell(_get_row(income, _TAX_NAMES), col),
+                    "depreciation_amortization": _cell(_get_row(income, _DA_NAMES), col),
+                    "rd_expense": _cell(_get_row(income, _RD_NAMES), col),
+                    "sga_expense": _cell(_get_row(income, _SGA_NAMES), col),
+                    "interest_expense": _cell(_get_row(income, _INTEREST_EXPENSE_NAMES), col),
+                }
+            )
+        cashflow = await self._read_statement(ticker, t, "ttm_cashflow")
+        if cashflow is not None and not cashflow.empty:
+            capex = _cell(_get_row(cashflow, _CAPEX_NAMES), cashflow.columns[0])
+            frames["capital_expenditure"] = abs(capex) if capex is not None else None
+        return frames
+
+    async def _read_statement(self, ticker: str, t: yf.Ticker, attr: str) -> pd.DataFrame | None:
+        """One lazily-fetched statement frame, or None when Yahoo will not serve it.
+
+        yfinance statement properties are lazy HTTP reads, so they raise the same
+        transport errors ``fetch`` already maps (rate limit, YFException, and the
+        AttributeError/KeyError family a missing frame surfaces as). Completeness
+        fields must not fail the FINANCIALS fetch, so every arm degrades to None
+        with a log line.
+        """
+        try:
+            frame = await asyncio.to_thread(lambda: getattr(t, attr))
+        except (
+            YFRateLimitError,
+            YFException,
+            AttributeError,
+            KeyError,
+            TypeError,
+            ValueError,
+            RuntimeError,
+            OSError,
+        ) as e:
+            logger.warning(f"{attr} unavailable for {ticker}: {e}")
+            return None
+        if frame is None or not isinstance(frame, pd.DataFrame):
+            return None
+        return cast(pd.DataFrame, frame)
+
+    async def _flat_financials(self, ticker: str, info: dict[str, Any], t: yf.Ticker) -> DataResult:
+        """The flat FINANCIALS payload: ``info`` scalars + everything the statement
+        frames add (EV-bridge claims, the TTM window, the six income lines, CapEx).
+
+        One entry point so every path that lands on the flat snapshot — the direct
+        FINANCIALS branch and the two multi-year fallbacks — carries the same
+        fields; the alternative (each caller remembering to merge two dicts) is how
+        the six lines went missing in the first place.
+        """
+        meta = await self._ttm_snapshot_meta(ticker, t, info)
+        meta.update(await self._ttm_statement_lines(ticker, t))
+        return self._fetch_financials(ticker, info, meta)
+
     def _fetch_financials(
         self, ticker: str, info: dict[str, Any], meta: dict[str, Any]
     ) -> DataResult:
+        # EBITDA on the OPERATING caliber (EBIT + D&A) now that the statement read
+        # supplies both legs — the same rule and the same fallback FMP's own
+        # payloads use (fmp_provider.py:712). This field is the canonical's, and
+        # the canonical is what the report's income table and the data-collection
+        # prompt read; ``extractor`` independently recomputes its
+        # ``ebitda_operating`` for the multiples. Serving Yahoo's opaque
+        # ``info.ebitda`` scalar here let the two disagree the moment the legs
+        # existed: live NFLX 2026-10-14, canonical 14,726,931,456 against a
+        # projection of 32,023,120,000, so the published table read
+        # "EBIT 14.355B · D&A 17.669B · EBITDA 14.727B" — an internally
+        # inconsistent statement. Falls back to the scalar only when a leg is
+        # missing (faithful, never fabricated).
+        ebitda_operating = calculate_ebitda_operating(
+            meta["operating_income"], meta["depreciation_amortization"]
+        )
         # dict.get() never raises; no try/except needed here
         data = {
             "revenue": info.get("totalRevenue"),
-            "ebitda": info.get("ebitda"),
+            "ebitda": (ebitda_operating if ebitda_operating is not None else info.get("ebitda")),
             "net_income": info.get("netIncomeToCommon"),
             "gross_margin": info.get("grossMargins"),
             "operating_margin": info.get("operatingMargins"),
@@ -877,16 +1024,13 @@ class YFinanceProvider(DataProvider):
             "ttm_quarter_ends": meta["ttm_quarter_ends"],
             "company_name": info.get("shortName") or info.get("longName"),
             # TTM cash-flow actuals for a real FCF = OCF − CapEx (computed
-            # downstream, never LLM-estimated). yfinance `info` exposes TTM
-            # operatingCashflow + freeCashflow but no capex line, so derive
-            # capex = OCF − FCF (positive magnitude) when both are present.
+            # downstream, never LLM-estimated). CapEx prefers ``ttm_cashflow``'s
+            # own row; the old ``OCF − info.freeCashflow`` derivation survives only
+            # as the guarded fallback (see _ttm_capex — Yahoo's flat freeCashflow
+            # is not always net of capex, and it published a 16x-wrong, wrong-signed
+            # CapEx on NFLX).
             "operating_cash_flow": info.get("operatingCashflow"),
-            "capital_expenditure": (
-                info["operatingCashflow"] - info["freeCashflow"]
-                if isinstance(info.get("operatingCashflow"), int | float)
-                and isinstance(info.get("freeCashflow"), int | float)
-                else None
-            ),
+            "capital_expenditure": _ttm_capex(info, meta["capital_expenditure"]),
             # Industry/sector for valuation model routing (DDM vs DCF)
             "industry": info.get("industry"),
             "sector": info.get("sector"),
@@ -928,6 +1072,30 @@ class YFinanceProvider(DataProvider):
             # ADR where yfinance returns financialCurrency="USD" despite IS/BS
             # being reported in TWD).
             "country": info.get("country"),
+            # ── statement-frame completions (see _ttm_statement_lines) ──────
+            # Six standard income-statement lines ``info`` does not carry on any
+            # issuer. All TTM, all read off ``ttm_income_stmt``; None when Yahoo
+            # omits the row.
+            "operating_income": meta["operating_income"],
+            "income_tax_expense": meta["income_tax_expense"],
+            "depreciation_amortization": meta["depreciation_amortization"],
+            "rd_expense": meta["rd_expense"],
+            "sga_expense": meta["sga_expense"],
+            "interest_expense": meta["interest_expense"],
+            # 5y monthly beta for the WACC leg. Free in ``info`` on every issuer
+            # probed, but the flat snapshot never mapped it, so the canonical's
+            # ``beta`` published null on every yfinance run (live NFLX
+            # 2026-10-14: info.beta = 1.613) and the valuation had to fall back to
+            # whatever its no-beta default is.
+            "beta": info.get("beta"),
+            # This payload IS Yahoo's TTM snapshot — totalRevenue / ebitda /
+            # netIncomeToCommon / operatingCashflow are all trailing-twelve-month,
+            # and ``ttm_quarter_ends`` above names the window — but it never SAID
+            # so, so ``normalize_financials`` treated the basis as undeclared and
+            # stamped DEGRADED_PERIOD_BASIS_UNKNOWN on every yfinance run while
+            # still publishing "ttm". Declaring it removes the flag without
+            # changing the number.
+            "period_basis": "ttm",
             # yfinance .info carries no ADR structural flag, so is_adr stays None
             # on this path — the family-1 acceptor keeps its full review behavior
             # for yfinance snapshots (None ≠ False: "unknown", not "confirmed
@@ -960,14 +1128,10 @@ class YFinanceProvider(DataProvider):
             logger.warning(
                 f"Historical data extraction failed for {ticker}, falling back to single-year: {e}"
             )
-            return self._fetch_financials(
-                ticker, info, await self._ttm_snapshot_meta(ticker, t, info)
-            )
+            return await self._flat_financials(ticker, info, t)
 
         if income_stmt is None or income_stmt.empty:
-            return self._fetch_financials(
-                ticker, info, await self._ttm_snapshot_meta(ticker, t, info)
-            )
+            return await self._flat_financials(ticker, info, t)
 
         # Tolerant: the balance sheet only supplies the net-debt legs, so its absence
         # must not cost the income/cashflow years (it would send a multi-year fetch

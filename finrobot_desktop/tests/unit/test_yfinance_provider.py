@@ -31,8 +31,26 @@ def _make_mock_ticker(
     cashflow: pd.DataFrame | None = None,
     quarterly_balance_sheet: pd.DataFrame | None = None,
     balance_sheet: pd.DataFrame | None = None,
+    ttm_income_stmt: pd.DataFrame | None = None,
+    ttm_cashflow: pd.DataFrame | None = None,
+    ttm_raises: type[Exception] | None = None,
 ):
-    mock = MagicMock()
+    if ttm_raises is None:
+        mock = MagicMock()
+    else:
+        # A real property on a LOCAL MagicMock subclass: a class-level property on
+        # ``MagicMock`` itself would shadow the per-instance attribute every other
+        # test sets (and leak across the whole session).
+        class _RaisingTicker(MagicMock):
+            @property
+            def ttm_income_stmt(self):
+                raise ttm_raises()
+
+            @property
+            def ttm_cashflow(self):
+                raise ttm_raises()
+
+        mock = _RaisingTicker()
     mock.info = info
     mock.news = news or []
     if history is None:
@@ -60,6 +78,13 @@ def _make_mock_ticker(
         pd.DataFrame() if quarterly_balance_sheet is None else quarterly_balance_sheet
     )
     mock.balance_sheet = pd.DataFrame() if balance_sheet is None else balance_sheet
+    # TTM statement frames (the flat snapshot's six income lines + CapEx). Empty
+    # by default so every pre-existing test keeps the None it always saw; pass a
+    # frame to exercise the read, or ``ttm_raises`` to model a rate-limited read
+    # that must degrade to None without failing the fetch.
+    if ttm_raises is None:  # the raising subclass defines them as properties
+        mock.ttm_income_stmt = pd.DataFrame() if ttm_income_stmt is None else ttm_income_stmt
+        mock.ttm_cashflow = pd.DataFrame() if ttm_cashflow is None else ttm_cashflow
     return mock
 
 
@@ -1069,6 +1094,173 @@ class TestTtmWindowMetadata:
             result = await YFinanceProvider().fetch("EHC", "financials")
         assert result.data["fiscal_year"] is None
         assert result.data["ttm_quarter_ends"] == []
+
+
+class TestTtmStatementLines:
+    """The six income-statement lines + CapEx the flat ``info`` snapshot cannot
+    supply, read off the TTM frames.
+
+    Live evidence (NFLX, 2026-10-14): ``info`` carried no operatingIncome /
+    incomeTaxExpense / depreciation / researchDevelopment /
+    sellingGeneralAdministrative / interestExpense key AT ALL, so the report
+    published ``null (not provided)`` for all six lines while Yahoo's own
+    ``ttm_income_stmt`` held every one of them on the TTM basis the flat snapshot
+    already claims. The same frame's CapEx row also replaced a sign-inverted,
+    16x-too-large derivation (see ``_ttm_capex``).
+    """
+
+    @staticmethod
+    def _ttm_income() -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                pd.Timestamp("2026-06-30"): {
+                    "Operating Income": 14_354_517_000.0,
+                    "Tax Provision": 2_843_181_000.0,
+                    "Reconciled Depreciation": 17_668_603_000.0,
+                    "Research And Development": 3_711_255_000.0,
+                    "Selling General And Administration": 5_692_918_000.0,
+                    "Interest Expense": 847_451_000.0,
+                }
+            }
+        )
+
+    @staticmethod
+    def _ttm_cashflow() -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                pd.Timestamp("2026-06-30"): {
+                    "Capital Expenditure": -818_828_000.0,
+                    "Operating Cash Flow": 11_970_833_000.0,
+                }
+            }
+        )
+
+    @pytest.mark.asyncio
+    async def test_six_income_lines_capex_and_beta_land_in_the_snapshot(self):
+        mock_ticker = _make_mock_ticker(
+            dict(VALID_INFO, beta=1.613),
+            ttm_income_stmt=self._ttm_income(),
+            ttm_cashflow=self._ttm_cashflow(),
+        )
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker", return_value=mock_ticker
+        ):
+            result = await YFinanceProvider().fetch("NFLX", "financials")
+        assert result.data["operating_income"] == 14_354_517_000.0
+        assert result.data["income_tax_expense"] == 2_843_181_000.0
+        assert result.data["depreciation_amortization"] == 17_668_603_000.0
+        assert result.data["rd_expense"] == 3_711_255_000.0
+        assert result.data["sga_expense"] == 5_692_918_000.0
+        assert result.data["interest_expense"] == 847_451_000.0
+        # POSITIVE magnitude — the convention ``multiples`` and ``dcf_seed``
+        # assume (the annual builder emits abs(capex_raw) too).
+        assert result.data["capital_expenditure"] == 818_828_000.0
+        assert result.data["beta"] == 1.613
+        # EBITDA on the operating caliber the projection recomputes — NOT
+        # VALID_INFO's opaque 130e9 scalar, which used to leave the published
+        # income table reading "EBIT + D&A = 32.0B" beside "EBITDA 14.7B".
+        assert result.data["ebitda"] == 14_354_517_000.0 + 17_668_603_000.0
+        # Declared basis: without it normalize_financials stamps
+        # DEGRADED_PERIOD_BASIS_UNKNOWN on every yfinance run while publishing "ttm".
+        assert result.data["period_basis"] == "ttm"
+
+    @pytest.mark.asyncio
+    async def test_ebitda_keeps_the_info_scalar_when_a_leg_is_missing(self):
+        """Both legs or the provider's own field — never a fabricated sum."""
+        mock_ticker = _make_mock_ticker(VALID_INFO)
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker", return_value=mock_ticker
+        ):
+            result = await YFinanceProvider().fetch("AAPL", "financials")
+        assert result.data["ebitda"] == 130_000_000_000
+
+    @pytest.mark.asyncio
+    async def test_annual_frames_never_substitute_for_the_ttm_frames(self):
+        """An annual leg inside a statement the canonical labels ``ttm`` is the
+        period-mixing defect the report contract exists to prevent: the read is
+        TTM-frames-only, and an absent TTM frame stays an honest None."""
+        mock_ticker = _make_mock_ticker(
+            VALID_INFO,
+            income_stmt=pd.DataFrame(
+                {pd.Timestamp("2025-12-31"): {"Operating Income": 13_326_603_000.0}}
+            ),
+            cashflow=pd.DataFrame(
+                {pd.Timestamp("2025-12-31"): {"Capital Expenditure": -688_220_000.0}}
+            ),
+            ttm_income_stmt=pd.DataFrame(),
+            ttm_cashflow=pd.DataFrame(),
+        )
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker", return_value=mock_ticker
+        ):
+            result = await YFinanceProvider().fetch("NFLX", "financials")
+        assert result.data["operating_income"] is None
+        assert result.data["capital_expenditure"] is None
+
+    @pytest.mark.asyncio
+    async def test_six_lines_are_present_as_none_when_no_frame_is_available(self):
+        """Keys are always present (the canonical maps them unconditionally), so
+        the audit can tell "issuer does not report it" from "we never looked"."""
+        mock_ticker = _make_mock_ticker(VALID_INFO)
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker", return_value=mock_ticker
+        ):
+            result = await YFinanceProvider().fetch("AAPL", "financials")
+        for key in (
+            "operating_income",
+            "income_tax_expense",
+            "depreciation_amortization",
+            "rd_expense",
+            "sga_expense",
+            "interest_expense",
+            "capital_expenditure",
+        ):
+            assert result.data[key] is None
+
+    @pytest.mark.asyncio
+    async def test_rate_limited_ttm_frame_does_not_fail_the_fetch(self):
+        from yfinance.exceptions import YFRateLimitError
+
+        mock_ticker = _make_mock_ticker(VALID_INFO, ttm_raises=YFRateLimitError)
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker", return_value=mock_ticker
+        ):
+            result = await YFinanceProvider().fetch("AAPL", "financials")
+        assert result.data["revenue"] == 385_000_000_000
+        assert result.data["operating_income"] is None
+        assert result.data["capital_expenditure"] is None
+
+    @pytest.mark.asyncio
+    async def test_capex_falls_back_to_the_derivation_when_it_is_self_consistent(self):
+        """No frame: ``OCF − freeCashflow`` is the pre-existing derivation and is
+        still used while it is coherent (FCF ≤ OCF, i.e. capex ≥ 0)."""
+        info = dict(VALID_INFO, operatingCashflow=100_000_000_000.0, freeCashflow=60_000_000_000.0)
+        mock_ticker = _make_mock_ticker(info)
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker", return_value=mock_ticker
+        ):
+            result = await YFinanceProvider().fetch("AAPL", "financials")
+        assert result.data["capital_expenditure"] == 40_000_000_000.0
+
+    @pytest.mark.asyncio
+    async def test_incoherent_yahoo_free_cashflow_publishes_no_capex(self):
+        """Regression (live NFLX 2026-10-14): ``info.freeCashflow`` was
+        25,387,552,768 against an ``operatingCashflow`` of 11,970,833,408 — Yahoo's
+        own flat FCF larger than the OCF it is supposedly net of — so the old
+        ``OCF − FCF`` derivation published CapEx of -13,416,719,360: sign-inverted
+        (breaking the positive-magnitude convention) and 16x the statement's own
+        -818,828,000, which handed ``multiples`` an FCF of +25.4B."""
+        info = dict(
+            VALID_INFO,
+            operatingCashflow=11_970_833_408.0,
+            freeCashflow=25_387_552_768.0,
+        )
+        mock_ticker = _make_mock_ticker(info)
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker", return_value=mock_ticker
+        ):
+            result = await YFinanceProvider().fetch("NFLX", "financials")
+        assert result.data["capital_expenditure"] is None
 
 
 # ---------------------------------------------------------------------------
