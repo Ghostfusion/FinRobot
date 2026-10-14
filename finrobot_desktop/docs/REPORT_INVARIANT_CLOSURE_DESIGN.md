@@ -953,6 +953,19 @@ Phase 1 (§7); the archive treatment in §9.3 is the only part that is not a cod
   (`contract`, `data_authority`, `drift`, `audit`); every dynamic number lives in `metadata`,
   never in the code; the `(reason_code, domain)` pair is unique per logical cause and must not be
   reused for a different one.
+- **Measured 2026-10-14 — the lossiness this decision exists to end, counted.** Of the 43 stored
+  artifacts that ship withheld, **38 carry `withheld_reason = "contract_C7"` and not one of those
+  38 records a cause clause anywhere in the payload**; the other five do (`contract_C1` ×2,
+  `valuation_synthesis_dial` ×3). C7 is the no-resurrection *scrub* — an internal invariant whose
+  job is to null a headline slot that survived a withhold — so those 38 pages tell a reader that a
+  rule they cannot see has run, and never why the price is gone. One string slot, last writer
+  wins: the scrub holds the only place a cause could have lived. That is why the shape has to be
+  structured rather than a longer string — a cause and the scrubs that followed it are two
+  different facts, and the reader needs both.
+  Size, from the same HEAD: producers are `builders.py` ×3 (`numeric_audit_blocked_field` twice,
+  `valuation_synthesis_dial` once) plus `contract._withhold`; readers are `builders.py`'s own
+  reason read, the badge's `shipped_withheld_reason`, and the report parser's `[CONTRACT/Cn]`
+  evidence (the cover reads the evidence, not the raw string); ~8 tests pin the string today.
 - **What changes.** `withheld_reason: str` becomes
   `{reason_code, domain, metadata, help_url}`. `contract_C7` splits into at least two causes —
   the resurrection scrub and the out-of-band target — because one pair for two logically
