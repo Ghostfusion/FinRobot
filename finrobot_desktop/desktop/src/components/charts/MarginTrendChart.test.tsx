@@ -34,4 +34,12 @@ describe('MarginTrendChart', () => {
     const heading = screen.getByText('Margin Trends')
     expect(heading.tagName).toBe('SPAN')
   })
+
+  // The x-axis must label EVERY year, including the wide DCF forecast-basis labels
+  // ("TTM (Jul 2026)" / "2027E (TTM+1)") that made Recharts' default auto-interval
+  // hide their neighbours. That is PINNED by `interval={0}` on the XAxis but cannot
+  // be asserted here: jsdom gives the ResponsiveContainer no layout, so Recharts
+  // renders no ticks at all in this environment (verified: 0 tick nodes, with and
+  // without a ResizeObserver / getBoundingClientRect stub). Verified instead in the
+  // live DOM of the audited report — see the chart's own axe labels there.
 })

@@ -17,7 +17,7 @@
 // English labels here (no i18n mock needed — mirrors ChapterCover.test).
 
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 
 import { ChapterCompanyOverview } from './ChapterCompanyOverview'
 import type { SegmentOverviewShape, ThesisShape } from './types'
@@ -85,9 +85,46 @@ describe('ChapterCompanyOverview — sourced snapshot strip', () => {
     // Beta is a plain ratio (no %, no currency).
     expect(screen.getByText('Beta')).toBeInTheDocument()
     expect(screen.getByText('1.09')).toBeInTheDocument()
+    // The beta tile names its caliber (provider 5y, unadjusted) and cross-refs
+    // the DCF's Blume-adjusted β, so this tile's β can't read against WACC's.
+    expect(screen.getByText(/Provider 5y β, unadjusted/)).toBeInTheDocument()
+    expect(screen.getByText(/Blume-adjusted/)).toBeInTheDocument()
+    // Gross margin comes from the TTM income statement — the tile labels the
+    // period so it can never be read as the narrative's FY margin.
+    expect(screen.getByText('TTM')).toBeInTheDocument()
 
     // The narrative still renders below the strip.
     expect(screen.getByText('AAPL designs and sells consumer electronics.')).toBeInTheDocument()
+  })
+
+  it('telemetry row wraps/shrinks instead of clipping (auto-fit grid, no overflow:hidden)', () => {
+    // jsdom can't measure a rendered clip; this pins the structural
+    // preconditions of the fix (the pixel result stays a browser claim).
+    render(
+      <ChapterCompanyOverview
+        thesis={thesis({ company_overview: 'x' })}
+        rawData={{ ...RAW_DATA, income: { gross_margin: 0.4786, operating_margin: 0.315 } }}
+        historicalMetrics={HISTORICAL}
+        quoteCurrency="USD"
+        dataSource="fmp"
+        fetchedAt="2026-06-11T18:24:24.154643Z"
+        segmentOverview={null}
+        reportingCurrency="USD"
+      />,
+    )
+    // auto-fit + a minmax floor → tiles wrap rather than shrink below width.
+    const grid = screen.getByTestId('snapshot-telemetry')
+    expect(grid.getAttribute('style')).toContain('auto-fit')
+    expect(grid.getAttribute('style')).toContain('minmax')
+    // The tile no longer clips its content.
+    const tile = screen.getByTestId('snapshot-tile-gross_margin')
+    expect(tile.getAttribute('style')).not.toContain('overflow')
+    // The gauge+figure row wraps, and the figure may shrink (min-width:0).
+    const row = within(tile).getByTestId('snapshot-tile-gauge-row')
+    expect(row.style.flexWrap).toBe('wrap')
+    const fig = within(tile).getByTestId('snapshot-tile-figure')
+    expect(fig.style.minWidth).toBe('0px')
+    expect(fig.style.whiteSpace).toBe('nowrap')
   })
 
   it('renders operating margin as a % metric (profitability companion to gross margin) when present', () => {
@@ -108,6 +145,8 @@ describe('ChapterCompanyOverview — sourced snapshot strip', () => {
     expect(screen.getByText('Operating Margin')).toBeInTheDocument()
     expect(screen.getByText('31.5%')).toBeInTheDocument()
     expect(screen.getByText('Gross Margin')).toBeInTheDocument()
+    // Both margins are the TTM period → two TTM tags on the row.
+    expect(screen.getAllByText('TTM')).toHaveLength(2)
   })
 
   it('renders a negative operating margin (loss-maker, backend allows ge=-5) without crashing', () => {

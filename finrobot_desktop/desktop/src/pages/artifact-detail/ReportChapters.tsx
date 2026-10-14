@@ -98,11 +98,17 @@ function EquityReportChapters({
     // <main> (export/viewer.tsx), so the landmark is never lost.
     <div style={{ minWidth: 0, padding: '12px 0 60px' }}>
       <ChapterAuditBanner audit={d.numericAudit} contractFindings={contractFindings} />
-      {/* The metric-authority decision record (`raw_data.data_authority`): who
-          else supplied each number and why the canonical one won. Reference
-          material beside the audited numbers — renders nothing on older
-          artifacts that predate the block. */}
-      <DataAuthorityPanel authority={d.inputs.raw_data?.['data_authority']} />
+      {/* The metric-authority decision record (`raw_data.data_authority` is now
+          FINANCIALS-ONLY): who else supplied each number and why the canonical one
+          won. `raw_data.price_authority` carries the PRICE canonical's own record
+          (its `current_price` decision), and `raw_data.provenance` the coverage
+          counts — so a missing financials record reads as "unreconciled", never as
+          a reassuring "0 conflicts". */}
+      <DataAuthorityPanel
+        authority={d.inputs.raw_data?.['data_authority']}
+        priceAuthority={d.inputs.raw_data?.['price_authority']}
+        coverage={d.inputs.raw_data?.['provenance']}
+      />
       {langMismatch && (
         <div
           data-testid="report-lang-mismatch"
@@ -235,6 +241,9 @@ function EquityReportChapters({
         snapshotBeta={d.snapshotBeta}
         snapshot52wHigh={d.snapshot52wHigh}
         snapshot52wLow={d.snapshot52wLow}
+        // The published verdict — the tactical box reconciles its mechanical
+        // directional levels against it (HOLD beside an "Ideal Buy" is the defect).
+        recommendation={d.thesis?.recommendation ?? null}
       />
       {/* Credit & Default Risk closes the analytical spine: the DEBT leg of the
           same capital structure the valuation prices from the equity side, and
@@ -246,6 +255,7 @@ function EquityReportChapters({
         rawData={d.inputs.raw_data ?? null}
         dataSource={d.inputs.data_source ?? null}
         fetchedAt={d.inputs.data_fetched_at ?? null}
+        retrievedAt={d.snapshotRetrievedAt}
         ticker={d.symbol}
         quoteCurrency={d.quoteCurrency}
         reportingCurrency={d.reportingCurrency}

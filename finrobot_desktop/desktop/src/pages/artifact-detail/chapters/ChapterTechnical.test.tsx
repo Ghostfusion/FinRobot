@@ -9,7 +9,11 @@ import { render, screen } from '@testing-library/react'
 import { ChapterTechnical } from './ChapterTechnical'
 import type { TechnicalAnalysisShape } from './types'
 
-function renderChapter(technical: TechnicalAnalysisShape | null, financialSector = false) {
+function renderChapter(
+  technical: TechnicalAnalysisShape | null,
+  financialSector = false,
+  recommendation: string | null = null,
+) {
   return render(
     <ChapterTechnical
       technical={technical}
@@ -19,6 +23,7 @@ function renderChapter(technical: TechnicalAnalysisShape | null, financialSector
       snapshotBeta={1.2}
       snapshot52wHigh={180}
       snapshot52wLow={110}
+      recommendation={recommendation}
     />,
   )
 }
@@ -269,5 +274,81 @@ describe('ChapterTechnical', () => {
     // The legacy placeholder language must be gone.
     expect(screen.queryByText(/computed on-demand via/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/P4 — desktop augmentation/i)).not.toBeInTheDocument()
+  })
+
+  // Change 6(b): the tactical box publishes a full directional LONG reference
+  // (ideal buy above the market, size, R/R) while the verdict is HOLD. The numbers
+  // stay published; the HOLD verdict adds the reconciliation so the box is not read
+  // as a trade signal.
+  it('reconciles a directional tactical box with a HOLD verdict', () => {
+    renderChapter(
+      {
+        sniper: {
+          ideal_buy: 246.88,
+          secondary_buy: 212.17,
+          stop_loss: 195.12,
+          take_profit: 259.87,
+          position_size_pct: 1.4,
+          safety_margin: 0.05,
+          support_level: 212.17,
+          resistance_level: 239.24,
+          risk_reward_ratio: 0.94,
+          direction: 'LONG',
+        },
+      },
+      false,
+      'HOLD',
+    )
+    // The directional numbers are still published…
+    expect(screen.getByText('Ideal Buy')).toBeInTheDocument()
+    expect(screen.getByText('$246.88')).toBeInTheDocument()
+    // …and the HOLD reconciliation is explicit.
+    const note = screen.getByTestId('sniper-hold-reconciliation')
+    expect(note.textContent).toMatch(/HOLD — mechanical reference levels, not a trade signal/)
+  })
+
+  it('omits the HOLD reconciliation when the verdict is directional', () => {
+    renderChapter(
+      {
+        sniper: {
+          ideal_buy: 246.88,
+          stop_loss: 195.12,
+          take_profit: 259.87,
+          support_level: 212.17,
+          resistance_level: 239.24,
+          direction: 'LONG',
+        },
+      },
+      false,
+      'BUY',
+    )
+    expect(screen.queryByTestId('sniper-hold-reconciliation')).not.toBeInTheDocument()
+  })
+
+  // Change 6(c): a band computed over a pre-ramp window makes the CHEAP badge a
+  // directional-only signal; slice D publishes the caveat, rendered beside the badge.
+  it('renders the structural-break caveat beside the band classification badge', () => {
+    renderChapter({
+      historical_bands: {
+        metric: 'ev_ebitda',
+        current: 27.1,
+        median: 58.7,
+        p25: 37.8,
+        p75: 98.5,
+        p90: 183.3,
+        sample_count: 928,
+        classification: 'cheap',
+        classification_caveat: 'QUANTILES DRIVEN BY A PRE-STEP BASE — directional only',
+        timeline: [
+          ['2023-01-01', 79.8],
+          ['2023-07-01', 170.7],
+          ['2024-01-01', 60.0],
+        ],
+      },
+    })
+    expect(screen.getByTestId('band-classification')).toHaveTextContent(/cheap/i)
+    expect(screen.getByTestId('band-classification-caveat')).toHaveTextContent(
+      'QUANTILES DRIVEN BY A PRE-STEP BASE — directional only',
+    )
   })
 })

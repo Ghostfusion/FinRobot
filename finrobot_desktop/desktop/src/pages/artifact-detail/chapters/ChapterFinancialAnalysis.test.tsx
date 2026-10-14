@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 
 import { ChapterFinancialAnalysis } from './ChapterFinancialAnalysis'
+import type { DcfShape } from './types'
+import type { HistoricalMetrics } from '../../../types/finance'
 
 // Captures the props the revenue chart receives, so the year axis this chapter
 // ASSEMBLES (fiscal anchor + base-row merge) is asserted end to end and not only
@@ -220,5 +222,77 @@ describe('ChapterFinancialAnalysis DCF year axis (2026 must not vanish)', () => 
   it('falls back to the last reported fiscal year when the anchor field is absent', () => {
     renderDcfChapter(makeDcfShape(null))
     expect(chartYears()).toEqual(['2022', '2023', '2024', '2025', '2026E', '2027E'])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Forecast basis (i1): the DCF base is a TTM run-rate, so labelling it with the
+// anchor YEAR collided with the FY bar, the base row was dropped as a duplicate,
+// and the chart jumped FY2025 → 2026E — the TTM×growth first forecast read as a
+// near-doubling. The base row now carries "TTM (Mon YYYY)" and the first forecast
+// year states its basis.
+// ---------------------------------------------------------------------------
+
+/** A DCF block whose forecast_basis makes the TTM base explicit. */
+function makeTtmDcfShape(): DcfShape {
+  return {
+    ...makeDcfShape(2025),
+    forecast_basis: { base: 'ttm', base_period_end: '2025-07-26', first_forecast_year: 2026 },
+  } as unknown as DcfShape
+}
+
+describe('ChapterFinancialAnalysis forecast basis (TTM base visible)', () => {
+  it('renders the TTM base with a non-colliding label and marks the first forecast year', () => {
+    renderDcfChapter(makeTtmDcfShape())
+    expect(chartYears()).toEqual([
+      '2022',
+      '2023',
+      '2024',
+      '2025',
+      'TTM (Jul 2025)',
+      '2026E (TTM+1)',
+      '2027E',
+    ])
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Series honesty (change 3 / i4/i5): the DCF carries NO forecast gross margin —
+// the forecast rows are EBITDA / operating margin only. The chart must say so, or
+// the ~66% forecast EBITDA margin reads as a gross-margin forecast vs a ~75% TTM
+// actual.
+// ---------------------------------------------------------------------------
+
+describe('ChapterFinancialAnalysis series honesty labels', () => {
+  it('labels the margin series: forecast = EBITDA / operating margin, gross margin history-only', () => {
+    renderDcfChapter(makeTtmDcfShape())
+    const note = screen.getByTestId('margin-forecast-caliber')
+    expect(note.textContent).toContain('预测年份只给 EBITDA 利润率与营业(EBIT)利润率')
+    expect(note.textContent).toContain('毛利率曲线为历史口径')
+  })
+
+  it('states the annual-vs-TTM EBITDA caliber beside the revenue/EBITDA chart', () => {
+    renderDcfChapter(makeTtmDcfShape())
+    const note = screen.getByTestId('ebitda-caliber-note')
+    // TREND_TO_2025 carries no frozen label → the static zh disclosure renders.
+    expect(note.textContent).toContain('营业利润 + 折旧摊销')
+  })
+
+  it('prefers the frozen payload caliber label when present', () => {
+    revenueChartProps.mockClear()
+    render(
+      <ChapterFinancialAnalysis
+        dcf={makeTtmDcfShape()}
+        rawData={null}
+        historicalMetrics={
+          {
+            ...TREND_TO_2025,
+            ebitda_caliber: 'FROZEN CALIBER LABEL',
+          } as unknown as HistoricalMetrics
+        }
+        reportingCurrency="USD"
+      />,
+    )
+    expect(screen.getByTestId('ebitda-caliber-note').textContent).toBe('FROZEN CALIBER LABEL')
   })
 })

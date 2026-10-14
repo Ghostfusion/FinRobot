@@ -225,4 +225,65 @@ describe('DataAuthorityPanel', () => {
     expect(container.textContent).toContain('—')
     expect(container.textContent).not.toContain('NaN')
   })
+
+  // ── Coverage counts + the PRICE record (change 7) ─────────────────────────
+  // The audited run carried NO financials record (`data_authority` null). The panel
+  // must say so explicitly with the coverage counts — a bare "· 0" read as "zero
+  // conflicts" — and render the PRICE canonical's own record separately.
+
+  it('states the missing financials record explicitly with the coverage counts', () => {
+    render(
+      <DataAuthorityPanel
+        authority={null}
+        coverage={{ metrics_decided: 0, metrics_without_record: 4, divergence_warnings: 1 }}
+      />,
+    )
+    expect(screen.getByTestId('report-data-authority-no-record').textContent).toMatch(
+      /NOT the same as zero conflicts/,
+    )
+    const coverage = screen.getByTestId('report-data-authority-coverage').textContent
+    expect(coverage).toContain('4')
+    expect(coverage).toContain('1')
+    // The header no longer reads a bare "0".
+    expect(screen.getByTestId('report-data-authority-details')).toHaveTextContent(
+      'no financial-metrics record',
+    )
+  })
+
+  it('renders the PRICE decision record separately, labelled as the price record', () => {
+    render(
+      <DataAuthorityPanel
+        authority={null}
+        priceAuthority={{
+          policy_version: 'metric_authority_v1',
+          decisions: [
+            {
+              metric: 'current_price',
+              status: 'accepted',
+              value: 228.52,
+              unit: 'USD',
+              currency: 'USD',
+              selected_source: 'eodhd',
+              is_authoritative: true,
+              reason_code: 'sources_agree',
+              candidates: [],
+            },
+          ],
+        }}
+      />,
+    )
+    expect(screen.getByTestId('report-data-authority-price')).toHaveTextContent(
+      'Price decision record',
+    )
+    // The authoritative current price is reader-visible through its accepted count…
+    expect(screen.getByTestId('report-data-authority-price-accepted').textContent).toContain('1')
+    // …and it is NOT folded into the financials record (which is absent here).
+    expect(screen.queryByTestId('report-data-authority-accepted')).toBeNull()
+    expect(screen.getByTestId('report-data-authority-no-record')).toBeInTheDocument()
+  })
+
+  it('renders nothing when neither a record nor a coverage count is present', () => {
+    const { container } = render(<DataAuthorityPanel authority={null} priceAuthority={null} />)
+    expect(container.firstChild).toBeNull()
+  })
 })

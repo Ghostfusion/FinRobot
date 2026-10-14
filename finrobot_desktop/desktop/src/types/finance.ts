@@ -111,4 +111,9 @@ export interface HistoricalMetrics {
   cagr_revenue: number | null
   ticker: string
   price_data_available: boolean
+  // Caliber label for the annual EBITDA bars vs the report's TTM EBITDA (which is
+  // computed as operating income + D&A): the two treat D&A differently, so the
+  // chart chapter discloses it. Frozen onto the payload by the builder; absent on
+  // artifacts written before the field (the chapter falls back to a static note).
+  ebitda_caliber?: string | null
 }

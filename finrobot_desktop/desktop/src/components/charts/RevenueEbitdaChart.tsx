@@ -57,11 +57,20 @@ export default function RevenueEbitdaChart({ data, title }: ChartProps) {
           <BarChart data={data} barGap={6} margin={{ top: 24, right: 16, left: 0, bottom: 4 }}>
             <XAxis
               dataKey="year"
+              // Every year MUST be labelled. A forecast-basis label ("TTM (Jul
+              // 2026)" / "2027E (TTM+1)") is wider than a bare year, and Recharts'
+              // default auto-interval then HID the neighbouring actual-year tick,
+              // silently re-creating the "jumps FY2026 → 2027E" hole on the axis.
+              // interval={0} + angled labels keeps all of them legible.
+              interval={0}
               tick={{
                 fill: 'var(--text-secondary)',
-                fontSize: 12,
+                fontSize: 11,
                 fontFamily: "'JetBrains Mono', monospace",
+                angle: -30,
+                textAnchor: 'end',
               }}
+              height={68}
               tickLine={false}
               axisLine={{ stroke: 'var(--border-soft)' }}
             />

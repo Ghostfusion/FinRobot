@@ -43,6 +43,15 @@ export interface SnapshotMetric {
   value: string
   /** Raw numeric — drives the gauge encoding only (ratio for margin/cagr, x for beta). */
   raw: number
+  /** The measurement period the value covers (e.g. "TTM"), rendered as a tag
+   *  beside the label so a TTM margin can never be read as a fiscal-year one.
+   *  Omitted when the tile's period is already obvious (a live market cap, a
+   *  trailing CAGR the foot labels, a provider 5y beta the note dates). */
+  period?: string
+  /** A short lower-case caveat under the foot: what the figure IS and its
+   *  caliber (e.g. the beta's provider-5y/unadjusted basis + the DCF's
+   *  Blume-adjusted counterpart). Localised by the chapter. */
+  note?: string
   source?: NumberSource
 }
 
@@ -352,7 +361,10 @@ const tileBase: React.CSSProperties = {
   minHeight: 168,
   display: 'flex',
   flexDirection: 'column',
-  overflow: 'hidden',
+  // No `overflow: hidden`: the tile used to CLIP a 25px figure whenever the
+  // equal-1fr column fell below gauge+figure width. minHeight stays a floor —
+  // content (a period tag or the beta note) can grow the tile, never be cut.
+  minWidth: 0,
 }
 const tileKey: React.CSSProperties = {
   fontFamily: 'var(--font-mono)',
@@ -360,6 +372,18 @@ const tileKey: React.CSSProperties = {
   letterSpacing: '0.2em',
   textTransform: 'uppercase',
   color: 'var(--text-muted)',
+}
+const tilePeriod: React.CSSProperties = {
+  flex: 'none',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 9,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase',
+  color: 'var(--text-muted)',
+  border: '1px solid var(--border-soft)',
+  borderRadius: 3,
+  padding: '1px 5px',
+  lineHeight: 1.4,
 }
 const tileVal: React.CSSProperties = {
   fontFamily: 'var(--font-mono)',
@@ -369,6 +393,19 @@ const tileVal: React.CSSProperties = {
   letterSpacing: '0.01em',
   color: 'var(--text-primary)',
   fontVariantNumeric: 'tabular-nums',
+  // Shrink rather than overflow: the figure keeps its glyphs on one line
+  // (never broken mid-token) but the flex row wraps it under the gauge when the
+  // tile is narrow, so it is never clipped.
+  whiteSpace: 'nowrap',
+  minWidth: 0,
+}
+const tileNote: React.CSSProperties = {
+  marginTop: 10,
+  fontFamily: 'var(--font-mono)',
+  fontSize: 9.5,
+  lineHeight: 1.45,
+  letterSpacing: '0.03em',
+  color: 'var(--text-dim)',
 }
 const tileFoot: React.CSSProperties = {
   position: 'relative',
@@ -389,22 +426,33 @@ function TelemetryTile({
 }): React.ReactElement {
   const isBeta = metric.kind === 'beta'
   const figure = (
-    <div style={tileVal}>
+    <div style={tileVal} data-testid="snapshot-tile-figure">
       <SourcedNumber value={metric.value} source={metric.source} />
     </div>
   )
   return (
-    <article style={tileBase}>
+    <article style={tileBase} data-testid={`snapshot-tile-${metric.kind}`}>
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          gap: 8,
           marginBottom: 'auto',
         }}
       >
-        <span style={tileKey}>{metric.label}</span>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-dim)' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <span style={tileKey}>{metric.label}</span>
+          {metric.period && <span style={tilePeriod}>{metric.period}</span>}
+        </span>
+        <span
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 9,
+            color: 'var(--text-dim)',
+            flex: 'none',
+          }}
+        >
           {`T0${idx + 1}`}
         </span>
       </div>
@@ -415,12 +463,25 @@ function TelemetryTile({
           <BetaScale value={metric.raw} />
         </div>
       ) : (
-        <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div
+          data-testid="snapshot-tile-gauge-row"
+          style={{
+            marginTop: 14,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 14,
+            // Wrap the figure under the gauge when the tile is too narrow to
+            // fit both — the alternative (equal 1fr columns at a small width)
+            // clipped the figure against overflow:hidden.
+            flexWrap: 'wrap',
+          }}
+        >
           {TILE_GAUGE[metric.kind](metric)}
           {figure}
         </div>
       )}
 
+      {metric.note && <div style={tileNote}>{metric.note}</div>}
       <div style={tileFoot}>{TILE_FOOT(metric)}</div>
     </article>
   )
@@ -611,9 +672,15 @@ export function CompanySnapshot({
       {/* telemetry tiles: quantitative metrics, each with a value-encoding gauge */}
       {metrics.length > 0 && (
         <div
+          data-testid="snapshot-telemetry"
           style={{
             display: 'grid',
-            gridTemplateColumns: `repeat(${Math.min(metrics.length, 5)}, 1fr)`,
+            // auto-fit + a 180px floor: the row fits as many 180px-wide tiles as
+            // the container allows and WRAPS the rest, instead of forcing
+            // `min(count,5)` equal 1fr columns that shrank tiles below their
+            // gauge+figure width (the clipping defect). Tiles stay ≥180px, so
+            // no figure/unit/label is cut.
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
             gap: 1,
             background: 'var(--border-grid)',
             borderTop: passport.length > 0 ? '1px solid var(--border-grid)' : undefined,

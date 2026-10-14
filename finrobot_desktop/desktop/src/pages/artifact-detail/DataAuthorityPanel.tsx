@@ -128,6 +128,35 @@ export function parseDataAuthority(raw: unknown): DataAuthorityRecord | null {
   }
 }
 
+/** Coverage counts the data layer publishes beside the records
+ *  (`raw_data.provenance.metrics_decided` / `metrics_without_record` /
+ *  `divergence_warnings`). Every field is `int | null`. */
+export interface DataAuthorityCoverage {
+  metricsDecided: number | null
+  metricsWithoutRecord: number | null
+  divergenceWarnings: number | null
+}
+
+/** Narrow `raw_data.provenance` into the coverage read model. Returns null when no
+ *  count is present (a legacy artifact) — the caller then renders no coverage line. */
+export function parseAuthorityCoverage(raw: unknown): DataAuthorityCoverage | null {
+  const r = asRecord(raw)
+  if (!r) return null
+  const coverage: DataAuthorityCoverage = {
+    metricsDecided: asNumber(r.metrics_decided),
+    metricsWithoutRecord: asNumber(r.metrics_without_record),
+    divergenceWarnings: asNumber(r.divergence_warnings),
+  }
+  if (
+    coverage.metricsDecided === null &&
+    coverage.metricsWithoutRecord === null &&
+    coverage.divergenceWarnings === null
+  ) {
+    return null
+  }
+  return coverage
+}
+
 // ── Labels ───────────────────────────────────────────────────────────────────
 // Finance names stay English (the repo's i18n exemption list: EV/EBITDA, P/E…),
 // mirroring ChapterAuditBanner's FIELD_LABELS. Falls back to Title Case.
@@ -210,73 +239,111 @@ function formatAuthorityValue(
   return formatNumberAuto(value, locale)
 }
 
+// Shared panel styles (the note / list / count blocks render in both the
+// financials record and the price record, so they are declared once).
+const panelBoxStyle: React.CSSProperties = {
+  padding: '12px 16px',
+  background: 'var(--bg-card)',
+  border: '1px solid var(--border-soft)',
+  borderRadius: 'var(--radius-sm)',
+}
+const panelSummaryStyle: React.CSSProperties = {
+  cursor: 'pointer',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10.5,
+  letterSpacing: '0.08em',
+  color: 'var(--text-muted)',
+  listStyle: 'revert',
+}
+const panelNoteStyle: React.CSSProperties = {
+  margin: '8px 0 0',
+  fontFamily: 'var(--font-body)',
+  fontSize: 12,
+  lineHeight: 1.6,
+  color: 'var(--text-muted)',
+}
+const panelListStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
+  margin: '12px 0 0',
+  padding: 0,
+  listStyle: 'none',
+}
+const panelCountStyle: React.CSSProperties = {
+  margin: '10px 0 0',
+  fontFamily: 'var(--font-body)',
+  fontSize: 12,
+  lineHeight: 1.6,
+  color: 'var(--text-secondary)',
+}
+
 export function DataAuthorityPanel({
   authority,
+  priceAuthority,
+  coverage,
 }: {
   authority: unknown
+  priceAuthority?: unknown
+  coverage?: unknown
 }): React.ReactElement | null {
   const { t, locale } = useI18n()
   const record = parseDataAuthority(authority)
-  if (!record) return null
+  const priceRecord = parseDataAuthority(priceAuthority)
+  const cov = parseAuthorityCoverage(coverage)
+  // Nothing to say when neither a record nor a coverage count reached the artifact
+  // (every artifact written before these fields existed) — never an empty shell.
+  if (!record && !priceRecord && !cov) return null
 
   // A conflict is PUBLISHED — only the non-accepted decisions need a row; the
   // accepted ones are summarised by a count (the canonical value is already on
   // the page). An unknown status counts as non-accepted on purpose: anything the
   // reader can't reconcile should be visible.
-  const flagged = record.decisions.filter((d) => d.status !== 'accepted')
-  const acceptedCount = record.decisions.length - flagged.length
+  const flagged = record ? record.decisions.filter((d) => d.status !== 'accepted') : []
+  const acceptedCount = record ? record.decisions.length - flagged.length : 0
+  const priceFlagged = priceRecord
+    ? priceRecord.decisions.filter((d) => d.status !== 'accepted')
+    : []
+  const priceAccepted = priceRecord ? priceRecord.decisions.length - priceFlagged.length : 0
+  // The FINANCIALS record is absent for the audited run. The panel must say so
+  // explicitly — a bare "· 0" reads as "zero conflicts", which is the defect.
+  const financialsMissing = record === null
 
   return (
     <div data-testid="report-data-authority" style={{ margin: '8px 0 24px' }}>
       {/* Native <details> (as ComputeWarningsPanel uses): the standalone HTML
           export keeps the toggle without JS. Default-OPEN — this is the record
           the conflict is measured against, not a footnote. */}
-      <details
-        open
-        data-testid="report-data-authority-details"
-        style={{
-          padding: '12px 16px',
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border-soft)',
-          borderRadius: 'var(--radius-sm)',
-        }}
-      >
-        <summary
-          style={{
-            cursor: 'pointer',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10.5,
-            letterSpacing: '0.08em',
-            color: 'var(--text-muted)',
-            listStyle: 'revert',
-          }}
-        >
-          {t('report.dataAuthority.title')} · {flagged.length}
+      <details open data-testid="report-data-authority-details" style={panelBoxStyle}>
+        <summary style={panelSummaryStyle}>
+          {t('report.dataAuthority.title')} ·{' '}
+          {financialsMissing
+            ? locale === 'zh'
+              ? '财务指标无决策记录'
+              : 'no financial-metrics record'
+            : flagged.length}
         </summary>
 
-        <p
-          style={{
-            margin: '8px 0 0',
-            fontFamily: 'var(--font-body)',
-            fontSize: 12,
-            lineHeight: 1.6,
-            color: 'var(--text-muted)',
-          }}
-        >
-          {t('report.dataAuthority.note')}
-        </p>
+        {record && <p style={panelNoteStyle}>{t('report.dataAuthority.note')}</p>}
+
+        {financialsMissing && (
+          <p data-testid="report-data-authority-no-record" style={panelNoteStyle}>
+            {locale === 'zh'
+              ? '未为「财务指标」持久化指标权威决策记录——这不等于零冲突:本次运行的对账结果未落库,对账状态未知,请按未核对处理。'
+              : 'No metric-authority decision record was persisted for the financial metrics — this is NOT the same as zero conflicts. The reconciliation simply did not reach this run, so treat the financial figures as unreconciled.'}
+          </p>
+        )}
+
+        {cov && (
+          <p data-testid="report-data-authority-coverage" style={panelNoteStyle}>
+            {locale === 'zh'
+              ? `覆盖:财务指标决策 ${cov.metricsDecided ?? '—'} 项 · 已比对但无记录 ${cov.metricsWithoutRecord ?? '—'} 项 · 校验分歧警告 ${cov.divergenceWarnings ?? '—'} 条`
+              : `Coverage: ${cov.metricsDecided ?? '—'} financial-metric decision(s) · ${cov.metricsWithoutRecord ?? '—'} compared metric(s) with no record · ${cov.divergenceWarnings ?? '—'} validator divergence warning(s)`}
+          </p>
+        )}
 
         {flagged.length > 0 && (
-          <ul
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 10,
-              margin: '12px 0 0',
-              padding: 0,
-              listStyle: 'none',
-            }}
-          >
+          <ul style={panelListStyle}>
             {flagged.map((d) => (
               <DecisionRow key={d.metric} decision={d} />
             ))}
@@ -284,20 +351,44 @@ export function DataAuthorityPanel({
         )}
 
         {acceptedCount > 0 && (
-          <p
-            data-testid="report-data-authority-accepted"
-            style={{
-              margin: '10px 0 0',
-              fontFamily: 'var(--font-body)',
-              fontSize: 12,
-              lineHeight: 1.6,
-              color: 'var(--text-secondary)',
-            }}
-          >
+          <p data-testid="report-data-authority-accepted" style={panelCountStyle}>
             {t('report.dataAuthority.accepted', { count: acceptedCount })}
           </p>
         )}
       </details>
+
+      {/* The PRICE canonical's own decision record (`raw_data.price_authority`).
+          Rendered separately and labelled as the PRICE's record: its
+          `current_price` decision is how the authoritative price becomes
+          reader-visible — it must never be read as the financials' record. */}
+      {priceRecord && (
+        <details
+          open
+          data-testid="report-data-authority-price"
+          style={{ ...panelBoxStyle, marginTop: 10 }}
+        >
+          <summary style={panelSummaryStyle}>
+            {locale === 'zh' ? '价格决策记录' : 'Price decision record'} · {priceFlagged.length}
+          </summary>
+          <p style={panelNoteStyle}>
+            {locale === 'zh'
+              ? '权威现价(current_price)的对账记录——封面与各章节所用价格的来源。'
+              : 'The reconciliation record behind the authoritative current price — the value the cover and every chapter publish.'}
+          </p>
+          {priceFlagged.length > 0 && (
+            <ul style={panelListStyle}>
+              {priceFlagged.map((d) => (
+                <DecisionRow key={d.metric} decision={d} />
+              ))}
+            </ul>
+          )}
+          {priceAccepted > 0 && (
+            <p data-testid="report-data-authority-price-accepted" style={panelCountStyle}>
+              {t('report.dataAuthority.accepted', { count: priceAccepted })}
+            </p>
+          )}
+        </details>
+      )}
     </div>
   )
 }

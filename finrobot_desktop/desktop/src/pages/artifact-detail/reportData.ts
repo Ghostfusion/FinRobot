@@ -109,6 +109,9 @@ export interface DerivedReportData {
   snapshot52wLow: number | null
   /** When the underlying market data was fetched — the report's "as of" stamp. */
   snapshotAsOf: string | null
+  /** Wall-clock retrieval instant of the snapshot (`raw_data.provenance.retrieved_at`).
+   * Distinct from `snapshotAsOf`, which is the DATA's vintage/as-of. */
+  snapshotRetrievedAt: string | null
   /** True when the frozen quote is a LIVE intraday tick; false when it is a prior
    *  close (the data step's flag). Absent/legacy ⇒ false, so a stale close is
    *  never mislabelled "Live". */
@@ -376,6 +379,19 @@ export function deriveReportData(
   const snapshot52wHigh = num(market['price_52w_high'])
   const snapshot52wLow = num(market['price_52w_low'])
   const snapshotAsOf = inputs.data_fetched_at ?? null
+  // The wall-clock instant the snapshot was actually retrieved — a DIFFERENT fact
+  // from snapshotAsOf (the data's own vintage/as-of, which the pipeline stamps from
+  // the quote session close). The audited 2026-10-13 NVDA report printed one instant
+  // under a "FETCHED AT" label that matched neither the fetch nor the close, so the two
+  // are now published and rendered separately. Absent on artifacts older than the field.
+  const provenanceSnap = ((inputs.raw_data ?? {}) as Record<string, unknown>)['provenance']
+  const provenance = (
+    typeof provenanceSnap === 'object' && provenanceSnap !== null ? provenanceSnap : {}
+  ) as Record<string, unknown>
+  const snapshotRetrievedAt =
+    typeof provenance['retrieved_at'] === 'string' && provenance['retrieved_at']
+      ? (provenance['retrieved_at'] as string)
+      : null
   // Whether the snapshot quote is a LIVE intraday tick or a prior close. The
   // data step flags it; absent (legacy artifacts) ⇒ treat as NOT live so the
   // report never claims a stale close is live.
@@ -461,6 +477,7 @@ export function deriveReportData(
     snapshot52wHigh,
     snapshot52wLow,
     snapshotAsOf,
+    snapshotRetrievedAt,
     quoteIsLive,
     quoteAsOf,
     snapshotEvEbitda,

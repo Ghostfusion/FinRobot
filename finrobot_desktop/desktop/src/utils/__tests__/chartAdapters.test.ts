@@ -5,6 +5,7 @@ import {
   dcfResultToRevenueEbitdaData,
   historicalToRevenueEbitdaData,
   mergeDcfBaseRow,
+  ttmBaseLabel,
 } from '../chartAdapters'
 import type { CompsResult, DCFResult, HistoricalMetrics } from '../../types/finance'
 
@@ -197,5 +198,48 @@ describe('DCF first forecast year — forecast_basis provenance', () => {
     expect(omitted.map((r) => r.year)).toEqual(['2025', '2026E', '2027E'])
     const explicitNull = dcfResultToMarginData(makeDcfResult(0.05), 2025, null)
     expect(explicitNull.map((r) => r.year)).toEqual(['2025', '2026E', '2027E'])
+  })
+})
+
+// The DCF base is a TTM run-rate, so labelling it with the anchor YEAR collided
+// with the FY history bar, the merge dropped it as a duplicate, and the chart
+// jumped FY2026 → 2027E (the TTM×growth first forecast read as +96%). The base
+// must be visible with a non-colliding label, and the first forecast year must
+// state its basis.
+describe('DCF TTM base row — non-colliding label and forecast basis', () => {
+  it('labels the base row "TTM (Mon YYYY)" and the first forecast year "(TTM+1)"', () => {
+    const bars = dcfResultToRevenueEbitdaData(makeDcfResult(0.05), 2025, 2027, '2026-07-26')
+    expect(bars.map((r) => r.year)).toEqual(['TTM (Jul 2026)', '2027E (TTM+1)', '2028E'])
+    const margins = dcfResultToMarginData(makeDcfResult(0.05), 2025, 2027, '2026-07-26')
+    expect(margins.map((r) => r.year)).toEqual(['TTM (Jul 2026)', '2027E (TTM+1)', '2028E'])
+  })
+
+  it('keeps the TTM base row beside the FY bar instead of dropping it as a duplicate', () => {
+    // History reaches the anchor year → the FY bar is authority for it, but the TTM
+    // run-rate is a SEPARATE row (distinct label), so it is no longer dropped.
+    const merged = mergeDcfBaseRow(
+      historicalToRevenueEbitdaData(makeHistory([2024, 2025])),
+      dcfResultToRevenueEbitdaData(makeDcfResult(0.05), 2025, 2026, '2025-07-26'),
+    )
+    expect(merged.map((r) => r.year)).toEqual([
+      '2024',
+      '2025',
+      'TTM (Jul 2025)',
+      '2026E (TTM+1)',
+      '2027E',
+    ])
+  })
+
+  it('keeps the plain year label when the base period end is absent (legacy artifact)', () => {
+    const bars = dcfResultToRevenueEbitdaData(makeDcfResult(0.05), 2025, 2027, null)
+    expect(bars.map((r) => r.year)).toEqual(['2025', '2027E', '2028E'])
+  })
+
+  it('ttmBaseLabel ignores a malformed / out-of-range period end', () => {
+    expect(ttmBaseLabel('2026-07-26')).toBe('TTM (Jul 2026)')
+    expect(ttmBaseLabel('2026-13-01')).toBeNull()
+    expect(ttmBaseLabel('nope')).toBeNull()
+    expect(ttmBaseLabel(null)).toBeNull()
+    expect(ttmBaseLabel(undefined)).toBeNull()
   })
 })

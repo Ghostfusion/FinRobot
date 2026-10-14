@@ -449,3 +449,157 @@ describe('ChapterValuation DCF bridge', () => {
     expect(rows!.find((r) => r.label === 'Less: Net Debt')!.value).toBeCloseTo(-2.0e11)
   })
 })
+
+// Change 6(a): the DCF's implied TERMINAL EV/EBITDA is the main reason the target
+// sits below the current multiple (NVDA 7.61x vs 27.1x) — it belongs in the
+// assumption grid, not only in the football field's small footnote.
+describe('ChapterValuation terminal-multiple assumption cell', () => {
+  it('promotes the implied terminal EV/EBITDA to a first-class DCF KvGrid cell', () => {
+    render(
+      <ChapterValuation
+        dcf={{ ...DCF, terminal_ev_ebitda: 7.61 }}
+        thesis={null}
+        valuationSynthesis={null}
+        forwardEstimates={null}
+        sotpBreakdown={null}
+        quoteCurrency="USD"
+        reportingCurrency="USD"
+        currentEvEbitda={27.1}
+      />,
+    )
+    expect(screen.getByText(/Terminal EV\/EBITDA|终值 EV\/EBITDA/)).toBeInTheDocument()
+    expect(screen.getByText('7.61×')).toBeInTheDocument()
+    expect(screen.getByText(/vs 27\.1× today|对比当前 27\.1×/)).toBeInTheDocument()
+  })
+
+  it('renders the cell value alone (no comparison) when today\u2019s multiple is absent', () => {
+    render(
+      <ChapterValuation
+        dcf={{ ...DCF, terminal_ev_ebitda: 7.61 }}
+        thesis={null}
+        valuationSynthesis={null}
+        forwardEstimates={null}
+        sotpBreakdown={null}
+        quoteCurrency="USD"
+        reportingCurrency="USD"
+      />,
+    )
+    expect(screen.getByText('7.61×')).toBeInTheDocument()
+    expect(screen.queryByText(/vs 27\.1× today/)).not.toBeInTheDocument()
+  })
+})
+
+// Change 6(c): the band's CHEAP/FAIR/EXPENSIVE rail is computed over a window that
+// may contain a structural EBITDA break (slice D publishes the caveat on
+// technical_analysis.historical_bands). Render it beside the football field so the
+// rail is never read as a clean signal.
+describe('ChapterValuation own-history band caveat', () => {
+  const METHODS: ValuationSynthesisShape = {
+    current_price: 228.52,
+    methods: [
+      {
+        name: 'dcf',
+        low: 150,
+        mid: 188,
+        high: 220,
+        confidence: 0.8,
+        source: 'implied_price ± 12%',
+      },
+    ],
+  }
+
+  it('renders the structural-break caveat under the football field when published', () => {
+    render(
+      <ChapterValuation
+        dcf={DCF}
+        thesis={null}
+        valuationSynthesis={METHODS}
+        forwardEstimates={null}
+        sotpBreakdown={null}
+        quoteCurrency="USD"
+        reportingCurrency="USD"
+        historicalBand={{
+          metric: 'ev_ebitda',
+          current: 27.1,
+          classification: 'cheap',
+          classification_caveat: 'BREAK CAVEAT TEXT',
+        }}
+      />,
+    )
+    expect(screen.getByTestId('football-own-history-caveat').textContent).toBe('BREAK CAVEAT TEXT')
+  })
+
+  it('renders no caveat when the band carries none', () => {
+    render(
+      <ChapterValuation
+        dcf={DCF}
+        thesis={null}
+        valuationSynthesis={METHODS}
+        forwardEstimates={null}
+        sotpBreakdown={null}
+        quoteCurrency="USD"
+        reportingCurrency="USD"
+        historicalBand={{ metric: 'ev_ebitda', current: 27.1, classification: 'fair' }}
+      />,
+    )
+    expect(screen.queryByTestId('football-own-history-caveat')).not.toBeInTheDocument()
+  })
+
+  it('renders the own-history cross-check band caveat when the basis does not carry it', () => {
+    render(
+      <ChapterValuation
+        dcf={DCF}
+        thesis={null}
+        valuationSynthesis={{
+          ...METHODS,
+          cross_checks: [
+            {
+              name: 'ev_ebitda_band',
+              label: 'Own 5-year EV/EBITDA',
+              low: 317,
+              mid: 492,
+              high: 825,
+              basis: 'Own 5-year EV/EBITDA band applied to TTM EBITDA.',
+              band_break_caveat: 'BREAK CAVEAT — cheap is directional only',
+            },
+          ],
+        }}
+        forwardEstimates={null}
+        sotpBreakdown={null}
+        quoteCurrency="USD"
+        reportingCurrency="USD"
+      />,
+    )
+    expect(screen.getByTestId('football-cross-check-caveat').textContent).toBe(
+      'BREAK CAVEAT — cheap is directional only',
+    )
+  })
+
+  it('does not print the cross-check caveat twice when the row basis already carries it', () => {
+    render(
+      <ChapterValuation
+        dcf={DCF}
+        thesis={null}
+        valuationSynthesis={{
+          ...METHODS,
+          cross_checks: [
+            {
+              name: 'ev_ebitda_band',
+              label: 'Own 5-year EV/EBITDA',
+              low: 317,
+              mid: 492,
+              high: 825,
+              basis: 'Own 5-year EV/EBITDA band applied. BREAK CAVEAT — directional only',
+              band_break_caveat: 'BREAK CAVEAT — directional only',
+            },
+          ],
+        }}
+        forwardEstimates={null}
+        sotpBreakdown={null}
+        quoteCurrency="USD"
+        reportingCurrency="USD"
+      />,
+    )
+    expect(screen.queryByTestId('football-cross-check-caveat')).not.toBeInTheDocument()
+  })
+})

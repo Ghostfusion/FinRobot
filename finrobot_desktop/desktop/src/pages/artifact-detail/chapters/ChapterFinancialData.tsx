@@ -13,6 +13,7 @@ import {
   formatCompactNumber,
   formatCurrency,
   formatCurrencyCompact,
+  formatDateTimeUtc,
   formatNumber,
   formatPercent,
 } from '../../../utils/format'
@@ -24,7 +25,18 @@ import { extractErrorDetail } from '../../../api/errors'
 interface ChapterFinancialDataProps {
   rawData: Record<string, unknown> | null
   dataSource: string | null
+  // The artifact's data vintage — `inputs.data_fetched_at`, which the pipeline
+  // stamps from the snapshot's own as-of (the quote session close for a live
+  // equity run), NOT the wall-clock retrieval instant. The strip therefore
+  // labels it "DATA AS OF"; painting it as a fetch time put "Fetched 3:00 PM"
+  // on the 2026-10-13 NVDA report for a 20:00Z close.
   fetchedAt: string | null
+  // The wall-clock instant the snapshot was actually retrieved (backend
+  // `raw_data.provenance.retrieved_at`, and `price_retrieved_at` for the price
+  // feed). Kept separate from `fetchedAt` because the artifact's vintage and the
+  // wire time are different facts — the 2026-10-13 NVDA report printed one
+  // instant under a "FETCHED AT" label that matched neither.
+  retrievedAt?: string | null
   ticker: string
   // quote → market_cap & per-share prices (price, 52w hi/lo); reporting →
   // income / balance / EV absolutes (BUG-030).
@@ -446,6 +458,7 @@ export function ChapterFinancialData({
   rawData,
   dataSource,
   fetchedAt,
+  retrievedAt,
   ticker,
   quoteCurrency,
   reportingCurrency,
@@ -515,10 +528,14 @@ export function ChapterFinancialData({
         </span>
         {fetchedAt && (
           <span>
-            {tr('抓取时间', 'FETCHED AT', locale)}:{' '}
-            <span style={{ color: 'var(--text-secondary)' }}>
-              {formatDate(fetchedAt, locale, 'datetime')}
-            </span>
+            {tr('数据截止时间', 'DATA AS OF', locale)}:{' '}
+            <span style={{ color: 'var(--text-secondary)' }}>{formatDateTimeUtc(fetchedAt)}</span>
+          </span>
+        )}
+        {retrievedAt && (
+          <span>
+            {tr('抓取时间', 'RETRIEVED', locale)}:{' '}
+            <span style={{ color: 'var(--text-secondary)' }}>{formatDateTimeUtc(retrievedAt)}</span>
           </span>
         )}
       </div>

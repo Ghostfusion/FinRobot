@@ -1,6 +1,42 @@
 import type { DCFResult, CompsResult, HistoricalMetrics } from '../types/finance'
 import { tSync } from '../i18n'
 
+const MONTH_ABBR = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+]
+
+/**
+ * Non-colliding axis label for the DCF's TTM run-rate base row.
+ *
+ * The base row restates the DCF's fiscal anchor year but carries a TTM run-rate,
+ * not that year's reported figure. Its old `${baseYear}` label COLLIDED with the
+ * historical bar for the same year, so `mergeDcfBaseRow` dropped it as a
+ * duplicate and the chart jumped the last FY bar → first forecast year (NVDA:
+ * FY2026 215.9B → 2027E 424.2B), making the TTM×growth first forecast read as
+ * +96%. Labelling it "TTM (Jul 2026)" keeps it distinct from the FY bar and
+ * states the basis. Returns null when the base period end is unknown (a legacy
+ * artifact without `forecast_basis`), keeping the plain year label.
+ */
+export function ttmBaseLabel(basePeriodEnd?: string | null): string | null {
+  if (!basePeriodEnd) return null
+  const match = /^(\d{4})-(\d{2})/.exec(basePeriodEnd)
+  if (!match) return null
+  const month = Number(match[2])
+  if (!Number.isInteger(month) || month < 1 || month > 12) return null
+  return `TTM (${MONTH_ABBR[month - 1]} ${match[1]})`
+}
+
 /**
  * Build Revenue & EBITDA bar chart data from DCF projections.
  * Year 0 = base year (actual), Years 1..N = forecast.
@@ -15,17 +51,26 @@ import { tSync } from '../i18n'
  * row (it restates the last historical bar), that punched a hole in the axis in
  * EVERY report: 2025 actual → 2027E forecast, no 2026. A wall-clock default here
  * would reintroduce exactly that, so the caller resolves the anchor.
+ *
+ * `basePeriodEnd` is the TTM base window's ISO end (`forecast_basis
+ * .base_period_end`). When present the base row is labelled "TTM (Mon YYYY)"
+ * instead of the bare anchor year — it must NOT collide with the historical bar
+ * for that same fiscal year (see `ttmBaseLabel`) — and the first forecast year
+ * carries its basis ("2027E (TTM+1)").
  */
 export function dcfResultToRevenueEbitdaData(
   result: DCFResult,
   baseYear: number,
   firstForecastYear?: number | null,
+  basePeriodEnd?: string | null,
 ): Array<Record<string, number | string | boolean | null>> {
   const rows: Array<Record<string, number | string | boolean | null>> = []
 
-  // Base year (actual)
+  // Base year (actual). A TTM-based run-rate leaves its basis on the label so it
+  // cannot collide with (and be dropped in favour of) the FY bar.
+  const baseLabel = ttmBaseLabel(basePeriodEnd)
   rows.push({
-    year: String(baseYear),
+    year: baseLabel ?? String(baseYear),
     revenue: result.inputs.revenue_base,
     ebitda: result.inputs.revenue_base * result.inputs.ebitda_margin,
     is_forecast: false,
@@ -38,7 +83,8 @@ export function dcfResultToRevenueEbitdaData(
   const start = firstForecastYear != null ? firstForecastYear : baseYear + 1
   for (let i = 0; i < result.projected_revenue.length; i++) {
     rows.push({
-      year: `${start + i}E`,
+      // The first forecast year states its basis when the base was a TTM run-rate.
+      year: i === 0 && baseLabel !== null ? `${start}E (TTM+1)` : `${start + i}E`,
       revenue: result.projected_revenue[i],
       ebitda: result.projected_ebitda[i],
       is_forecast: true,
@@ -64,11 +110,15 @@ export function dcfResultToRevenueEbitdaData(
  * clock (a wall-clock base year put the projection a year ahead of the DCF
  * schedule and, once the base row was dropped as a duplicate, left a hole in
  * the axis: 2025 actual → 2027E forecast, no 2026).
+ * `basePeriodEnd` is the TTM base window's ISO end — see
+ * `dcfResultToRevenueEbitdaData`: it relabels the base row "TTM (Mon YYYY)" (so it
+ * can't collide with the FY bar) and marks the first forecast year "(TTM+1)".
  */
 export function dcfResultToMarginData(
   result: DCFResult,
   baseYear: number,
   firstForecastYear?: number | null,
+  basePeriodEnd?: string | null,
 ): Array<Record<string, number | string | boolean | null>> {
   const rows: Array<Record<string, number | string | boolean | null>> = []
 
@@ -82,8 +132,9 @@ export function dcfResultToMarginData(
 
   // Base year
   const baseEbitdaMargin = result.inputs.ebitda_margin
+  const baseLabel = ttmBaseLabel(basePeriodEnd)
   rows.push({
-    year: String(baseYear),
+    year: baseLabel ?? String(baseYear),
     ebitda_margin: baseEbitdaMargin,
     operating_margin: ebitMargin(baseEbitdaMargin),
     is_forecast: false,
@@ -97,7 +148,7 @@ export function dcfResultToMarginData(
     const ebitda = result.projected_ebitda[i]
     const ebitdaMargin = rev > 0 ? ebitda / rev : 0
     rows.push({
-      year: `${start + i}E`,
+      year: i === 0 && baseLabel !== null ? `${start}E (TTM+1)` : `${start + i}E`,
       ebitda_margin: ebitdaMargin,
       operating_margin: ebitMargin(ebitdaMargin),
       is_forecast: true,
@@ -110,17 +161,18 @@ export function dcfResultToMarginData(
 /**
  * Merge a historical series with the DCF rows, reconciling the base year.
  *
- * The DCF's first row restates the last reported fiscal year (its
- * `assumption_current_actuals_fy`), which the historical series usually already
- * carries — on a different caliber: the row's revenue is `revenue_base`, a TTM
- * run-rate, not that year's reported figure. History therefore stays the
- * authority for that year, and the base row is dropped whenever the series
- * reaches it, so the bar shown is the reported actual.
+ * The DCF's base row rests on `revenue_base`, a TTM run-rate — NOT the last
+ * reported fiscal year's figure. When the base row carries the anchor YEAR label
+ * (a legacy artifact with no `forecast_basis`, see `ttmBaseLabel`) it collides with
+ * the historical bar for that year, which is the reported actual and therefore the
+ * authority; the base row is then dropped so the bar shown is the filing, not the
+ * run-rate. When it carries a distinct TTM label ("TTM (Jul 2026)") it no longer
+ * collides and is KEPT, so the run-rate basis is visible beside the FY bar.
  *
- * When the series does NOT reach it (the vendor annual series can lag the DCF's
- * own anchor), dropping the row would leave a hole in the axis — the exact
- * "2025 actual → 2027E forecast, no 2026" case this fixes — so the base row is
- * kept to bridge the two.
+ * When the series does NOT reach the anchor year at all (the vendor annual series
+ * can lag the DCF's own anchor), the base row bridges the two and is kept in every
+ * case — dropping it would leave a hole in the axis (the "2025 actual → 2027E
+ * forecast, no 2026" case this fixes).
  */
 export function mergeDcfBaseRow(
   historical: Array<Record<string, number | string | boolean | null>>,

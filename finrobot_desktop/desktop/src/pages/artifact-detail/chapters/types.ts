@@ -378,6 +378,19 @@ export interface HistoricalBandShape {
   // label the band (e.g. "5y"). Absent on artifacts written before the field.
   window_years?: number | null
   warnings?: string[]
+  // Structural-break disclosure (technical_payload): a YoY EBITDA step >= 3x inside
+  // the band window makes the P25/P90 quantiles a pre-ramp artefact, so the
+  // classification is directional only. `classification_caveat` is a short sentence
+  // to render beside the CHEAP/FAIR/EXPENSIVE badge; null when no break. Absent on
+  // artifacts written before the fields.
+  classification_caveat?: string | null
+  structural_break?: {
+    from_fiscal_year?: string
+    to_fiscal_year?: string
+    from_ebitda?: number
+    to_ebitda?: number
+    step_multiple?: number
+  } | null
 }
 
 export interface TechnicalAnalysisShape {
@@ -484,9 +497,22 @@ export interface ScheduleThirteenAlertShape {
   filing_date: string
   accession_no: string
   schedule_type: '13D' | '13G' | string
+  /** AS-FILED count — never silently rewritten by the backend. */
   shares: number
   pct_of_class?: number | null
   transaction_summary?: string
+  /** Which basis the as-filed count is on. `pre_split` means the filing predates
+   *  an issuer stock split, so `shares` is not comparable to the current shares
+   *  outstanding; `shares_adjusted` (shares × split_factor) then carries the
+   *  split-adjusted count. `null` when no percentage was parsed (basis unknown).
+   *  Absent on artifacts written before the field. */
+  share_basis?: 'pre_split' | 'post_split' | null
+  split_factor?: number | null
+  shares_adjusted?: number | null
+  /** Days between the filing date and the run's as-of; `stale` when > 400 (a 13G
+   *  annual amendment has been missed). */
+  filing_age_days?: number | null
+  stale?: boolean
 }
 
 export type OwnershipDegradedReason =
@@ -511,6 +537,11 @@ export interface OwnershipGovernanceShape {
   /** Total shares held across the listed institutional holders — the denominator
    *  the concentration is measured against. Absent on legacy artifacts. */
   institutional_shares_listed?: number | null
+  /** True when the cached 13F period the holders came from has no completion
+   *  marker — a PARTIAL refresh, so the coverage % and any top-5 concentration
+   *  are computed over a partial index and must be labelled as such. Absent on
+   *  legacy artifacts (treated as complete/unknown). */
+  institutional_index_partial?: boolean
   /** Non-fatal disclosure strings from the SEC ownership step (e.g. partial 13F
    *  coverage). Reader-facing; the chapter surfaces them under the institutions
    *  table. Absent on legacy artifacts. */
@@ -687,6 +718,11 @@ export interface CrossCheckShape {
   high: number
   basis?: string | null
   note?: string | null
+  // Structural-break disclosure for the cross-check's OWN band window ("cheap" is
+  // computed over a window containing a >=3x EBITDA step, so the badge is
+  // directional only). null when the window has no break. The same sentence is
+  // appended to `basis` (dedupe when rendering). Absent on artifacts predating it.
+  band_break_caveat?: string | null
 }
 
 export interface ValuationSynthesisShape {

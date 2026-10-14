@@ -360,10 +360,15 @@ export function CompactArtifactViewer({
     // standalone export supplies its own <main> (export/viewer.tsx).
     <div data-testid="compact-artifact-viewer" style={{ minWidth: 0, padding: '12px 0 60px' }}>
       <ChapterAuditBanner audit={numericAudit} contractFindings={contractFindings} />
-      {/* The metric-authority decision record (`raw_data.data_authority`) — the
-          same reference surface the full report shows. Renders nothing when the
-          block is absent. */}
-      <DataAuthorityPanel authority={inputs.raw_data?.['data_authority']} />
+      {/* The metric-authority decision records — the same reference surface the
+          full report shows: the FINANCIALS record (`data_authority`), the PRICE
+          canonical's own record (`price_authority`) and the coverage counts
+          (`provenance`). Renders nothing when none of the three is present. */}
+      <DataAuthorityPanel
+        authority={inputs.raw_data?.['data_authority']}
+        priceAuthority={inputs.raw_data?.['price_authority']}
+        coverage={inputs.raw_data?.['provenance']}
+      />
 
       {/* Header: type + ticker + headline number */}
       <header style={{ marginBottom: 28 }}>

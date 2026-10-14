@@ -55,7 +55,16 @@ export default function MarginTrendChart({ data, title }: ChartProps) {
                 <stop offset="95%" stopColor={COLORS.ebitda_margin} stopOpacity={0.01} />
               </linearGradient>
             </defs>
-            <XAxis dataKey="year" tick={AXIS_TICK} axisLine={{ stroke: 'var(--border-soft)' }} />
+            <XAxis
+              dataKey="year"
+              // Same forecast-basis labels as the revenue chart — every year must
+              // be labelled or the wide "TTM (Jul 2026)" / "2027E (TTM+1)" ticks
+              // make Recharts hide their neighbours (the axis hole the fix closes).
+              interval={0}
+              tick={{ ...AXIS_TICK, fontSize: 10, angle: -30, textAnchor: 'end' }}
+              height={64}
+              axisLine={{ stroke: 'var(--border-soft)' }}
+            />
             <YAxis
               tickFormatter={formatPercent}
               tick={AXIS_TICK}

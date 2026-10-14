@@ -235,7 +235,16 @@ function renderInline(text: string): ReactNode[] {
       (tok.startsWith('*') && tok.endsWith('*')) ||
       (tok.startsWith('_') && tok.endsWith('_'))
     ) {
-      out.push(<em key={out.length}>{tok.slice(1, -1)}</em>)
+      // Underscore emphasis is never intraword (CommonMark): `_` only opens
+      // emphasis when it is NOT preceded by a word character and only closes it
+      // when NOT followed by one. Without this guard a line carrying two
+      // intraword fields (`fetched_at … from_cache`) matches `_…_` across them
+      // and eats both underscores, rendering `fetchedat … fromcache` — the
+      // engine-brief provenance defect. `*emphasis*` stays intraword-capable.
+      const intraword =
+        tok.startsWith('_') &&
+        (/\w/.test(text[m.index - 1] ?? '') || /\w/.test(text[m.index + tok.length] ?? ''))
+      out.push(intraword ? tok : <em key={out.length}>{tok.slice(1, -1)}</em>)
     } else {
       out.push(tok)
     }

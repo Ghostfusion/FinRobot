@@ -96,6 +96,11 @@ export function ChapterFinancialAnalysis({
   // necessarily baseFY + 1 — prefer the backend's forecast_basis provenance when
   // present (an older artifact lacks it and falls back to the baseFY + 1 rule).
   const firstForecastYear = dcf?.forecast_basis?.first_forecast_year ?? null
+  // The TTM base window's end (e.g. 2026-07-26). Relabels the base row
+  // "TTM (Jul 2026)" so it does NOT collide with the FY bar and get dropped —
+  // without it the chart jumped FY2026 → 2027E and the TTM×growth first forecast
+  // read as +96%.
+  const basePeriodEnd = dcf?.forecast_basis?.base_period_end ?? null
 
   const revenueChartData = (() => {
     const hist = historical ? historicalToRevenueEbitdaData(historical) : []
@@ -104,6 +109,7 @@ export function ChapterFinancialAnalysis({
         dcf as unknown as DCFResult,
         dcfBaseYear,
         firstForecastYear,
+        basePeriodEnd,
       )
       return mergeDcfBaseRow(hist, fcst)
     }
@@ -117,6 +123,7 @@ export function ChapterFinancialAnalysis({
         dcf as unknown as DCFResult,
         dcfBaseYear,
         firstForecastYear,
+        basePeriodEnd,
       )
       return mergeDcfBaseRow(hist, fcst)
     }
@@ -202,6 +209,19 @@ export function ChapterFinancialAnalysis({
             data={revenueChartData}
             title={t('chapter.financial.chart.title.revenueEbitda')}
           />
+          {/* The EBITDA the ProfitWaterfall above shows is a TTM figure (Σ latest
+              4 quarters); the annual bars are the provider's reported EBITDA per
+              fiscal year. The two treat D&A differently (NVDA FY2026 implies ~$14B
+              of D&A vs $3.7B TTM), so the caliber is stated — the gap is a
+              definitional difference, not a data error. The label is published on
+              the frozen payload (`historical_metrics.ebitda_caliber`); the static
+              fallback carries the same disclosure for a legacy artifact. */}
+          <p style={caliberNote} data-testid="ebitda-caliber-note">
+            {historical?.ebitda_caliber ??
+              (locale === 'zh'
+                ? 'EBITDA 口径:年度柱为供应商按财年披露的 EBITDA;上方 TTM EBITDA 为营业利润 + 折旧摊销——两者折旧口径不同,不是数据错误。'
+                : "EBITDA caliber: the annual bars are the provider's reported EBITDA per fiscal year; the TTM EBITDA shown above is computed as operating income + D&A — two different D&A calibers, not a data error.")}
+          </p>
         </SubChapter>
       )}
 
@@ -211,6 +231,16 @@ export function ChapterFinancialAnalysis({
             data={marginChartData}
             title={t('chapter.financial.chart.title.margin')}
           />
+          {/* Honesty label for the series: the DCF carries NO forecast gross
+              margin — the forecast rows carry only EBITDA / operating (EBIT)
+              margin, so the gross-margin line is history-only. Without this the
+              ~66% forecast EBITDA margin was read as a gross-margin forecast
+              against a ~74.7% TTM actual. */}
+          <p style={caliberNote} data-testid="margin-forecast-caliber">
+            {locale === 'zh'
+              ? '预测年份只给 EBITDA 利润率与营业(EBIT)利润率——本模型没有预测毛利率;毛利率曲线为历史口径(仅实际值),不得读作毛利率预测。'
+              : 'Forecast years carry EBITDA margin and operating (EBIT) margin only — this model has no forecast gross margin. The gross-margin line is history-only (actuals); it must not be read as a gross-margin forecast.'}
+          </p>
         </SubChapter>
       )}
 

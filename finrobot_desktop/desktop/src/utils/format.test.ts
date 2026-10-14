@@ -3,6 +3,7 @@ import {
   formatAge,
   formatCurrencyCompact,
   formatDate,
+  formatDateTimeUtc,
   formatSourceDate,
   freshnessColor,
   freshnessTier,
@@ -27,6 +28,26 @@ vi.mock('../i18n', async () => {
     },
   }
 })
+
+// Vitest runs this suite under Node, but the web tsconfig carries no Node
+// types, so reach `process.env` through globalThis behind runtime guards
+// (no unchecked cast on member access). Shape mirrors Node's process object
+// just enough for the TZ-swap helper below.
+function nodeEnv(): { env: Record<string, string | undefined> } {
+  const g: unknown = globalThis
+  if (typeof g === 'object' && g !== null && 'process' in g) {
+    const p: unknown = g.process
+    if (typeof p === 'object' && p !== null && 'env' in p) {
+      const e: unknown = p.env
+      if (typeof e === 'object' && e !== null) {
+        // `e` is a plain object (checked above); process.env is a string map.
+        const env = e as Record<string, string | undefined>
+        return { env }
+      }
+    }
+  }
+  return { env: {} }
+}
 
 describe('formatAge', () => {
   const now = new Date('2026-05-27T12:00:00Z')
@@ -122,10 +143,9 @@ describe('formatCurrencyCompact', () => {
 })
 
 describe('formatDate — date-only strings are TZ-safe (western-hemisphere off-by-one)', () => {
-  // The web tsconfig has no Node types; reach process via globalThis so the
-  // TZ swap (a Node/vitest-only facility) doesn't break the tsc build.
-  const proc = (globalThis as unknown as { process: { env: Record<string, string | undefined> } })
-    .process
+  // TZ swap is a Node/vitest-only facility; nodeEnv() reaches process.env
+  // through globalThis (the web tsconfig has no Node types).
+  const proc = nodeEnv()
   const originalTZ = proc.env.TZ
 
   afterEach(() => {
@@ -161,9 +181,40 @@ describe('formatDate — date-only strings are TZ-safe (western-hemisphere off-b
   })
 })
 
+describe('formatDateTimeUtc — labelled, TZ-stable instant (provenance strip)', () => {
+  const proc = nodeEnv()
+  const originalTZ = proc.env.TZ
+
+  afterEach(() => {
+    if (originalTZ === undefined) delete proc.env.TZ
+    else proc.env.TZ = originalTZ
+  })
+
+  it('renders the UTC wall-clock with an explicit UTC label', () => {
+    expect(formatDateTimeUtc('2026-10-13T20:00:00Z')).toBe('2026-10-13 20:00 UTC')
+  })
+
+  it('is identical in a UTC-negative and a UTC-positive viewer zone', () => {
+    // A bare local time (formatDate 'datetime') showed "3:00 PM" west of UTC
+    // and could be matched to neither the fetch nor the close; the labelled
+    // UTC form is zone-invariant.
+    proc.env.TZ = 'America/New_York'
+    const west = formatDateTimeUtc('2026-10-13T20:00:00Z')
+    proc.env.TZ = 'Asia/Shanghai'
+    const east = formatDateTimeUtc('2026-10-13T20:00:00Z')
+    expect(west).toBe('2026-10-13 20:00 UTC')
+    expect(east).toBe(west)
+  })
+
+  it('null / undefined / invalid → em dash', () => {
+    expect(formatDateTimeUtc(null)).toBe('—')
+    expect(formatDateTimeUtc(undefined)).toBe('—')
+    expect(formatDateTimeUtc('not-a-date')).toBe('—')
+  })
+})
+
 describe('formatSourceDate — UTC calendar day, TZ-stable (source-reported dates)', () => {
-  const proc = (globalThis as unknown as { process: { env: Record<string, string | undefined> } })
-    .process
+  const proc = nodeEnv()
   const originalTZ = proc.env.TZ
   afterEach(() => {
     if (originalTZ === undefined) delete proc.env.TZ

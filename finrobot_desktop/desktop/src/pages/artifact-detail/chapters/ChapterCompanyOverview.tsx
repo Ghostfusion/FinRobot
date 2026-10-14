@@ -95,6 +95,9 @@ function buildSnapshot(
       label: tr('毛利率', 'Gross Margin', locale),
       value: formatPercent(grossMargin, locale),
       raw: grossMargin,
+      // TTM: the value is raw_data.income.gross_margin (extractor TTM income),
+      // so label the period or the tile reads against the narrative's FY margin.
+      period: 'TTM',
       source,
     })
   }
@@ -109,6 +112,8 @@ function buildSnapshot(
       label: tr('营业利润率', 'Operating Margin', locale),
       value: formatPercent(operatingMargin, locale),
       raw: operatingMargin,
+      // Same TTM income statement basis as gross margin — label the period.
+      period: 'TTM',
       source,
     })
   }
@@ -129,6 +134,14 @@ function buildSnapshot(
       label: 'Beta',
       value: formatNumber(market.beta, locale, 2),
       raw: market.beta,
+      // Caliber: this is the provider-reported 5y raw beta; the DCF uses
+      // adjust_beta_blume (2/3·β + 1/3·1.0). Naming both stops the tile (2.22)
+      // and the WACC table (1.81) from reading as a contradiction.
+      note: tr(
+        '行情商 5 年 β（未调整）— DCF 采用 Blume 调整后 β',
+        'Provider 5y β, unadjusted — DCF uses a Blume-adjusted β',
+        locale,
+      ),
       source,
     })
   }

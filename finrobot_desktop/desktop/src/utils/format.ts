@@ -282,6 +282,27 @@ export function formatSourceDate(
 }
 
 /**
+ * Instant → "2026-10-13 20:00 UTC" — the UTC wall-clock of an instant, TZ-stable
+ * and explicitly labelled. For provenance surfaces (the FETCHED-AT strip) where
+ * `formatDate(..., 'datetime')` prints a BARE LOCAL time: a UTC-5 reader saw
+ * "3:00 PM" and could match it to neither the fetch instant nor the session
+ * close. The trailing "UTC" names the zone so the value is unambiguous under any
+ * viewer timezone. Locale-invariant like the 'short' style. Returns '—' on
+ * null/invalid.
+ */
+export function formatDateTimeUtc(d: string | number | Date | null | undefined): string {
+  if (d === null || d === undefined) return '—'
+  const dt = d instanceof Date ? d : new Date(d)
+  if (Number.isNaN(dt.getTime())) return '—'
+  const y = dt.getUTCFullYear()
+  const mo = String(dt.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(dt.getUTCDate()).padStart(2, '0')
+  const h = String(dt.getUTCHours()).padStart(2, '0')
+  const min = String(dt.getUTCMinutes()).padStart(2, '0')
+  return `${y}-${mo}-${day} ${h}:${min} UTC`
+}
+
+/**
  * Month + day, no year — for stamping an as-of date onto a price label
  * ("Close $124.42 · Oct 12"). Date-only strings parse as local midnight (see
  * parseDateInput) so the calendar day round-trips regardless of viewer timezone.

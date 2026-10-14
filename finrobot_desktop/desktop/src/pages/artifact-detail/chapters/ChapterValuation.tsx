@@ -27,6 +27,21 @@ interface EquityBridgeParts {
   equity_value: number
 }
 
+// Caveat under the football field: the band's CHEAP/FAIR/EXPENSIVE rail is computed
+// over a window that may contain a structural EBITDA break, so it is directional
+// only. Warning-adjacent so it is not read as a clean signal.
+const footballCaveatStyle: React.CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10.5,
+  lineHeight: 1.6,
+  color: 'var(--text-muted)',
+  background: 'var(--bg-card-50)',
+  borderLeft: '2px solid color-mix(in srgb, var(--warning) 55%, transparent)',
+  borderRadius: 'var(--radius-sm)',
+  padding: '6px 10px',
+  margin: '8px 0 0',
+}
+
 /** Read + validate the DCF equity bridge. Returns null when the field is absent
  *  (legacy artifact) or the load-bearing legs (EV / net debt / equity) are not
  *  finite — the caller then falls back to the residual-derived bridge.
@@ -178,6 +193,19 @@ export function ValuationBody({
       basis: c.basis ?? null,
       note: c.note ?? null,
     }))
+
+  // Structural-break caveat on the band's OWN-HISTORY cross-check row (slice D
+  // publishes `cross_checks[i].band_break_caveat`; the row's `basis` already ends
+  // with the same sentence, so only surface it separately when it is NOT in the
+  // basis — otherwise the reader sees it twice). The band block's own
+  // `classification_caveat` carries the same string, so the two are deduped below.
+  const crossCheckCaveat =
+    (valuationSynthesis?.cross_checks ?? []).find(
+      (c) => c.band_break_caveat && !(c.basis ?? '').includes(c.band_break_caveat),
+    )?.band_break_caveat ?? null
+  // The band block's own caveat (slice D): same sentence as the cross-check row's
+  // when both describe the same band, so it is rendered only when distinct.
+  const bandOwnHistoryCaveat = historicalBand?.classification_caveat ?? null
   // Implied terminal EV/EBITDA vs today's multiple — a RATIO-space comparison
   // (it cannot share the price axis), rendered as a labelled row under the plot.
   const terminalEvEbitda =
@@ -282,6 +310,21 @@ export function ValuationBody({
       ({
         label: <TermTip term="Terminal Growth">{t('chapter.valuation.kv.terminalGrowth')}</TermTip>,
         value: `${(terminalGrowth * 100).toFixed(2)}%`,
+      } as Cell),
+    // The DCF's implied TERMINAL EV/EBITDA promoted to a first-class assumption:
+    // it is the main reason the target sits BELOW the current multiple (NVDA 7.61x
+    // vs 27.1x today), so it belongs in the assumption grid, not only in the
+    // football field's footnote.
+    terminalEvEbitda !== null &&
+      ({
+        label: locale === 'en' ? 'Terminal EV/EBITDA' : '终值 EV/EBITDA',
+        value: `${terminalEvEbitda.toFixed(2)}×`,
+        sub:
+          todayEvEbitda !== null
+            ? locale === 'en'
+              ? `vs ${todayEvEbitda.toFixed(1)}× today`
+              : `对比当前 ${todayEvEbitda.toFixed(1)}×`
+            : undefined,
       } as Cell),
     taxRate !== null &&
       ({
@@ -558,6 +601,23 @@ export function ValuationBody({
               metric: 'EV/EBITDA',
             }}
           />
+          {/* Structural-break caveat for the band's CHEAP/FAIR/EXPENSIVE rail: when a
+              YoY EBITDA step sits inside the band window, the quantiles (and the
+              own-multiple cross-check computed from them) are driven by the pre-step
+              small-EBITDA base, so the badge is directional only. Rendered right
+              under the football field so the rail cannot be read as a clean signal. */}
+          {bandOwnHistoryCaveat && bandOwnHistoryCaveat !== crossCheckCaveat && (
+            <p data-testid="football-own-history-caveat" style={footballCaveatStyle}>
+              {bandOwnHistoryCaveat}
+            </p>
+          )}
+          {/* The own-history cross-check row's own caveat (slice D); rendered only
+              when the row's `basis` does not already carry it (no double print). */}
+          {crossCheckCaveat && (
+            <p data-testid="football-cross-check-caveat" style={footballCaveatStyle}>
+              {crossCheckCaveat}
+            </p>
+          )}
           {forwardEstimates?.source && (
             <p
               style={{

@@ -39,6 +39,11 @@ interface ChapterTechnicalProps {
   snapshotBeta: number | null
   snapshot52wHigh: number | null
   snapshot52wLow: number | null
+  // The published verdict (`thesis.recommendation`, e.g. "HOLD"). The tactical box
+  // publishes mechanical LONG/SHORT reference levels derived from the DCF fair value
+  // even when the verdict is HOLD, so the two must be reconciled in the reader's view
+  // (owner review: HOLD beside an "Ideal Buy 246.88 above the 228.52 market, R/R 0.94").
+  recommendation?: string | null
 }
 
 export function ChapterTechnical({
@@ -49,6 +54,7 @@ export function ChapterTechnical({
   snapshotBeta,
   snapshot52wHigh,
   snapshot52wLow,
+  recommendation = null,
 }: ChapterTechnicalProps): React.ReactElement {
   const { t, locale } = useI18n()
   const fmtPx = (v: number): string => formatCurrency(v, quoteCurrency, locale, 2)
@@ -105,6 +111,19 @@ export function ChapterTechnical({
   const bands = technical?.historical_bands ?? null
   const anyOverlay = mc !== null || sniper !== null || bands !== null
 
+  // Tactical-vs-verdict reconciliation: a full directional LONG reference box beside
+  // a HOLD verdict is contradictory unless the box is labelled for what it is. The
+  // numbers stay published (they ARE the mechanical reference levels); the HOLD
+  // verdict adds the note that reconciles them. (Chose the reconcile-note route over
+  // gating the cells: the levels remain analytically useful to monitor, and hiding
+  // them would drop published numbers.)
+  const holdReconciliation =
+    (recommendation ?? '').toUpperCase() === 'HOLD'
+      ? locale === 'zh'
+        ? 'HOLD——下列为机械参考位,不是交易信号:方向性价位由 DCF 公允价值机械推导,在 HOLD 评级下仅作监控参考,并非建仓指示。'
+        : 'HOLD — mechanical reference levels, not a trade signal. The directional levels below are derived mechanically from the DCF fair value; with the published verdict on HOLD they are levels to monitor, not an entry instruction.'
+      : null
+
   return (
     <Chapter id="technical">
       {cells.length > 0 ? (
@@ -132,7 +151,9 @@ export function ChapterTechnical({
         </SubChapter>
       )}
 
-      {sniper !== null && <SniperPanel sniper={sniper} t={t} fmtPx={fmtPx} />}
+      {sniper !== null && (
+        <SniperPanel sniper={sniper} t={t} fmtPx={fmtPx} holdNote={holdReconciliation} />
+      )}
 
       {bands !== null && (
         <SubChapter heading={t('chapter.technical.subheading.historicalBands')}>
@@ -379,10 +400,15 @@ function SniperPanel({
   sniper,
   t,
   fmtPx,
+  holdNote = null,
 }: {
   sniper: SniperShape
   t: (key: string, params?: Record<string, string | number>) => string
   fmtPx: (v: number) => string
+  // The verdict-vs-tactical-box reconciliation, pre-resolved by the chapter so this
+  // panel stays free of verdict/locale logic. Rendered only when the box actually
+  // publishes directional cells (in NEUTRAL there are none).
+  holdNote?: string | null
 }): React.ReactElement {
   type Cell = MetricCell
   // Two distinct readouts, NOT one trading-desk block (BACKLOG PM-review ②):
@@ -525,6 +551,11 @@ function SniperPanel({
           <p style={tacticalNote} data-testid="sniper-tactical-note">
             {t('chapter.technical.sniper.tacticalFraming')}
           </p>
+          {holdNote && (
+            <p style={holdReconciliationNote} data-testid="sniper-hold-reconciliation">
+              {holdNote}
+            </p>
+          )}
           <MetricModule
             title={t('chapter.technical.subheading.tacticalReference')}
             accent="primary"
@@ -631,6 +662,16 @@ function HistoricalBandPanel({
           {clsLabel}
         </span>
       </div>
+
+      {/* Structural-break caveat: the CHEAP/FAIR/EXPENSIVE badge is computed over the
+          band window, so when a YoY EBITDA step sits inside it the P25/P90 quantiles
+          are driven by the pre-step base — the badge is directional only. Rendered
+          beside the badge so it is never read as a clean signal. */}
+      {band.classification_caveat && (
+        <p data-testid="band-classification-caveat" style={bandCaveatStyle}>
+          {band.classification_caveat}
+        </p>
+      )}
 
       {timeline.length > 1 && (
         <svg
@@ -758,6 +799,20 @@ const statRow: React.CSSProperties = {
   margin: '4px 0 8px',
 }
 
+// Caliber caveat under the band badge (structural EBITDA break inside the window):
+// warning-adjacent, because it says the CHEAP/FAIR/EXPENSIVE badge is directional.
+const bandCaveatStyle: React.CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10.5,
+  lineHeight: 1.6,
+  color: 'var(--text-muted)',
+  background: 'var(--bg-card-50)',
+  borderLeft: '2px solid color-mix(in srgb, var(--warning) 55%, transparent)',
+  borderRadius: 'var(--radius-sm)',
+  padding: '6px 10px',
+  margin: '0 0 8px',
+}
+
 const mutedNote: React.CSSProperties = {
   fontFamily: 'var(--font-mono)',
   fontSize: 11.5,
@@ -778,4 +833,21 @@ const tacticalNote: React.CSSProperties = {
   letterSpacing: '0.02em',
   color: 'var(--text-muted)',
   margin: '20px 0 0',
+}
+
+// Reconciliation of the tactical box with a HOLD verdict: warning-toned (unlike the
+// quiet tactical caption) because the two DO read as contradictory without it — a
+// directional LONG reference beside a HOLD headline.
+const holdReconciliationNote: React.CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 11,
+  lineHeight: 1.65,
+  letterSpacing: '0.02em',
+  color: 'var(--warning)',
+  background: 'color-mix(in srgb, var(--warning) 10%, transparent)',
+  border: '1px solid color-mix(in srgb, var(--warning) 38%, transparent)',
+  borderLeft: '3px solid var(--warning)',
+  borderRadius: 'var(--radius-sm)',
+  padding: '8px 12px',
+  margin: '10px 0 0',
 }

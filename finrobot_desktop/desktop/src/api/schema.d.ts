@@ -1897,6 +1897,7 @@ export interface components {
         | 'acquisition'
         | 'management'
         | 'market'
+        | 'other'
       /** Headline */
       headline: string
       /**
@@ -2318,6 +2319,11 @@ export interface components {
        * @description Says plainly that this is a mean-reversion cross-check excluded from the published target blend.
        */
       note: string
+      /**
+       * Band Break Caveat
+       * @description Caveat for a cross-check whose own-history band spans a structural EBITDA break (engine.primitives.historical_valuation.EbitdaStructuralBreak) — e.g. a 5-year window that opens on the pre-ramp year, so its P25/P90 blend two earnings regimes. A quantile-only cross-check (low/mid/high + basis) cannot disclose that, and the 2026-10-13 NVDA auditor read exactly such a row ($493, +115%, 'CHEAP' off a p25 distorted by the FY2023 EBITDA base) as a clean signal. Renderers MUST show this beside the row; None when the window holds no break. The SAME string is published as technical_analysis.historical_bands.classification_caveat and as HistoricalBandSpread.structural_break_caveat, so the surfaces cannot disagree.
+       */
+      band_break_caveat?: string | null
     }
     /**
      * DCFInputs
@@ -2543,6 +2549,22 @@ export interface components {
       pe_ttm_lag_quarters?: number | null
       /** Degraded */
       degraded?: string[]
+      /** Retrieved At */
+      retrieved_at?: string | null
+      /** From Cache */
+      from_cache?: boolean | null
+      /** Price Retrieved At */
+      price_retrieved_at?: string | null
+      /** Price From Cache */
+      price_from_cache?: boolean | null
+      /** Session As Of */
+      session_as_of?: string | null
+      /** Metrics Decided */
+      metrics_decided?: number | null
+      /** Metrics Without Record */
+      metrics_without_record?: number | null
+      /** Divergence Warnings */
+      divergence_warnings?: number | null
     }
     /**
      * DcfEquivalenceLineRequest
@@ -2862,11 +2884,44 @@ export interface components {
       field_warnings?: {
         [key: string]: string[]
       }
+      data_authority?: components['schemas']['ReconciliationReport'] | null
+      price_authority?: components['schemas']['ReconciliationReport'] | null
     }
     /** HTTPValidationError */
     HTTPValidationError: {
       /** Detail */
       detail?: components['schemas']['ValidationError'][]
+    }
+    /**
+     * HistoricalBandBreakPoint
+     * @description Structural EBITDA break inside the published window (disclosure only).
+     *
+     *     A ≥3x year-over-year EBITDA step changes the EV/EBITDA denominator regime
+     *     mid-sample, so the P25/P90 quantiles blend two bases (2026-10-13 NVDA: the 5y
+     *     window opens on the pre-ramp FY2023 base, $5.99B → FY2024 $35.58B, giving p25
+     *     37.76x / p90 183.34x). The quantiles themselves are unchanged — this only lets a
+     *     renderer caveat the cheap/fair/expensive badge.
+     */
+    HistoricalBandBreakPoint: {
+      /**
+       * From Fiscal Year
+       * @description ISO fiscal-year-end date of the pre-step FY.
+       */
+      from_fiscal_year: string
+      /**
+       * To Fiscal Year
+       * @description ISO fiscal-year-end date of the post-step FY.
+       */
+      to_fiscal_year: string
+      /** From Ebitda */
+      from_ebitda: number
+      /** To Ebitda */
+      to_ebitda: number
+      /**
+       * Step Multiple
+       * @description EBITDA step magnitude >= 3 between the two fiscal years.
+       */
+      step_multiple: number
     }
     /**
      * HistoricalBandResponse
@@ -2900,6 +2955,13 @@ export interface components {
        * @enum {string}
        */
       classification: 'expensive' | 'fair' | 'cheap' | 'unknown'
+      /** @description Structural EBITDA break inside the window, or null. Same disclosure the report publishes (technical_analysis.historical_bands.structural_break / CrossCheck.band_break_caveat); the badge above must be read as directional when this is set. */
+      structural_break?: components['schemas']['HistoricalBandBreakPoint'] | null
+      /**
+       * Classification Caveat
+       * @description One-sentence caveat for the badge when a structural break is present (null otherwise). Render it next to the classification.
+       */
+      classification_caveat?: string | null
       /** Warnings */
       warnings?: string[]
     }
@@ -3407,6 +3469,72 @@ export interface components {
       /** Ceiling Price */
       ceiling_price?: number | null
     }
+    /** MetricCandidate */
+    MetricCandidate: {
+      /** Source */
+      source: string
+      /** Value */
+      value: number | null
+      /** Eligible */
+      eligible: boolean
+      /** Deviation Pct */
+      deviation_pct: number | null
+      /** Deviation Abs */
+      deviation_abs: number | null
+      /** Reason Code */
+      reason_code: string
+      /**
+       * Non Independent
+       * @default false
+       */
+      non_independent: boolean
+    }
+    /** MetricDecision */
+    MetricDecision: {
+      /** Metric */
+      metric: string
+      /** Status */
+      status: string
+      /** Value */
+      value: number | null
+      /** Unit */
+      unit: string
+      /** Currency */
+      currency: string | null
+      /** Selected Source */
+      selected_source: string | null
+      /** Is Authoritative */
+      is_authoritative: boolean
+      /** Reason Code */
+      reason_code: string
+      /** Policy Version */
+      policy_version: string
+      /** Definition Version */
+      definition_version: string
+      /** Basis */
+      basis: string
+      /** Comparability */
+      comparability: string
+      /** Tolerance Pct */
+      tolerance_pct: number
+      /** Tolerance Abs */
+      tolerance_abs: number | null
+      /** Period End */
+      period_end: string | null
+      /** Period Basis */
+      period_basis: string | null
+      /** Disagreement Pct */
+      disagreement_pct: number | null
+      /** Agreement Is Independent */
+      agreement_is_independent: boolean
+      /** Candidates */
+      candidates: components['schemas']['MetricCandidate'][]
+      /**
+       * Reconciled At
+       * Format: date-time
+       */
+      reconciled_at: string
+    }
     /**
      * MonteCarloRequest
      * @description Request body for Monte Carlo endpoint.
@@ -3745,6 +3873,20 @@ export interface components {
       created_at: string
       /** Age Label */
       age_label: string
+    }
+    /** ReconciliationReport */
+    ReconciliationReport: {
+      /** Policy Version */
+      policy_version: string
+      /** Run As Of */
+      run_as_of: string | null
+      /**
+       * Clock
+       * Format: date-time
+       */
+      clock: string
+      /** Decisions */
+      decisions: components['schemas']['MetricDecision'][]
     }
     /** RefreshRuntimeState */
     RefreshRuntimeState: {

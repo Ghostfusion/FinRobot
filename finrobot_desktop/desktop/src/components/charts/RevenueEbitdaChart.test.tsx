@@ -34,4 +34,11 @@ describe('RevenueEbitdaChart', () => {
     const heading = screen.getByText('Revenue & EBITDA')
     expect(heading.tagName).toBe('SPAN')
   })
+
+  // The x-axis must label EVERY year, including the wide DCF forecast-basis labels
+  // ("TTM (Jul 2026)" / "2027E (TTM+1)") that made Recharts' default auto-interval
+  // hide their neighbours. Pinned by `interval={0}` on the XAxis, but NOT assertable
+  // here: jsdom gives the ResponsiveContainer no layout, so Recharts renders no ticks
+  // (verified 0 tick nodes, with and without a ResizeObserver / getBoundingClientRect
+  // stub). Verified in the live DOM of the audited report instead.
 })
