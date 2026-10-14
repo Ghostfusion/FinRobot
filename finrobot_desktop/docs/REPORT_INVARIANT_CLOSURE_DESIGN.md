@@ -493,11 +493,36 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
 2. **Golden fixtures.** The pinned instances (§1.1) plus the GMED pair become fixtures in
    `tests/artifact/`, stored as payloads, not as hand-built objects — so a clause is tested
    against the artifact that produced the defect, including the `99cdca` ordering case.
-3. **Metamorphic relations** for the numeric core, where no ground truth exists: scaling
-   `shares_outstanding` by *k* must scale every per-share output by 1/*k* and leave the band's
-   `sample_count` unchanged (this catches instance B in one assertion: 0 vs 948); deleting a
-   numerator must withhold every ratio that used it; swapping the provider must change the
-   `basis` strings. See [metamorphic testing for scientific software](https://pmc.ncbi.nlm.nih.gov/articles/PMC7252536/)
+   **Shipped:** 16 payloads under `tests/artifact/fixtures/contract/`, written by
+   `scripts/extract_contract_fixtures.py` (a declared path spec per artifact — a full row reaches
+   3 MB, `insider_transactions` alone is 1 MB — values verbatim) and asserted by
+   `tests/artifact/test_contract_fixtures.py`, which re-runs every live and staged clause over
+   each payload and compares against the verdict map recorded at extraction. 665 KB total. Two
+   fixtures exist to stay QUIET — SMCI's withheld-path disclaimer for `C14b` and AMZN's 2009-era
+   long history for `C12c` — because a false-positive guard that is never tested is a guard that
+   silently rots.
+3. **Metamorphic relations** for the numeric core, where no ground truth exists. Measured against
+   the tree as it stands, two of the three already exist and the third belongs beside them rather
+   than in a new file:
+
+   - *scaling `shares_outstanding` by k scales every per-share output by 1/k and leaves the band's
+     `sample_count` unchanged* — **added** to `tests/unit/test_valuation_band_cross_check.py`. This
+     is the assertion that would have caught instance B, whose band resolved to 0 samples because
+     the call omitted the run's share count; its sibling pins the other half, that a band with no
+     sample count (0 or absent) never prints "0 samples" but says the count is unavailable.
+   - *deleting a numerator yields no row instead of a zero* — already pinned there
+     (`test_missing_ttm_ebitda_emits_no_entry`, `test_missing_shares_or_net_debt_emits_no_entry`).
+   - *swapping the provider* — already pinned in `tests/unit/test_data_authority.py`: the
+     `selected_source` follows the provider, and the decision record is order-independent
+     (`test_reconcile_results_is_deterministic_and_sorted_by_metric`).
+
+   **Correction to this rule as first written:** the *basis string* does NOT change with the
+   provider. Measured 2026-10-14 by reconciling the same payload from `fmp` and from `yfinance`:
+   `gross_margin`'s basis is *"gross_profit / revenue on FMP's TTM income-statement caliber"* for
+   BOTH — the basis names the caliber's ORIGIN, not the source of this value. A basis string is
+   therefore not evidence of who supplied the number, which is exactly why `C10d` reports "the
+   basis text names a provider other than `selected_source`" as an observation to review rather
+   than as a violation. See [metamorphic testing for scientific software](https://pmc.ncbi.nlm.nih.gov/articles/PMC7252536/)
    and the [banking-software application](https://www.cs.montana.edu/izurieta/pubs/IRI_2023.pdf).
 4. **Per-clause unit tests** in `tests/unit/test_artifact_contract.py` (existing file), each
    clause with one passing and one violating payload, and a test that a violation **never raises**.

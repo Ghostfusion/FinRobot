@@ -115,6 +115,61 @@ class TestCrossCheckMath:
         assert _band_cross_check(shares_outstanding=None) == []
         assert _band_cross_check(current_net_debt=None) == []
 
+    def test_scaling_shares_by_k_scales_the_band_by_one_over_k_and_keeps_the_samples(self):
+        """§7.3's metamorphic relation, and the one assertion that would have caught
+        instance B.
+
+        The row is the EV→equity bridge OVER shares, so scaling the share count by k
+        must scale low/mid/high by exactly 1/k. The band's own ``sample_count`` is a
+        property of the BAND, not of the count, so it must not move — and it is the
+        quantity that says whether the band is evidence at all. Instance B (THC
+        20:27:40) published a cross-check its own decision had never read because
+        ``fetch_reverse_multiple_band`` was called without the run's share count and
+        the band resolved to 0 samples; the fix is a share count, and this test is
+        what says the two quantities are independent.
+        """
+        band = (8.0, 12.0)
+        small = _band_cross_check(
+            ttm_ebitda=1_000.0,
+            current_net_debt=2_000.0,
+            shares_outstanding=100.0,
+            noncontrolling_interest=0.0,
+            preferred_stock=0.0,
+            historical_ev_ebitda_band=band,
+            historical_ev_ebitda_median=10.0,
+            historical_ev_ebitda_window_years=5,
+            historical_ev_ebitda_sample_n=948,
+        )[0]
+        large = _band_cross_check(
+            ttm_ebitda=1_000.0,
+            current_net_debt=2_000.0,
+            shares_outstanding=1_000.0,
+            noncontrolling_interest=0.0,
+            preferred_stock=0.0,
+            historical_ev_ebitda_band=band,
+            historical_ev_ebitda_median=10.0,
+            historical_ev_ebitda_window_years=5,
+            historical_ev_ebitda_sample_n=948,
+        )[0]
+
+        # (8×1000 − 2000)/100 = 60 · (10×1000 − 2000)/100 = 80 · (12×1000 − 2000)/100 = 100
+        assert (small.low, small.mid, small.high) == pytest.approx((60.0, 80.0, 100.0))
+        for small_leg, large_leg in ((small.low, large.low), (small.mid, large.mid)):
+            assert large_leg == pytest.approx(small_leg / 10.0, rel=1e-12)
+        assert large.high == pytest.approx(small.high / 10.0, rel=1e-12)
+        assert "948 samples" in small.basis
+        assert "948 samples" in large.basis
+
+    def test_a_band_with_no_sample_count_never_claims_one(self):
+        """The count is the evidence's quantity: ``sample_count`` 0 or absent means
+        the band did not compute, so the row must say the count is unavailable
+        instead of printing "0 samples" as if a zero-sample band were a measurement.
+        """
+        for n in (None, 0):
+            check = _band_cross_check(historical_ev_ebitda_sample_n=n)[0]
+            assert "0 samples" not in check.basis
+            assert "sample count unavailable" in check.basis
+
     def test_bank_suppressed(self):
         """EV/EBITDA is a category error for a balance-sheet financial — the
         cross-check row is suppressed alongside the method row."""
