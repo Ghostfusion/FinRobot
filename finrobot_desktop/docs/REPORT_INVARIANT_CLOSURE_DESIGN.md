@@ -346,6 +346,15 @@ evidence string from `cross_checks` (count, names, whether any brackets the pric
 synthesis' `degradation_note` quote it. This is the same defect class as the frozen
 `ebitda_caliber` constant: a label that encodes a rule rather than a reading.
 
+**Staging note (2026-10-14) — "replaces" was one word too strong.** The fix has two halves and the
+staged set implements both, as a pair rather than as one rewritten clause:
+live `C6` fires when a single-method headline's basis carries **no** disclosure at all, and the
+staged `C6b` fires when the note **denies** a cross-check the payload prints (instance B's shape).
+Those are different predicates over the same sentences, so neither replaces the other — the
+promotion diff keeps both, and additionally lets live `C6`'s evidence report the cross-check facts
+the way `C6b`'s already does. Read "replaces" above as "replaces the *derivation*, not the
+clause".
+
 ---
 
 ## 5. Ordering: the gate must see the evidence the report prints
