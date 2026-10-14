@@ -2,7 +2,9 @@
 // state (system group / overview) lives here; local sort density lives in
 // coverageStore. Opening a ticker auto-enrols it into Studied Tickers.
 
+import { useEffect, useMemo, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useRunStreamStore, type RunStatus } from '../stores/runStreamStore'
 import {
   coverageApi,
   type CoverageBatchProgress,
@@ -104,6 +106,69 @@ export function useCoverageOverview(groupId: string | null): CoverageOverviewSta
     refreshing: fresh.isFetching,
     refreshNoop: data?.refresh_noop ?? false,
   }
+}
+
+/** Terminal run statuses — the run has produced (or failed to produce) its
+ *  artifact, which is the moment a coverage row changes. */
+const TERMINAL_RUN_STATUSES: ReadonlySet<RunStatus> = new Set<RunStatus>([
+  'completed',
+  'failed',
+  'cancelled',
+])
+
+/**
+ * Keep the coverage table honest WITHOUT a manual reload.
+ *
+ * `useCoverageOverview` re-fetches only when something in this client invalidates
+ * it — a member mutation, the coverage page's own batch completion, or the 刷新
+ * button — and the query-client defaults (`staleTime` 5 min,
+ * `refetchOnWindowFocus: false`) mean a plain route change does not re-fetch
+ * either. So a report started from the ticker workspace, which is the normal
+ * entry point, left its card showing pre-run state, and a name the run enrolled
+ * server-side was invisible until the user reloaded the page — the reported bug:
+ * a KGC report had run and existed in the artifact store, yet its card only
+ * appeared after F5.
+ *
+ * The run stream store already tracks every run THIS client started, so drive the
+ * invalidation off it. Exactly two transitions change what the table shows
+ * (latest artifact / verdict / target / run state), and both are in the signature:
+ *   - a ticker gaining a runId → the run was accepted, `run_state` changes
+ *   - a run reaching a terminal status → its artifact exists, verdict/target change
+ * SSE step ticks must NOT refetch, so the subscription key is that coarse
+ * signature rather than the run objects (which change on every progress frame).
+ *
+ * Mounted app-wide (AppShell) rather than on the coverage page: a run started from
+ * `/stocks/:ticker` finishes while that page is unmounted, and it is the SHARED
+ * query cache the coverage page renders from when the user gets there.
+ *
+ * Scope note: a run started outside this client (CLI, HTTP API, another window)
+ * never enters the store, so those still need the page's 刷新 button — the
+ * server-side enrolment fix and this bridge together cover everything the app
+ * itself can do.
+ */
+export function useCoverageRunBridge(): void {
+  const queryClient = useQueryClient()
+  const runs = useRunStreamStore((s) => s.runs)
+  const signature = useMemo(
+    () =>
+      Object.values(runs)
+        .map(
+          (r) =>
+            `${r.ticker}:${r.runId}:${TERMINAL_RUN_STATUSES.has(r.status) ? 'done' : r.status}`,
+        )
+        .sort()
+        .join('|'),
+    [runs],
+  )
+  const lastSignature = useRef<string | null>(null)
+
+  useEffect(() => {
+    const previous = lastSignature.current
+    lastSignature.current = signature
+    // First pass only records the baseline: mounting the shell is not a change.
+    if (previous === null || previous === signature) return
+    void queryClient.invalidateQueries({ queryKey: ['coverage'] })
+  }, [signature, queryClient])
 }
 
 /**

@@ -150,7 +150,17 @@ export function StockWorkspace(): React.ReactElement {
     if (!symbol || !accepted) return
     if (lastStudiedRef.current === symbol) return
     lastStudiedRef.current = symbol
-    addStudied.mutate(symbol)
+    addStudied.mutate(symbol, {
+      // Latch while the POST is in flight, but RELEASE it if the call fails: the
+      // ref exists to stop a re-render re-POSTing, and latching before the call
+      // made one dropped enrolment permanent for the whole session (a live KGC
+      // open whose POST never reached the server stayed out of Studied Tickers
+      // even after its report was run and its artifact opened). The server is
+      // idempotent, so a retry after a genuine failure is a cheap no-op.
+      onError: () => {
+        if (lastStudiedRef.current === symbol) lastStudiedRef.current = null
+      },
+    })
   }, [symbol, accepted, addStudied])
 
   if (!symbol) {

@@ -13,6 +13,7 @@ import { MandatoryUpdateGate } from '../components/MandatoryUpdateGate'
 import { AiOnboardingGate } from '../components/AiOnboardingGate'
 import { BootSplash } from '../components/BootSplash'
 import { AppFooter } from '../components/AppFooter'
+import { useCoverageRunBridge } from '../hooks/useCoverage'
 import { useHealth } from '../hooks/useHealth'
 import { useI18n } from '../i18n'
 import { useUiStore } from '../stores/uiStore'
@@ -34,6 +35,12 @@ export function AppShell(): React.ReactElement {
   // erroring against a booting one. See useHealth for the 'starting' contract.
   const { data: health } = useHealth()
   const booting = health?.level === 'starting'
+
+  // A run finishing anywhere in the app invalidates the coverage queries, so the
+  // Coverage table reflects a new report (and a name that run enrolled) without a
+  // manual reload. Shell-level because the run usually finishes while the user is
+  // on the ticker workspace, not on /coverage.
+  useCoverageRunBridge()
 
   // The Research homepage is the luminous cockpit: paint the cockpit glow at
   // the SHELL level (behind the title bar too, so it frosts into it rather

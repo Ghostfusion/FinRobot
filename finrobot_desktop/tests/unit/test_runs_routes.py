@@ -1097,3 +1097,101 @@ async def test_list_runs_accepts_cancelled_status_filter(tmp_path: Any) -> None:
     assert resp.status_code == 200, resp.text
     assert [row["run_id"] for row in resp.json()] == [record.run_id]
     await store.close()
+
+
+# ---------------------------------------------------------------------------
+# Studied-Tickers enrolment on run creation
+# ---------------------------------------------------------------------------
+
+
+def _stub_pipeline_creation(monkeypatch: Any) -> Any:
+    """Wire the cheapest spawn: a factory dict + a no-op pipeline runner."""
+    from finrobot.routes import runs as runs_mod
+
+    monkeypatch.setattr(
+        runs_mod, "get_pipeline_factories", lambda: {"research": lambda agents: MagicMock()}
+    )
+    monkeypatch.setattr(runs_mod, "_run_pipeline", AsyncMock())
+
+
+@pytest.mark.asyncio
+async def test_create_run_enrols_the_ticker_in_studied_tickers(
+    tmp_path: Any, monkeypatch: Any
+) -> None:
+    """A created run is the strongest "studied this name" signal, so it enrols the
+    ticker server-side.
+
+    The SPA's own auto-add rides the ticker workspace's price-query gate. A live
+    KGC open dropped that POST — no enrolment request ever reached the server —
+    yet the report still ran, and the name stayed out of Coverage until a manual
+    reload ("i thought it will add without reloading the page"). Riding the created
+    run makes the guarantee independent of any client gate and covers every entry
+    point: single run, Coverage batch, and the HTTP API.
+    """
+    from finrobot.routes import runs as runs_mod
+    from finrobot.run_store import RunStore
+
+    enrol = AsyncMock()
+    monkeypatch.setattr(runs_mod, "ensure_studied_membership", enrol)
+    _stub_pipeline_creation(monkeypatch)
+
+    store = RunStore(tmp_path / "runs.db")
+    app = _make_app_with_store(store)
+    app.state.coverage_store = MagicMock()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        resp = await c.post("/api/runs", json={"pipeline_type": "research", "ticker": "kgc"})
+
+    assert resp.status_code == 200, resp.text
+    enrol.assert_awaited_once()
+    assert enrol.await_args.args[0] is app.state.coverage_store
+    # The NORMALISED ticker (what the run row carries), not the raw body value.
+    assert enrol.await_args.args[1] == "KGC"
+    await store.close()
+
+
+@pytest.mark.asyncio
+async def test_create_run_without_a_coverage_store_is_fine(tmp_path: Any, monkeypatch: Any) -> None:
+    """Harnesses and headless runtimes wire no coverage store: the enrolment is a
+    silent skip, never an AttributeError."""
+    from finrobot.routes import runs as runs_mod
+    from finrobot.run_store import RunStore
+
+    enrol = AsyncMock()
+    monkeypatch.setattr(runs_mod, "ensure_studied_membership", enrol)
+    _stub_pipeline_creation(monkeypatch)
+
+    store = RunStore(tmp_path / "runs.db")
+    app = _make_app_with_store(store)  # no coverage_store
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        resp = await c.post("/api/runs", json={"pipeline_type": "research", "ticker": "AAPL"})
+
+    assert resp.status_code == 200, resp.text
+    enrol.assert_not_awaited()
+    await store.close()
+
+
+@pytest.mark.asyncio
+async def test_create_run_survives_a_failed_enrolment(tmp_path: Any, monkeypatch: Any) -> None:
+    """Enrolment is best-effort: the run row already exists and spawning its
+    pipeline must not depend on a coverage write. A locked coverage.db (sqlite is
+    single-writer) is the plausible failure this pins."""
+    import sqlite3
+
+    from finrobot.routes import runs as runs_mod
+    from finrobot.run_store import RunStore
+
+    enrol = AsyncMock(side_effect=sqlite3.OperationalError("database is locked"))
+    monkeypatch.setattr(runs_mod, "ensure_studied_membership", enrol)
+    _stub_pipeline_creation(monkeypatch)
+
+    store = RunStore(tmp_path / "runs.db")
+    app = _make_app_with_store(store)
+    app.state.coverage_store = MagicMock()
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        resp = await c.post("/api/runs", json={"pipeline_type": "research", "ticker": "AAPL"})
+
+    assert resp.status_code == 200, resp.text
+    enrol.assert_awaited_once()
+    record = await store.get_run(resp.json()["run_id"])
+    assert record is not None and record.ticker == "AAPL"
+    await store.close()

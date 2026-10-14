@@ -15,6 +15,7 @@ from pydantic import BaseModel, ValidationError
 from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
+from finrobot.coverage.service import ensure_studied_membership
 from finrobot.engine.data.interface import ProviderError
 from finrobot.engine.data.ticker import validate_ticker
 from finrobot.llm_probe import LlmProbeGate
@@ -178,6 +179,42 @@ async def _source_lineage_verdict(
     return await store.verify_lineage(source_run.run_id)
 
 
+# Failure modes of the best-effort Studied-Tickers enrolment below: the coverage
+# store is aiosqlite (sqlite3.Error / OSError), its rows are pydantic models
+# (ValidationError IS a ValueError), and a group row that vanishes between the
+# two awaits surfaces as RuntimeError. Enumerated rather than a bare
+# ``except Exception`` — the project's no-bare-catch rule
+# (tests/audit/test_architecture.py::TestExceptionHygiene).
+_ENROL_FAILURES = (ValueError, RuntimeError, OSError, sqlite3.Error)
+
+
+async def _enrol_in_studied_tickers(request: Request, ticker: str) -> None:
+    """Add ``ticker`` to the default Studied Tickers workspace. Best-effort.
+
+    Why a created RUN enrols and not just an opened page: the desktop's
+    ``useAddStudiedTicker`` fires from the ticker workspace's price-query gate, so
+    an open whose price call never settles — a dropped request, a provider
+    outage, a slow queue — leaves a name the user *ran research on* out of the
+    workspace. That is the exact failure the workspace comment already names
+    ("跑过的东西 couldn't be found in the workspace"), and it is what a live KGC
+    open hit: the report ran, the artifact was correct, and no enrolment request
+    ever reached the server. A created run is the strongest "studied this name"
+    signal available and the one signal EVERY entry point shares (single run,
+    Coverage batch, API), so enrolment rides it. Idempotent server-side.
+
+    Never raises: the run row exists by now and spawning its pipeline must not
+    depend on a coverage write. A missing store (unit harnesses, a headless
+    runtime) is a silent skip.
+    """
+    store = getattr(request.app.state, "coverage_store", None)
+    if store is None:
+        return
+    try:
+        await ensure_studied_membership(store, ticker)
+    except _ENROL_FAILURES as exc:
+        logger.warning("Studied-Tickers enrolment failed for %s: %s", ticker, exc)
+
+
 async def spawn_run(
     request: Request,
     pipeline_type: str,
@@ -281,6 +318,10 @@ async def spawn_run(
         language=language,
         source_artifact_id=source_artifact_id,
     )
+    # A run for this ticker exists → it is studied. Rides the created run rather
+    # than a client gate so the name can never be "ran but not findable" (see
+    # _enrol_in_studied_tickers).
+    await _enrol_in_studied_tickers(request, norm)
     task = asyncio.create_task(_run_pipeline(record.run_id, request))
     request.app.state.run_tasks[record.run_id] = task
     return record
