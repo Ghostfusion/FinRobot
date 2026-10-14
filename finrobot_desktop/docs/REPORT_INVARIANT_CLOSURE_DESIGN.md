@@ -367,6 +367,30 @@ The division of labour matters and is already proven by `4e1a75f`: the compute l
 **verification** (a clause that would have refused to publish instance B's target). Neither
 layer alone closes the class.
 
+**Measured against HEAD (2026-10-14).** The first half of phase 1 has shipped, and the evidence is
+that it is *one* service with *one* count: `fetch_reverse_multiple_band` is called at three sites —
+`compute/coordinators/technical_payload.py` (the technical chapter) and `equity_research.py` twice
+(the DCF-not-applicable fallback and the main synthesis) — and every one of them passes
+`financial_data.market.shares_outstanding`, all reaching the same leaf
+(`compute_bands_via_data_layer` → `resolve_band_shares`). The 20:35:32 log line above is that band
+resolving *with* the override, eight minutes after instance B was written without it.
+
+What is still open is the second half, and it is exactly the back-fill: `publish_band_cross_check`
+(`compute/operators/audit/valuation_band.py`) still injects the row **post-verdict** when the
+synthesis' own fetch came back empty — reading the frozen technical band, which is the same run's
+data, so nothing is fabricated, but the ROW is still one the verdict never read. The pipeline's own
+log line names that shape (`… band unavailable (no EV/EBITDA method row, no cross-check)`).
+Two closures are available and both are run-path edits, so they wait for the owner:
+
+- make the synthesis' band a **precondition** — the directional call does not proceed without the
+  band it is required to consult, or it records that it had none (the `Withheld` measure of §6);
+- keep the back-fill **display-only** and tagged as not-consulted-by-the-verdict, so a reader is
+  never shown a cross-check that reads as corroboration of a call that never saw it (`C6b` is the
+  clause that catches a note claiming otherwise, and it is staged).
+
+Armed, `C8` refuses to publish what instance B published; that is the verification half, and it is
+staged pending the same go-ahead.
+
 ---
 
 ## 6. Phase 2 — one typed measurement, one vocabulary
