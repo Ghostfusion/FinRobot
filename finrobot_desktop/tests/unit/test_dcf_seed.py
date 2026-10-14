@@ -465,13 +465,81 @@ class TestDecliningFirmGrowth:
         assert inputs.revenue_growth_rates[0] == pytest.approx(-0.20)
 
     def test_high_growth_still_decays_to_terminal(self):
-        # Regression: the positive-growth decay path must be unchanged.
+        # Regression: the positive-growth decay path must be unchanged. The latest
+        # actual tracks the CAGR here, as it does for a firm genuinely compounding at
+        # that rate — a CAGR far ABOVE the current run-rate is the step-change case
+        # (TestGrowthSeedReconcilesAgainstCurrentActual).
         fin = _aapl_financials()
-        hist = _aapl_historical().model_copy(update={"cagr_revenue": 0.30})
+        hist = _aapl_historical().model_copy(
+            update={"cagr_revenue": 0.30, "revenue_growth_yoy": [None, 0.31, 0.29, 0.30]}
+        )
         inputs = seed_dcf_inputs(fin, hist)
         assert inputs.revenue_growth_rates[0] == pytest.approx(0.30)
         assert inputs.revenue_growth_rates[-1] == pytest.approx(0.030)
         assert "fading" in inputs.assumption_provenance["revenue_growth_rates"]
+        assert (
+            "seeded from the latest actual"
+            not in inputs.assumption_provenance["revenue_growth_rates"]
+        )
+
+
+class TestGrowthSeedReconcilesAgainstCurrentActual:
+    """A trailing CAGR is an AVERAGE; a step inside its window is not growth.
+
+    GMED 2026-10-14: a 42.2% trailing 3yr CAGR (NuVasive doubled the revenue base)
+    seeded a 40%/yr fade while the engine's own `assumption_current_actuals` — the
+    figure the report's model-vs-current table prints — held +16.7%. The projection
+    ran 2.4x the disclosed run-rate, the DCF landed 2.9x the market price, and its
+    point target was withheld; the BUY then rested on a single method the report
+    refused to publish a number for. Above `_STEP_CHANGE_RATIO` the seed rebases on
+    the current actual, so a real hyper-grower (CAGR within 2x of its actual) is
+    untouched.
+    """
+
+    def _history(self, cagr: float, latest_yoy: float | None) -> HistoricalMetrics:
+        return _aapl_historical().model_copy(
+            update={"cagr_revenue": cagr, "revenue_growth_yoy": [None, 0.10, 0.12, latest_yoy]}
+        )
+
+    def test_acquisition_inflated_cagr_rebases_on_the_current_actual(self):
+        inputs = seed_dcf_inputs(_aapl_financials(), self._history(0.422, 0.1665))
+        # The seeded fade starts at the current run-rate, not the 42.2% average.
+        assert inputs.revenue_growth_rates[0] == pytest.approx(0.1665)
+        assert inputs.revenue_growth_rates[-1] == pytest.approx(0.030)
+        prov = inputs.assumption_provenance["revenue_growth_rates"]
+        # The true historical CAGR is still named (the reader can see the gap)…
+        assert "trailing 3yr revenue CAGR 42.2%" in prov
+        assert "seeded from the latest actual 16.7% instead" in prov
+        assert "step change inside the window" in prov
+        # …but the clamp clause must NOT claim the schedule opens at the cap: the
+        # first live run of the rebase still printed "capped to 40.0% for the first
+        # forecast year" beside a schedule opening at 16.7%.
+        assert "capped to 40.0%" not in prov
+        assert "(the historical actual, not a seeded forward rate)" in prov
+
+    def test_a_genuine_hyper_grower_is_not_rebased(self):
+        # 100% CAGR against a +65% actual is 1.5x — under the ratio → untouched.
+        inputs = seed_dcf_inputs(_aapl_financials(), self._history(1.00, 0.65))
+        assert inputs.revenue_growth_rates[0] == pytest.approx(0.40)  # the cap
+        assert (
+            "seeded from the latest actual"
+            not in inputs.assumption_provenance["revenue_growth_rates"]
+        )
+
+    def test_a_flat_or_declining_latest_year_keeps_the_cagr_seed(self):
+        # Deliberate carve-out: with no positive run-rate to rebase ON, the CAGR path
+        # (and the floor's −20% clamp) stands. Rebasing a decade on a single flat or
+        # negative year is the harder call and stays out of this guard.
+        for latest in (0.0, -0.05, None):
+            inputs = seed_dcf_inputs(_aapl_financials(), self._history(0.40, latest))
+            assert inputs.revenue_growth_rates[0] == pytest.approx(0.40)
+
+    def test_the_rebased_seed_still_bends_to_the_floor_when_actual_is_negative(self):
+        # A high CAGR whose actual is a decline: no rebase, so the CAGR path's own
+        # floor/decay governs it unchanged.
+        inputs = seed_dcf_inputs(_aapl_financials(), self._history(0.40, -0.30))
+        assert inputs.revenue_growth_rates[0] == pytest.approx(0.40)
+        assert inputs.revenue_growth_rates[-1] == pytest.approx(0.03)
 
 
 class TestTrailingCagrLabel:
@@ -489,6 +557,11 @@ class TestTrailingCagrLabel:
             update={
                 "years": [2023, 2024, 2025, 2026],
                 "revenue": [26_974e6, 60_922e6, 130_497e6, 215_938e6],
+                # Real YoY, consistent with the revenue series above: a 100% trailing
+                # CAGR beside a +65% latest actual is 1.5x, below the 2x step-change
+                # ratio, so this history must NOT rebase the seed (see
+                # _STEP_CHANGE_RATIO).
+                "revenue_growth_yoy": [None, 1.2585, 1.1420, 0.6547],
                 "cagr_revenue": 1.0004509499443963,  # the real 3-interval CAGR
             }
         )
@@ -1238,11 +1311,22 @@ def _nwc_history(revenue: list[float], cwc: list[float], cagr: float | None) -> 
     """AAPL-shaped history with revenue / ΔNWC / trailing CAGR overridden to
     isolate the nwc_pct_revenue degradation path. The revenue series drives the
     marginal ratio (build/Δrev over growth years); cagr_revenue independently
-    drives the explicit growth schedule the degraded drag scales by."""
+    drives the explicit growth schedule the degraded drag scales by.
+
+    ``revenue_growth_yoy`` is re-derived from the overridden revenue series: it is
+    the field the seed reconciles its CAGR against (a trailing CAGR far above the
+    latest actual is a step change inside the window, not a run-rate — see
+    ``_STEP_CHANGE_RATIO``), so leaving AAPL's own +2% in place while overriding the
+    revenue series described a firm that never existed and made the seed depend on
+    a number the fixture does not model.
+    """
     hist = _aapl_historical()
     hist.revenue = revenue
     hist.change_in_working_capital = cwc
     hist.cagr_revenue = cagr
+    hist.revenue_growth_yoy = [None] + [
+        revenue[i] / revenue[i - 1] - 1 for i in range(1, len(revenue))
+    ]
     return hist
 
 

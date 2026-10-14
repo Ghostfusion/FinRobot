@@ -40,6 +40,14 @@ __all__ = [
 #: (NVDA's "$297.9M largest single sale"), which no computed aggregate can contradict.
 _FLOW_RE = re.compile(r"\b(?P<word>purchases|sales)\b", re.IGNORECASE)
 
+#: The NET flow leg, claimed by its own phrase because the direction lives in the
+#: words, not in the amount's sign ("net sellers of $4.41M"). "sales"/"purchases" are
+#: deliberately absent — they are already covered by ``_FLOW_RE``, and a "net sales of
+#: $2.9B" revenue line inside a management sentence must never be read as insider flow.
+_NET_FLOW_RE = re.compile(
+    r"\bnet\s+(?:insider\s+)?(?:sellers?|buyers?|selling|buying|flow)\b", re.IGNORECASE
+)
+
 #: Dollar amounts, with the usual magnitude suffix. The suffix — and the space before
 #: it — is part of the match ONLY when a suffix letter is really there, so a bare
 #: "$259.87 of purchases" matches exactly "$259.87" and a correction cannot eat the
@@ -191,12 +199,20 @@ def _flow_mismatches(text: str, ownership: object) -> list[FlowMismatch]:
         return []
     buy = ownership.get("insider_buy_value")
     sell = ownership.get("insider_sell_value")
+    net = ownership.get("insider_net_flow")
     expected: dict[str, float | None] = {
         "purchases": float(buy) if isinstance(buy, (int, float)) else None,
         "sales": float(sell) if isinstance(sell, (int, float)) else None,
+        # The net leg is compared on MAGNITUDE: prose states the direction in words
+        # ("net sellers of $X"), never in the sign. GMED 2026-10-14 shipped "insiders
+        # were net sellers of $90.61 over the last 90 days" — the price target written
+        # as the net flow — which escaped the plural-aggregate rule below (its noun is
+        # "sellers") AND was enforced rather than questioned by the target reconciler,
+        # because $90.61 IS the canonical target it rewrites drifting amounts TO.
+        "net flow": abs(float(net)) if isinstance(net, (int, float)) else None,
     }
     found: list[FlowMismatch] = _largest_sale_mismatches(text, ownership)
-    if expected["purchases"] is None and expected["sales"] is None:
+    if all(value is None for value in expected.values()):
         return found
     # A figure that IS another insider metric may legitimately belong to that metric
     # ("$967.6M of purchases" beside a sales clause is the SALE leg mis-named), so a
@@ -231,9 +247,14 @@ def _flow_mismatches(text: str, ownership: object) -> list[FlowMismatch]:
         # there is no way to tell which, so neither may be rewritten.
         claimed: dict[tuple[int, int], int] = {}
         per_noun: list[tuple[str, float, re.Match[str], float]] = []
-        for noun in _FLOW_RE.finditer(sentence):
-            key = noun.group("word").lower()
-            want = expected[key]
+        phrases: list[tuple[str, re.Match[str]]] = [
+            (match.group("word").lower(), match) for match in _FLOW_RE.finditer(sentence)
+        ]
+        phrases += [("net flow", match) for match in _NET_FLOW_RE.finditer(sentence)]
+        # Tokens a direction-specific aggregate leg already claimed in this sentence.
+        aggregate_claims: set[tuple[int, int]] = set()
+        for key, noun in phrases:
+            want = expected.get(key)
             if want is None:
                 continue
             match = _flow_amount_match(noun, amounts, sentence)
@@ -243,6 +264,15 @@ def _flow_mismatches(text: str, ownership: object) -> list[FlowMismatch]:
             if _matches(actual, want):
                 continue
             span = (match.start(), match.end())
+            # One token, one claim: when an aggregate leg names the same figure, its
+            # direction-specific reading is the precise one. "Insiders were net sellers:
+            # $500M of sales" is ONE sales claim, not a sales claim plus a net-flow
+            # claim — the net phrase is a fallback for figures no aggregate noun covers
+            # ("insiders were net sellers of $90.61" with no sales/purchases noun).
+            if key == "net flow" and span in aggregate_claims:
+                continue
+            if key != "net flow":
+                aggregate_claims.add(span)
             claimed[span] = claimed.get(span, 0) + 1
             per_noun.append((key, want, match, actual))
         for key, want, match, actual in per_noun:
@@ -323,6 +353,7 @@ def _field_key_for(noun: str) -> str:
     return {
         "purchases": "ownership_governance.insider_buy_value",
         "sales": "ownership_governance.insider_sell_value",
+        "net flow": "ownership_governance.insider_net_flow",
     }.get(noun, "ownership_governance.insider_largest_sale")
 
 

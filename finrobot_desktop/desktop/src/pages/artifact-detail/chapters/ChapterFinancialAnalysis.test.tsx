@@ -296,3 +296,52 @@ describe('ChapterFinancialAnalysis series honesty labels', () => {
     expect(screen.getByTestId('ebitda-caliber-note').textContent).toBe('FROZEN CALIBER LABEL')
   })
 })
+
+// ---------------------------------------------------------------------------
+// The chart's base row is a PERIOD node. It must show the snapshot's TTM EBITDA —
+// the number the ProfitWaterfall card and the data section publish — not the
+// FORECAST's own margin applied to TTM revenue. GMED 2026-10-14 plotted $695.6M
+// (TTM revenue × the trailing-3yr median margin) in the same chapter whose card
+// read $953.7M, a 37% gap no reader could reconcile.
+// ---------------------------------------------------------------------------
+
+describe('ChapterFinancialAnalysis chart base row (period actuals)', () => {
+  const RAW_WITH_INCOME = {
+    income: { revenue: 4.407e10, ebitda: 1.319e10, operating_margin: 0.2142 },
+  }
+
+  it('plots the snapshot TTM EBITDA, not revenue × the model margin', () => {
+    revenueChartProps.mockClear()
+    render(
+      <ChapterFinancialAnalysis
+        dcf={makeTtmDcfShape()}
+        rawData={RAW_WITH_INCOME}
+        historicalMetrics={TREND_TO_2025}
+        reportingCurrency="USD"
+      />,
+    )
+    const data = (revenueChartProps.mock.calls.at(-1)?.[0] as { data: Record<string, unknown>[] })
+      .data
+    const base = data.find((row) => String(row.year).startsWith('TTM'))
+    expect(base?.ebitda).toBe(1.319e10)
+    // …and NOT the model base (440.7B × 32.7% = 144.1B) that the forecast rows use.
+    expect(base?.ebitda).not.toBeCloseTo(4.407e10 * 0.327)
+    expect(data.at(-1)?.ebitda).toBeCloseTo(1.44e10)
+  })
+
+  it('keeps the model base when the snapshot has no income block', () => {
+    revenueChartProps.mockClear()
+    render(
+      <ChapterFinancialAnalysis
+        dcf={makeTtmDcfShape()}
+        rawData={null}
+        historicalMetrics={TREND_TO_2025}
+        reportingCurrency="USD"
+      />,
+    )
+    const data = (revenueChartProps.mock.calls.at(-1)?.[0] as { data: Record<string, unknown>[] })
+      .data
+    const base = data.find((row) => String(row.year).startsWith('TTM'))
+    expect(base?.ebitda).toBeCloseTo(4.407e10 * 0.327)
+  })
+})

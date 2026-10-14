@@ -1290,3 +1290,54 @@ class TestYFinanceIntegration:
     async def test_invalid_ticker_raises_real(self):
         with pytest.raises(ProviderError):
             await YFinanceProvider().fetch("INVALID_TICKER_XYZ_999", "financials")
+
+
+class TestFlatMarginCaliber:
+    """The flat snapshot's margins must come from the rows they sit beside.
+
+    GMED 2026-10-14 published ``operating_margin`` 24.76% (Yahoo's ``info``
+    operatingMargins scalar) in a snapshot whose own ``operating_income``
+    673,764,000 over revenue 3,144,934,000 is 21.42% — a 3.3-point contradiction
+    inside one income block, with the same shape on gross margin (68.97% scalar vs
+    68.55% from the frame's own Gross Profit). Yahoo computes its margin scalars on
+    a basis that is neither the same period nor the same numerator as the statement
+    rows beside them, so the snapshot derives them instead.
+    """
+
+    def _frame(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                pd.Timestamp("2026-06-30"): {
+                    "Total Revenue": 3_144_934_000.0,
+                    "Gross Profit": 2_155_789_000.0,
+                    "Operating Income": 673_764_000.0,
+                    "Reconciled Depreciation": 279_913_000.0,
+                }
+            }
+        )
+
+    @pytest.mark.asyncio
+    async def test_margins_are_derived_from_the_ttm_frame(self):
+        info = dict(VALID_INFO, totalRevenue=3_144_933_888.0, grossMargins=0.68974996)
+        info["operatingMargins"] = 0.24755
+        mock_ticker = _make_mock_ticker(info, ttm_income_stmt=self._frame())
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker", return_value=mock_ticker
+        ):
+            result = await YFinanceProvider().fetch("GMED", "financials")
+        assert result.data["operating_margin"] == pytest.approx(673_764_000.0 / 3_144_934_000.0)
+        assert result.data["gross_margin"] == pytest.approx(2_155_789_000.0 / 3_144_934_000.0)
+        # The published revenue stays the info scalar — only the ratios changed basis.
+        assert result.data["revenue"] == 3_144_933_888.0
+        # EBITDA is still the operating caliber recomputed from the same frame.
+        assert result.data["ebitda"] == 673_764_000.0 + 279_913_000.0
+
+    @pytest.mark.asyncio
+    async def test_margins_fall_back_to_the_info_scalars_without_a_frame(self):
+        mock_ticker = _make_mock_ticker(VALID_INFO)
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker", return_value=mock_ticker
+        ):
+            result = await YFinanceProvider().fetch("AAPL", "financials")
+        assert result.data["operating_margin"] == 0.30
+        assert result.data["gross_margin"] == 0.44

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import math
 import statistics
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -99,6 +100,52 @@ EBITDA_CALIBER_LABEL = (
     "shown beside them is computed as operating income + D&A — two different D&A "
     "calibers, not a data error"
 )
+
+# The SAME-caliber label: when the newest annual bar IS operating income + D&A — the
+# same formula the TTM figure uses, which is what a yfinance-served report looks like
+# (Yahoo's own annual EBITDA row is exactly EBIT + its D&A) — the two figures are
+# directly comparable and the mixed-caliber note would assert a gap that does not
+# exist. GMED 2026-10-14 froze the mixed note while its newest annual bar
+# (814,033,000) WAS 537,191,000 + 276,842,000 to the dollar.
+EBITDA_CALIBER_SAME_LABEL = (
+    "Annual bars are the provider's reported EBITDA per fiscal year; the TTM EBITDA "
+    "shown beside them is the same operating caliber (operating income + D&A), so the "
+    "two are directly comparable"
+)
+
+# Relative tolerance for "the annual bar IS the operating caliber": 1% absorbs
+# provider rounding without accepting a genuinely different D&A definition.
+_EBITDA_CALIBER_TOLERANCE = 0.01
+
+
+def ebitda_caliber_label(
+    ebitda: Sequence[float | None],
+    operating_income: Sequence[float | None],
+    depreciation_amortization: Sequence[float | None],
+) -> str:
+    """Which caliber note is TRUE for this history — the fact, not a constant.
+
+    The report puts an annual EBITDA series directly beside a TTM figure and asks the
+    reader to compare them, so whether they share a caliber is a property of the two
+    series. Compares the NEWEST year only (the bar standing next to the TTM figure);
+    any missing or non-finite leg keeps the mixed-caliber label, which is the
+    conservative claim — it warns rather than reassures.
+    """
+    if not ebitda or not operating_income or not depreciation_amortization:
+        return EBITDA_CALIBER_LABEL
+    newest_ebitda = ebitda[-1]
+    newest_operating = operating_income[-1]
+    newest_da = depreciation_amortization[-1]
+    if newest_ebitda is None or newest_operating is None or newest_da is None:
+        return EBITDA_CALIBER_LABEL
+    if not all(math.isfinite(v) for v in (newest_ebitda, newest_operating, newest_da)):
+        return EBITDA_CALIBER_LABEL
+    if newest_ebitda == 0:
+        return EBITDA_CALIBER_LABEL
+    same = abs(newest_ebitda - (newest_operating + newest_da)) <= (
+        abs(newest_ebitda) * _EBITDA_CALIBER_TOLERANCE
+    )
+    return EBITDA_CALIBER_SAME_LABEL if same else EBITDA_CALIBER_LABEL
 
 
 async def fetch_historical_metrics(

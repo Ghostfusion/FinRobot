@@ -14,6 +14,7 @@ from __future__ import annotations
 from typing import Any
 
 from finrobot.engine.compute.operators.audit.insider_flow import (
+    _NET_FLOW_RE,
     attach_insider_flow_findings,
     correct_insider_flow_claims,
     insider_flow_amount_findings,
@@ -199,3 +200,56 @@ class TestRobustness:
     def test_attach_no_ops_without_a_numeric_audit_block(self) -> None:
         structured: dict[str, Any] = {"ownership_governance": _OWNERSHIP}
         assert attach_insider_flow_findings(structured, [_KEY_TAKEAWAY]) == []
+
+
+class TestNetFlowLeg:
+    """GMED 2026-10-14: "insiders were net sellers of $90.61 over the last 90 days
+    with $0 of open-market purchases" — the price target written as the net insider
+    flow. The plural-aggregate rule cannot see it (its noun is "sellers"), and the
+    target reconciler ENFORCED it rather than questioning it, because $90.61 IS the
+    canonical target it rewrites drifting amounts TO.
+    """
+
+    _SENTENCE = (
+        "The ownership tape is unfavorable: insiders were net sellers of $90.61 over the "
+        "last 90 days with $0 of open-market purchases (largest single sale $2,237,502)."
+    )
+    _GMED: dict[str, Any] = {
+        "insider_net_flow": -4413467.0,
+        "insider_buy_value": 0.0,
+        "insider_sell_value": 4413467.0,
+        "insider_window_days": 90,
+        "insider_largest_sale": {"value": 2237502.0},
+    }
+
+    def test_target_price_written_as_the_net_flow_is_flagged_and_corrected(self) -> None:
+        findings = insider_flow_amount_findings([self._SENTENCE], self._GMED)
+        assert [f.field_key for f in findings] == ["ownership_governance.insider_net_flow"]
+        assert "$90.61" in findings[0].evidence
+        corrected, notes = correct_insider_flow_claims(self._SENTENCE, self._GMED)
+        assert "$90.61" not in corrected
+        assert "$4,413,467" in corrected
+        assert notes and "net flow" in notes[0]
+
+    def test_the_true_net_flow_sentence_passes(self) -> None:
+        text = (
+            "Insider supply: the 90-day insider net flow is -$4,413,467 with $0 of "
+            "open-market purchases, and the largest single sale was $2,237,502."
+        )
+        assert insider_flow_amount_findings([text], self._GMED) == []
+
+    def test_the_net_phrase_never_claims_a_revenue_line(self) -> None:
+        # "net sales" is a revenue metric, not an insider-flow leg: the phrase requires
+        # a flow verb/noun ("net sellers", "net flow"), never the bare "net sales".
+        assert _NET_FLOW_RE.search("net sales of $2.9bn") is None
+        assert _NET_FLOW_RE.search("insiders were net sellers of $90.61") is not None
+        assert _NET_FLOW_RE.search("90-day net insider flow of -$4,413,467") is not None
+
+    def test_an_aggregate_leg_owns_its_token_over_the_net_phrase(self) -> None:
+        """One token, one claim: "net sellers: $500M of sales" is a SALES claim, so the
+        net phrase must not add a second finding for the same figure (it is a fallback
+        for amounts no aggregate noun covers)."""
+        findings = insider_flow_amount_findings(
+            ["Insiders were net sellers: $500M of sales over the window."], self._GMED
+        )
+        assert [f.field_key for f in findings] == ["ownership_governance.insider_sell_value"]

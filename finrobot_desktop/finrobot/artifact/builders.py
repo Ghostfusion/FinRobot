@@ -37,7 +37,7 @@ from finrobot.artifact.models import (
     ArtifactMeta,
     ArtifactOutputs,
 )
-from finrobot.engine.compute.coordinators.historical_extractor import EBITDA_CALIBER_LABEL
+from finrobot.engine.compute.coordinators.historical_extractor import ebitda_caliber_label
 from finrobot.engine.compute.operators.audit import (
     attach_insider_flow_findings,
     attach_metric_authority_findings,
@@ -110,6 +110,22 @@ def _labeled_market_cap(text: str) -> float | None:
     except ValueError:
         return None
     return value * _MAGNITUDE.get((match.group(2) or "").upper(), 1.0)
+
+
+def _float_series(value: Any) -> list[float | None]:
+    """A payload series as floats — a non-numeric or absent entry reads as None.
+
+    The historical payload is JSON (``historical_metrics`` in ``structured_data``),
+    so the annual columns arrive as a plain list whose holes may be ``None`` or
+    missing entirely. Consumed by the EBITDA-caliber selector, which must never raise
+    on a malformed history.
+    """
+    if not isinstance(value, list):
+        return []
+    return [
+        float(item) if isinstance(item, (int, float)) and not isinstance(item, bool) else None
+        for item in value
+    ]
 
 
 def _assert_price_snapshot_coherent(
@@ -1317,14 +1333,20 @@ def build_equity_research_artifact(
         structured_out["ownership_governance"] = _safe_dump(ownership)
 
     # Label the annual EBITDA caliber where the report compares the TTM figure with
-    # the annual bars: the bars are the provider's reported EBITDA per fiscal year,
-    # while the TTM figure is operating income + D&A — two different D&A calibers,
-    # not a data error (NVDA FY2026 implies ~$14B of D&A vs $3.7B TTM). Frozen onto
-    # the payload as a sibling key (no HistoricalMetrics model change) so the chart
-    # chapter can disclose it; only when a history actually exists.
+    # the annual bars. Whether the two SHARE a caliber is a fact about the series
+    # (the bars are the provider's reported EBITDA per fiscal year, the TTM figure is
+    # operating income + D&A), not a constant: NVDA FY2026's annual bar implied ~$14B
+    # of D&A against $3.7B TTM (a definitional difference), while GMED FY2025's was
+    # exactly EBIT + D&A to the dollar. Frozen onto the payload as a sibling key (no
+    # HistoricalMetrics model change) so the chart chapter can disclose it; only when
+    # a history actually exists. See ebitda_caliber_label.
     historical_out = structured_out.get("historical_metrics")
     if isinstance(historical_out, dict) and historical_out.get("years"):
-        historical_out["ebitda_caliber"] = EBITDA_CALIBER_LABEL
+        historical_out["ebitda_caliber"] = ebitda_caliber_label(
+            _float_series(historical_out.get("ebitda")),
+            _float_series(historical_out.get("operating_income")),
+            _float_series(historical_out.get("depreciation_amortization")),
+        )
 
     # Forward-estimate provenance (FY1 consensus the comps-forward path used).
     # The numbers themselves already ride inside valuation_synthesis.methods; we

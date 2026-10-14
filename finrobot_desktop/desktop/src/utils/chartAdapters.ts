@@ -38,6 +38,26 @@ export function ttmBaseLabel(basePeriodEnd?: string | null): string | null {
 }
 
 /**
+ * The canonical TTM income block's own figures (``raw_data.income``), for the DCF
+ * chart's BASE row.
+ *
+ * The base row is a PERIOD node, not a model assumption: it must carry what the
+ * trailing twelve months actually produced, exactly as the chapter's
+ * ProfitWaterfall cards and the report's data section do. Deriving it from the
+ * model's own assumption instead (``inputs.revenue_base × inputs.ebitda_margin``)
+ * put two different "TTM EBITDA" numbers in the SAME chapter: GMED 2026-10-14
+ * plotted $695.6M (TTM revenue × the trailing-3yr median margin the FORECAST
+ * applies) beside a waterfall card reading $953.7M (the statement's own EBIT + D&A)
+ * and a data section publishing $953.7M — a 37% gap a reader cannot reconcile.
+ * ``null`` / absent falls back to the model base (an artifact with no income block).
+ */
+export interface TtmActuals {
+  ebitda: number | null
+  ebitdaMargin: number | null
+  operatingMargin: number | null
+}
+
+/**
  * Build Revenue & EBITDA bar chart data from DCF projections.
  * Year 0 = base year (actual), Years 1..N = forecast.
  *
@@ -57,12 +77,17 @@ export function ttmBaseLabel(basePeriodEnd?: string | null): string | null {
  * instead of the bare anchor year — it must NOT collide with the historical bar
  * for that same fiscal year (see `ttmBaseLabel`) — and the first forecast year
  * carries its basis ("2027E (TTM+1)").
+ *
+ * `ttmActuals` carries the canonical TTM income block's own figures, so the base
+ * row shows what the period ACTUALLY produced rather than the model's assumption
+ * (see `TtmActuals`); absent, the model base stands in.
  */
 export function dcfResultToRevenueEbitdaData(
   result: DCFResult,
   baseYear: number,
   firstForecastYear?: number | null,
   basePeriodEnd?: string | null,
+  ttmActuals?: TtmActuals | null,
 ): Array<Record<string, number | string | boolean | null>> {
   const rows: Array<Record<string, number | string | boolean | null>> = []
 
@@ -72,7 +97,7 @@ export function dcfResultToRevenueEbitdaData(
   rows.push({
     year: baseLabel ?? String(baseYear),
     revenue: result.inputs.revenue_base,
-    ebitda: result.inputs.revenue_base * result.inputs.ebitda_margin,
+    ebitda: ttmActuals?.ebitda ?? result.inputs.revenue_base * result.inputs.ebitda_margin,
     is_forecast: false,
   })
 
@@ -119,6 +144,7 @@ export function dcfResultToMarginData(
   baseYear: number,
   firstForecastYear?: number | null,
   basePeriodEnd?: string | null,
+  ttmActuals?: TtmActuals | null,
 ): Array<Record<string, number | string | boolean | null>> {
   const rows: Array<Record<string, number | string | boolean | null>> = []
 
@@ -130,13 +156,16 @@ export function dcfResultToMarginData(
   const ebitMargin = (ebitdaMargin: number): number | null =>
     daPct != null ? ebitdaMargin - daPct : null
 
-  // Base year
-  const baseEbitdaMargin = result.inputs.ebitda_margin
+  // Base year — the period's OWN margins when the snapshot carries them (see
+  // TtmActuals): the historical bars beside it are actuals, so a base row holding
+  // the forecast's assumption would both mislabel the period and hide the margin
+  // step the model deliberately takes from today into the projection.
+  const baseEbitdaMargin = ttmActuals?.ebitdaMargin ?? result.inputs.ebitda_margin
   const baseLabel = ttmBaseLabel(basePeriodEnd)
   rows.push({
     year: baseLabel ?? String(baseYear),
     ebitda_margin: baseEbitdaMargin,
-    operating_margin: ebitMargin(baseEbitdaMargin),
+    operating_margin: ttmActuals?.operatingMargin ?? ebitMargin(baseEbitdaMargin),
     is_forecast: false,
   })
 

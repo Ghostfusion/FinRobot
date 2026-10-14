@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 
 from finrobot.engine.compute.operators.valuation_synthesis import CanonicalThesis
+from finrobot.engine.compute.operators.audit.insider_flow import insider_flow_amount_findings
 from finrobot.engine.models.financial import (
     ThesisResult,
     ValuationMethod,
@@ -353,3 +354,72 @@ def test_published_value_band_bounds_survive_withheld_path_scrub() -> None:
     )
     assert "$263.24" in out.price_target_basis
     assert "$356.15" in out.price_target_basis
+
+
+def test_withheld_path_keeps_a_zero_amount() -> None:
+    """A ``$0`` amount is a datum, not a smuggled target — and erasing it forges a finding.
+
+    GMED 2026-10-14: the withheld-point scrubber erased the ``$0`` in "with $0 of
+    open-market purchases", so the thesis AND the summary read "[target withheld] of
+    open-market purchases". That wrecked the prose and, worse, handed the insider-flow
+    verifier a clause whose only remaining amount was the net flow: it then reported
+    "the narrative states $4,413,467.00 as the 90-day insider purchases figure; the
+    computed value is $0" — a false finding on a sentence that was correct before the
+    scrubber touched it. One corrupted token, two published defects.
+    """
+    sentence = (
+        "Conviction is capped by evidence quality, not by the thesis: 90-day insider net "
+        "flow of -$4,413,467 with $0 of open-market purchases, and only 2.0% "
+        "institutional coverage on file."
+    )
+    methods = [
+        ValuationMethod(
+            name="dcf",
+            low=174.49,
+            mid=218.12,
+            high=261.74,
+            confidence=0.85,
+            source="implied_price ± 20%",
+        )
+    ]
+    vs = ValuationSynthesis(
+        methods=methods,
+        weighted_price=None,
+        current_price=76.32,
+        upside_downside=None,
+        confidence="very_low",
+        target_low=163.59,
+        target_high=272.64,
+        anchor_method=None,
+        valuation_withheld=True,
+    )
+    canonical = CanonicalThesis(
+        target=None,
+        verdict="BUY",
+        basis="POINT TARGET WITHHELD (confidence=very_low)",
+        upside=None,
+        valuation_withheld=True,
+        confidence="very_low",
+    )
+    thesis = _thesis(
+        recommendation="BUY",
+        price_target=None,
+        price_target_basis="(LLM draft)",
+        key_takeaways=[sentence],
+    )
+
+    out = apply_canonical_override(thesis, canonical, vs)
+
+    text = (out.key_takeaways or [""])[0]
+    assert "$0" in text, "a zero amount was washed to the withheld marker"
+    assert "[target withheld]" not in text
+    # The surviving clause no longer accuses the narrative of a purchases figure it
+    # never claimed (ownership leaves as the GMED run had them).
+    ownership = {
+        "insider_net_flow": -4413467.0,
+        "insider_buy_value": 0.0,
+        "insider_sell_value": 4413467.0,
+        "insider_window_days": 90,
+        "insider_largest_sale": {"value": 2237502.0},
+    }
+    assert insider_flow_amount_findings([text], ownership) == []

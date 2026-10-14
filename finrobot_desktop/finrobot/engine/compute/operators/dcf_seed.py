@@ -72,6 +72,19 @@ DEFAULT_COST_OF_DEBT: Final[float] = 0.05  # Investment-grade corporate yield
 # euphoric consensus FY1 is clamped before it inflates the explicit window).
 _GROWTH_CAP: Final[float] = 0.40
 _GROWTH_FLOOR: Final[float] = -0.20
+# How far a trailing multi-year CAGR may sit ABOVE the latest actual YoY growth
+# before the CAGR is treated as a step change rather than a run-rate. A CAGR is an
+# average over a window, and a structural step inside that window (an acquisition
+# doubling the revenue base) is counted as organic growth by every subsequent year
+# of the average: GMED's FY2022→FY2025 CAGR of 42.2% (NuVasive) against a latest
+# actual of +16.7%. Seeding the fade from such an average projects a decade at the
+# acquisition's rate, and the number the engine ALREADY computes for "what the
+# business is doing now" (``dcf_current_actuals.revenue_growth``, the report's
+# model-vs-current table) sat unreconciled beside it. Above 2x, the seed rebases on
+# the current actual. A genuinely accelerating or stable grower stays under the
+# ratio (a 30% CAGR on a 25% actual does not trigger), so this cannot floored-cap a
+# real hyper-grower.
+_STEP_CHANGE_RATIO: Final[float] = 2.0
 
 # Effective cost-of-debt is clamped into this band: below it the rate is
 # rounding noise (sub-1% interest on a large debt balance), above it the implied
@@ -585,24 +598,50 @@ def seed_dcf_inputs(
         # only decays a base ABOVE terminal); the Gordon perpetuity handles the
         # eventual convergence to terminal_growth.
         base_growth = max(min(cagr, _GROWTH_CAP), _GROWTH_FLOOR)
+        # A trailing CAGR is an average over a window, so a structural step inside
+        # that window (an acquisition) is counted as growth by every year after it.
+        # When the average sits more than _STEP_CHANGE_RATIO above the latest actual
+        # YoY, it is not the rate the business is running at: rebase the fade on the
+        # current actual — the same number the report's own model-vs-current table
+        # shows beside this schedule. Without this reconciliation GMED 2026-10-14
+        # projected 40%/yr off a 42.2% acquisition-inflated CAGR while the engine
+        # held +16.7% as its "current actual": the DCF landed 2.9x the market price,
+        # its point target was withheld, and the BUY rode a single method the report
+        # itself refused to publish a number for.
+        actual_growth = _latest_actual_growth(historical)
+        step_changed = (
+            actual_growth is not None
+            and actual_growth > 0
+            and base_growth > actual_growth * _STEP_CHANGE_RATIO
+        )
+        step_note = ""
+        if step_changed:
+            assert actual_growth is not None  # narrowing for mypy
+            base_growth = max(min(actual_growth, _GROWTH_CAP), _GROWTH_FLOOR)
+            step_note = (
+                f" — seeded from the latest actual {actual_growth:.1%} instead, because a "
+                f"trailing CAGR more than {_STEP_CHANGE_RATIO:.0f}x the current run-rate is a "
+                "step change inside the window (e.g. a large acquisition), not a rate the "
+                "business is compounding"
+            )
         growth_schedule = _decay_growth_schedule(
             base_growth, terminal_growth_rate, projection_years
         )
         # The label carries the TRUE trailing CAGR — never the clamped seed — and it
         # counts year-over-year INTERVALS (a 4-year series is a 3-interval CAGR, since
         # cagr_revenue is calculate_cagr(revenue[0], revenue[-1], len(years) - 1)).
-        cagr_label = _trailing_cagr_label(historical, cagr)
+        cagr_label = _trailing_cagr_label(historical, cagr, rebased=step_changed)
         if base_growth > terminal_growth_rate:
             prov["revenue_growth_rates"] = (
                 f"{cagr_label}, fading linearly to terminal "
-                f"{terminal_growth_rate:.1%} over the next {projection_years}yr"
+                f"{terminal_growth_rate:.1%} over the next {projection_years}yr{step_note}"
             )
         else:
             # base ≤ terminal (mature or declining): held flat across the
             # explicit window — don't claim a decay that doesn't happen.
             prov["revenue_growth_rates"] = (
                 f"{cagr_label}, held flat over the next {projection_years}yr "
-                f"(terminal {terminal_growth_rate:.1%})"
+                f"(terminal {terminal_growth_rate:.1%}){step_note}"
             )
     else:
         # No reliable historical CAGR (data absent or NaN-polluted).
@@ -1183,12 +1222,6 @@ def dcf_current_actuals(
         r = _median_ratio(num, den, window=1, min_samples=1)
         return r[0] if r is not None else None
 
-    def _latest_finite(series: list[float | None]) -> float | None:
-        if not series:
-            return None
-        v = series[-1]
-        return v if v is not None and math.isfinite(v) else None
-
     # TTM EBITDA margin from the canonical snapshot (income is TTM). income.revenue
     # is a required float; guard 0 / non-finite / missing EBITDA → None (never 0).
     inc = financial_data.income
@@ -1223,7 +1256,7 @@ def dcf_current_actuals(
 
     nwc_raw = _latest_ratio(historical.change_in_working_capital, historical.revenue)
     actuals: dict[str, float | None] = {
-        "revenue_growth": _latest_finite(historical.revenue_growth_yoy),
+        "revenue_growth": _latest_actual_growth(historical),
         "ebitda_margin": ttm_margin,
         "capex_pct_revenue": capex_pct,
         "nwc_pct_revenue": None if nwc_raw is None else -nwc_raw,
@@ -1234,6 +1267,22 @@ def dcf_current_actuals(
 # ---------------------------------------------------------------------------
 # Small helpers — last so they stay near caller sites
 # ---------------------------------------------------------------------------
+
+
+def _latest_actual_growth(historical: HistoricalMetrics) -> float | None:
+    """The latest fiscal year's YoY revenue growth — a run-rate, not an average.
+
+    ``historical.revenue_growth_yoy`` is null for the first year (no prior period)
+    and can be non-finite from a provider gap; both mean "no actual to reconcile
+    against", never 0% growth. This is the SAME value ``dcf_current_actuals``
+    publishes as the report's current growth, so the seeded fade and the
+    model-vs-current table cannot quote different run-rates.
+    """
+    series = historical.revenue_growth_yoy
+    if not series:
+        return None
+    latest = series[-1]
+    return latest if latest is not None and math.isfinite(latest) else None
 
 
 def _cagr_intervals(historical: HistoricalMetrics) -> int:
@@ -1248,7 +1297,9 @@ def _cagr_intervals(historical: HistoricalMetrics) -> int:
     return max(len(historical.years) - 1, 1)
 
 
-def _trailing_cagr_label(historical: HistoricalMetrics, cagr: float) -> str:
+def _trailing_cagr_label(
+    historical: HistoricalMetrics, cagr: float, *, rebased: bool = False
+) -> str:
     """Provenance label for the REAL trailing revenue CAGR, clamp disclosed.
 
     Two defects shipped here (NVDA 2026-10-13, "trailing 4yr revenue CAGR 40.0%"):
@@ -1262,8 +1313,18 @@ def _trailing_cagr_label(historical: HistoricalMetrics, cagr: float) -> str:
     is what the reader must see; when the shared floor/cap bit, the clamped value is
     stated explicitly as the seed's first-forecast-year rate instead of silently
     replacing the actual.
+
+    ``rebased`` suppresses that clamp clause: the step-change path seeds from the
+    latest actual instead of the clamped CAGR, so "capped to 40.0% for the first
+    forecast year" would describe a rate the schedule does not use — the very
+    mislabeling this label exists to prevent (GMED 2026-10-14: the first live run of
+    the rebase still printed it beside a schedule opening at 16.7%).
     """
     label = f"trailing {_cagr_intervals(historical)}yr revenue CAGR {cagr:.1%}"
+    if rebased:
+        # The caller's own note states what the fade starts from and why. Neither the
+        # cap nor the floor produced the seeded rate here.
+        return f"{label} (the historical actual, not a seeded forward rate)"
     if cagr > _GROWTH_CAP:
         return (
             f"{label}, capped to {_GROWTH_CAP:.1%} for the first forecast year "

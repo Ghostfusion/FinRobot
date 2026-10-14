@@ -1447,6 +1447,8 @@ def _reconcile_narrative_targets(
         $-amount that is not a whitelisted per-method mid or the market price is
         replaced with a ``[target withheld]`` marker. This stops the LLM from
         printing "fair value ≈ $X" in prose when the structured target is null.
+        Amounts that cannot be a per-share price at all — a zero amount, a
+        magnitude-suffixed total, a minus-prefixed figure — are left alone.
 
     After the deterministic override forces ``price_target`` to the canonical
     weighted value, the headline-bearing free-text fields from the *same* LLM
@@ -1508,6 +1510,16 @@ def _reconcile_narrative_targets(
             try:
                 value = float(match.group(2).replace(",", ""))
             except ValueError:
+                return match.group(0)
+            # A ZERO amount is never a smuggled per-share target — "$0 of
+            # open-market purchases" is a real datum and a $0 fair value is
+            # meaningless. Erasing it wrecks the sentence AND hands the insider-flow
+            # verifier a clause whose only remaining amount is the net flow, so that
+            # verifier reports a false "the narrative states $4,413,467 as the
+            # purchases figure" finding. One corrupted token, two published defects
+            # (GMED 2026-10-14: the thesis and the summary both read "[target
+            # withheld] of open-market purchases").
+            if value == 0:
                 return match.group(0)
             if _is_allowed(value):
                 return match.group(0)

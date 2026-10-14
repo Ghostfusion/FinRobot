@@ -998,7 +998,7 @@ msgstr "of listed institutional shares"
 
 #. js-lingui-explicit-id
 msgid "chapter.ownership.signal.coveragePartial"
-msgstr "13F holder list is partial — it covers {pct}% of institutionally-held shares, so this concentration is measured against the listed base, not the issuer's full holder base."
+msgstr "13F holder list is partial — it covers {pct}% of shares outstanding, so this concentration is measured against the listed base, not the issuer's full holder base."
 
 #. js-lingui-explicit-id
 msgid "chapter.ownership.qoq.noPriorQuarter"

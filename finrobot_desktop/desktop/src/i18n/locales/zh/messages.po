@@ -998,7 +998,7 @@ msgstr "占已列示机构持股"
 
 #. js-lingui-explicit-id
 msgid "chapter.ownership.signal.coveragePartial"
-msgstr "13F 持有人名单不完整——仅覆盖机构持股的 {pct}%，因此该集中度以已列示口径计算，并非发行人的全部持有人基数。"
+msgstr "13F 持有人名单不完整——仅覆盖发行在外股份的 {pct}%，因此该集中度以已列示口径计算，并非发行人的全部持有人基数。"
 
 #. js-lingui-explicit-id
 msgid "chapter.ownership.qoq.noPriorQuarter"

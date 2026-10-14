@@ -243,3 +243,53 @@ describe('DCF TTM base row — non-colliding label and forecast basis', () => {
     expect(ttmBaseLabel(undefined)).toBeNull()
   })
 })
+
+// ---------------------------------------------------------------------------
+// The DCF chart's base row is a PERIOD node, not a model assumption. GMED
+// 2026-10-14 plotted $695.6M (TTM revenue × the trailing-3yr median margin the
+// FORECAST applies) in the same chapter whose waterfall card and data section
+// both published $953.7M for the same twelve months.
+// ---------------------------------------------------------------------------
+
+const TTM_ACTUALS = { ebitda: 953.68, ebitdaMargin: 0.3032423, operatingMargin: 0.214238 }
+
+describe('DCF chart base row — the period actuals, not the model assumption', () => {
+  it('plots the snapshot TTM EBITDA on the base bar', () => {
+    const rows = dcfResultToRevenueEbitdaData(
+      makeDcfResult(0.05),
+      2025,
+      null,
+      '2026-06-30',
+      TTM_ACTUALS,
+    )
+    // makeDcfResult: revenue_base 100 × ebitda_margin 0.3 = 30 would be the model
+    // base; the TTM row must carry what the period produced.
+    expect(rows[0].ebitda).toBe(953.68)
+    // Forecast years are untouched — they ARE the model.
+    expect(rows[1].ebitda).toBe(33)
+    expect(rows[2].ebitda).toBe(36)
+  })
+
+  it('falls back to the model base without an income block (legacy artifact)', () => {
+    const rows = dcfResultToRevenueEbitdaData(makeDcfResult(0.05), 2025)
+    expect(rows[0].ebitda).toBeCloseTo(30)
+  })
+
+  it('plots the period margins on the margin chart base row', () => {
+    const rows = dcfResultToMarginData(makeDcfResult(0.05), 2025, null, '2026-06-30', TTM_ACTUALS)
+    expect(rows[0].ebitda_margin).toBe(TTM_ACTUALS.ebitdaMargin)
+    expect(rows[0].operating_margin).toBe(TTM_ACTUALS.operatingMargin)
+    // 2026E: projected_ebitda 33 / projected_revenue 110.
+    expect(rows[1].ebitda_margin).toBeCloseTo(0.3)
+  })
+
+  it('keeps the model-derived EBIT margin when the snapshot has none', () => {
+    const rows = dcfResultToMarginData(makeDcfResult(0.05), 2025, null, '2026-06-30', {
+      ebitda: 953.68,
+      ebitdaMargin: 0.303,
+      operatingMargin: null,
+    })
+    // EBIT margin = EBITDA margin − D&A% (da_pct_revenue 0.05 in makeDcfResult).
+    expect(rows[0].operating_margin).toBeCloseTo(0.303 - 0.05)
+  })
+})

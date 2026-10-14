@@ -908,6 +908,11 @@ class YFinanceProvider(DataProvider):
         substitute. Each statement read is independently best-effort, so a
         rate-limited or missing frame leaves its fields None (the report then shows
         an honest gap) instead of failing the whole FINANCIALS fetch.
+
+        ``revenue``/``gross_profit`` ride along for ONE consumer: the flat
+        snapshot's margin ratios, which must be computed from the same frame rows
+        they sit beside (see ``_fetch_financials``). They are not published from
+        here — the snapshot's own ``revenue`` stays the ``info`` scalar.
         """
         frames: dict[str, Any] = {
             "operating_income": None,
@@ -917,6 +922,8 @@ class YFinanceProvider(DataProvider):
             "sga_expense": None,
             "interest_expense": None,
             "capital_expenditure": None,
+            "revenue": None,
+            "gross_profit": None,
         }
         income = await self._read_statement(ticker, t, "ttm_income_stmt")
         if income is not None and not income.empty:
@@ -929,6 +936,8 @@ class YFinanceProvider(DataProvider):
                     "rd_expense": _cell(_get_row(income, _RD_NAMES), col),
                     "sga_expense": _cell(_get_row(income, _SGA_NAMES), col),
                     "interest_expense": _cell(_get_row(income, _INTEREST_EXPENSE_NAMES), col),
+                    "revenue": _cell(_get_row(income, _REVENUE_NAMES), col),
+                    "gross_profit": _cell(_get_row(income, _GROSS_PROFIT_NAMES), col),
                 }
             )
         cashflow = await self._read_statement(ticker, t, "ttm_cashflow")
@@ -995,13 +1004,43 @@ class YFinanceProvider(DataProvider):
         ebitda_operating = calculate_ebitda_operating(
             meta["operating_income"], meta["depreciation_amortization"]
         )
+
+        def _ratio(numerator: float | None, denominator: float | None) -> float | None:
+            """num/den over the snapshot's own rows; None when a leg is unusable."""
+            if numerator is None or denominator is None:
+                return None
+            if not (math.isfinite(numerator) and math.isfinite(denominator)) or denominator == 0:
+                return None
+            return numerator / denominator
+
+        # Margin ratios are DERIVED from the same TTM rows the snapshot publishes,
+        # never taken from Yahoo's ``info`` margin scalars: those are computed on
+        # Yahoo's own basis, which is neither the same period nor the same numerator
+        # as the statement rows beside them. Live GMED 2026-10-14 published
+        # operating_margin 24.76% (info.operatingMargins) in a snapshot whose own
+        # operating_income 673,764,000 over revenue 3,144,934,000 is 21.42% — a
+        # 3.3-point contradiction inside one income block, and the same shape on
+        # gross margin (68.97% vs 68.55% from the frame's own Gross Profit). The
+        # denominator is the frame's revenue when it resolved, so numerator and
+        # denominator share a period and a basis; the published ``revenue`` field is
+        # untouched. Falls back to the scalar only when the frame rows are absent
+        # (faithful, never fabricated).
+        ratio_revenue = meta.get("revenue") or info.get("totalRevenue")
+        gross_margin_frame = _ratio(meta.get("gross_profit"), ratio_revenue)
+        operating_margin_frame = _ratio(meta.get("operating_income"), ratio_revenue)
         # dict.get() never raises; no try/except needed here
         data = {
             "revenue": info.get("totalRevenue"),
             "ebitda": (ebitda_operating if ebitda_operating is not None else info.get("ebitda")),
             "net_income": info.get("netIncomeToCommon"),
-            "gross_margin": info.get("grossMargins"),
-            "operating_margin": info.get("operatingMargins"),
+            "gross_margin": (
+                gross_margin_frame if gross_margin_frame is not None else info.get("grossMargins")
+            ),
+            "operating_margin": (
+                operating_margin_frame
+                if operating_margin_frame is not None
+                else info.get("operatingMargins")
+            ),
             "pe_ratio": info.get("trailingPE"),
             "market_cap": info.get("marketCap"),
             "shares_outstanding": info.get("sharesOutstanding"),

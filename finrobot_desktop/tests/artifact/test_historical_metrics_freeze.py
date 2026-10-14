@@ -21,7 +21,11 @@ from datetime import datetime, timezone
 from typing import Any, cast
 
 from finrobot.artifact.builders import build_equity_research_artifact
-from finrobot.engine.compute.coordinators.historical_extractor import EBITDA_CALIBER_LABEL
+from finrobot.engine.compute.coordinators.historical_extractor import (
+    EBITDA_CALIBER_LABEL,
+    EBITDA_CALIBER_SAME_LABEL,
+    ebitda_caliber_label,
+)
 from finrobot.engine.models.financial import (
     BalanceSheet,
     FinancialData,
@@ -106,10 +110,10 @@ def test_equity_research_freezes_historical_metrics() -> None:
 
 
 def test_frozen_historical_payload_labels_the_ebitda_caliber() -> None:
-    """The annual EBITDA bars (the provider's reported EBITDA per fiscal year) and
-    the report's TTM EBITDA (operating income + D&A) are different calibers. The
-    frozen payload carries the label so the chart chapter can disclose it where the
-    two are compared — a definitional disclosure, never an invented number."""
+    """The frozen payload carries a caliber label so the chart chapter can disclose
+    what it is comparing the TTM figure against — a definitional disclosure, never an
+    invented number. This fixture has no D&A series, so the label is the conservative
+    mixed-caliber one; the same-caliber case is pinned below."""
     result = PipelineResult(
         steps={"data_collection": "ok"},
         structured_data={
@@ -135,3 +139,50 @@ def test_historical_metrics_absent_when_pipeline_lacks_it() -> None:
     artifact = build_equity_research_artifact(result, "AAPL", cast(Any, None))
 
     assert "historical_metrics" not in artifact.outputs.structured
+
+
+# ---------------------------------------------------------------------------
+# The caliber disclosure must be TRUE for the history it labels. Whether the annual
+# bars share the TTM figure's caliber is a fact about the series, not a constant:
+# the report puts them side by side and asks the reader to compare them.
+# ---------------------------------------------------------------------------
+
+
+def test_caliber_label_is_same_when_the_newest_bar_is_ebit_plus_da() -> None:
+    """GMED 2026-10-14: the frozen payload called it "two different D&A calibers"
+    while its newest annual bar (814,033,000) was 537,191,000 + 276,842,000 to the
+    dollar — the same formula the TTM figure uses."""
+    label = ebitda_caliber_label(
+        [304_503_000.0, 346_942_000.0, 472_776_000.0, 814_033_000.0],
+        [236_251_000.0, 201_416_000.0, 219_387_000.0, 537_191_000.0],
+        [68_252_000.0, 145_526_000.0, 253_389_000.0, 276_842_000.0],
+    )
+    assert label == EBITDA_CALIBER_SAME_LABEL
+
+
+def test_caliber_label_stays_mixed_when_the_bars_imply_other_da() -> None:
+    """NVDA FY2026: the provider's annual bar implied ~$14B of D&A against $3.7B in
+    the TTM figure — a definitional difference the label must keep claiming."""
+    label = ebitda_caliber_label([50.0e9, 100.0e9], [20.0e9, 40.0e9], [3.7e9, 14.0e9])
+    assert label == EBITDA_CALIBER_LABEL
+
+
+def test_caliber_label_is_mixed_when_a_leg_is_missing() -> None:
+    """The conservative claim: a history that cannot be checked warns rather than
+    reassures."""
+    assert ebitda_caliber_label([100.0], [90.0], []) == EBITDA_CALIBER_LABEL
+    assert ebitda_caliber_label([], [90.0], [10.0]) == EBITDA_CALIBER_LABEL
+    assert ebitda_caliber_label([100.0, None], [90.0, None], [10.0, None]) == EBITDA_CALIBER_LABEL
+
+
+def test_frozen_payload_labels_the_same_caliber_for_a_consistent_history() -> None:
+    hist = _historical().model_copy(update={"depreciation_amortization": [11.0e9, 11.0e9, 8.0e9]})
+    result = PipelineResult(
+        steps={"data_collection": "ok"},
+        structured_data={"data_collection": _financial_data(), "historical_metrics": hist},
+    )
+    artifact = build_equity_research_artifact(result, "AAPL", cast(Any, None))
+
+    hm = artifact.outputs.structured["historical_metrics"]
+    # ebitda[-1] 131.0e9 == operating_income[-1] 123.0e9 + D&A[-1] 8.0e9.
+    assert hm["ebitda_caliber"] == EBITDA_CALIBER_SAME_LABEL

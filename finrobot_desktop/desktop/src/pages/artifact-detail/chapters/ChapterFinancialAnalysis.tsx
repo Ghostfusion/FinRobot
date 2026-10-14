@@ -12,6 +12,7 @@ import {
   dcfResultToRevenueEbitdaData,
   dcfResultToMarginData,
   mergeDcfBaseRow,
+  type TtmActuals,
 } from '../../../utils/chartAdapters'
 import type { DCFResult, HistoricalMetrics } from '../../../types/finance'
 import { useI18n } from '../../../i18n'
@@ -102,6 +103,28 @@ export function ChapterFinancialAnalysis({
   // read as +96%.
   const basePeriodEnd = dcf?.forecast_basis?.base_period_end ?? null
 
+  // The chart adapters' base row is a PERIOD node: hand them the same TTM figures
+  // the cards above and the data section publish, so one chapter cannot show three
+  // different "TTM" numbers (GMED 2026-10-14 plotted $695.6M against a waterfall
+  // card and a data section both reading $953.7M). ``null`` when the snapshot has
+  // no income block — the adapters then fall back to the model base.
+  const ttmActuals: TtmActuals | null =
+    income == null
+      ? null
+      : ((): TtmActuals => {
+          const rev = income.revenue
+          const opMargin = income.operating_margin
+          return {
+            ebitda: baseEbitda,
+            ebitdaMargin:
+              baseEbitda != null && typeof rev === 'number' && Number.isFinite(rev) && rev > 0
+                ? baseEbitda / rev
+                : null,
+            operatingMargin:
+              typeof opMargin === 'number' && Number.isFinite(opMargin) ? opMargin : null,
+          }
+        })()
+
   const revenueChartData = (() => {
     const hist = historical ? historicalToRevenueEbitdaData(historical) : []
     if (hasDcfForecast && dcfBaseYear != null) {
@@ -110,6 +133,7 @@ export function ChapterFinancialAnalysis({
         dcfBaseYear,
         firstForecastYear,
         basePeriodEnd,
+        ttmActuals,
       )
       return mergeDcfBaseRow(hist, fcst)
     }
@@ -124,6 +148,7 @@ export function ChapterFinancialAnalysis({
         dcfBaseYear,
         firstForecastYear,
         basePeriodEnd,
+        ttmActuals,
       )
       return mergeDcfBaseRow(hist, fcst)
     }
