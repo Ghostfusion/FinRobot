@@ -1327,6 +1327,20 @@ class CrossCheck(BaseModel):
             "HistoricalBandSpread.structural_break_caveat, so the surfaces cannot disagree."
         ),
     )
+    consulted_by_verdict: bool = Field(
+        default=True,
+        description=(
+            "Whether the DECISION had this row when it was written. True for the "
+            "synthesis' own row (the own-history band the verdict read). False marks the "
+            "audit BACK-FILL — audit.publish_band_cross_check publishes a row AFTER the "
+            "verdict, from the technical chapter's frozen band, when the synthesis' own "
+            "band fetch came back empty (run 99cdca, 2026-10-14: the band resolved to 0 "
+            "samples pre-verdict and 948 eight minutes later). Such a row is "
+            "display-only: the output-contract clause C8 does not read it against the "
+            "call, and renderers must not present it as corroboration of a call that "
+            "never saw it. Absent on artifacts predating 2026-10-14 → read as consulted."
+        ),
+    )
 
 
 class ValuationSynthesis(BaseModel):

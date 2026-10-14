@@ -723,6 +723,12 @@ export interface CrossCheckShape {
   // directional only). null when the window has no break. The same sentence is
   // appended to `basis` (dedupe when rendering). Absent on artifacts predating it.
   band_break_caveat?: string | null
+  // Whether the DECISION had this row when it was written (design §5). False marks
+  // the audit back-fill: the row is published AFTER the call was written, from the
+  // technical chapter's frozen band, so the call never read it — display-only
+  // evidence, which must not read as corroboration of the target beside it. Absent
+  // on artifacts predating 2026-10-14 → read as consulted.
+  consulted_by_verdict?: boolean | null
 }
 
 export interface ValuationSynthesisShape {

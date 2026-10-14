@@ -199,6 +199,17 @@ class TestPublishBandCrossCheck:
         # A consumer that ignores the field still cannot read the row as clean.
         assert caveat in row["basis"]
 
+    def test_the_back_filled_row_is_tagged_display_only(self):
+        """§5: this row is published AFTER the verdict, so it carries the tag that says
+        so. The tag is the only thing that keeps it from reading as corroboration of a
+        call that never saw it — and the only thing that lets C8 tell it apart from the
+        synthesis' own row, since the two are the same band applied to the same EBITDA."""
+        structured, raw = _structured_and_raw()
+        structured["valuation_synthesis"] = {"current_price": 124.42, "cross_checks": []}
+        assert publish_band_cross_check(structured, raw) is True
+        row = structured["valuation_synthesis"]["cross_checks"][0]
+        assert row["consulted_by_verdict"] is False
+
     def test_a_clean_window_publishes_a_clean_row(self):
         structured, raw = _structured_and_raw()
         structured["valuation_synthesis"] = {"current_price": 124.42, "cross_checks": []}

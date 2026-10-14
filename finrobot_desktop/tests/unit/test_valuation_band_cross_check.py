@@ -104,6 +104,13 @@ class TestCrossCheckMath:
         assert "excluded from the published target blend" in check.note
         assert "mean-reversion" in check.label.lower() or "Mean-reversion" in check.note
 
+    def test_the_synthesis_row_is_tagged_consulted(self):
+        """The synthesis builds this row while DECIDING, so it reads as consulted (the
+        default) and C8 may read it against the call. That is the whole difference from
+        the audit back-fill, which publishes the same band after the call and tags it
+        ``consulted_by_verdict=False`` (design §5)."""
+        assert _band_cross_check()[0].consulted_by_verdict is True
+
     def test_missing_median_emits_no_entry(self):
         """No median → no mid → NO cross-check. Never a fabricated 0 band."""
         assert _band_cross_check(historical_ev_ebitda_median=None) == []

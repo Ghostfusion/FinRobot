@@ -432,13 +432,38 @@ cross-check"* — reads as though the call had the evidence and ignored it. The 
 drop while the cross-check survives); tagging at the back-fill site is exactly what makes those two
 cases distinguishable again, which is why the smaller closure ships first.
 
-Two closures are available and both are run-path edits, so they wait for the owner:
+**Measured again 2026-10-14, with the tag in the tree — the shape is now HISTORICAL.** Of the 57
+stored artifacts that publish a cross-check row, the 43 back-fill-shaped ones — every one of which
+also carries the frozen technical band the back-fill reads — span `…10-13T20:45` to `…10-14T20:27:40`,
+and instance B is the LAST of them. The 14 newer rows, `…10-14T20:3x` through `…10-14T22:44`, all sit
+beside an EV/EBITDA method row: the synthesis built them itself, so the pre-verdict band fetch now
+resolves. (The row BMRN published at `…22:44:48` is one of them — its payload carries no technical
+band at all, so the back-fill could not have produced it.) So the registration fix closed the
+back-fill **in practice**, the tag is insurance on a path that no longer fires, and the precondition
+closure below is regression protection rather than a live defect — the reading §4.3 already records
+for `C10a`.
 
-- make the synthesis' band a **precondition** — the directional call does not proceed without the
-  band it is required to consult, or it records that it had none (the `Withheld` measure of §6);
-- keep the back-fill **display-only** and tagged as not-consulted-by-the-verdict, so a reader is
-  never shown a cross-check that reads as corroboration of a call that never saw it (`C6b` is the
-  clause that catches a note claiming otherwise, and it is live as of the 2026-10-14 promotion).
+Two closures were available; the smaller one **shipped 2026-10-14**:
+
+- **Shipped — the back-fill is tagged display-only.** `CrossCheck.consulted_by_verdict` carries the
+  provenance (`True` from the synthesis, which builds the row while deciding; `False` only from
+  `audit.publish_band_cross_check`, which publishes it after the verdict). `contract._consulted`
+  gates `C8` — a row the call never had cannot be the evidence it ignored — while `C6b` keeps
+  reading every printed row (it judges the report's display, not the decision) and now names the
+  provenance in its evidence when every printed row is display-only. The artifact page renders the
+  tagged rows as a caveat beside the football field (`football-cross-check-not-consulted`), because
+  the whole point is that the reader is never shown a cross-check that reads as corroboration of a
+  call that never saw it.
+  The tag is provenance, not value: the two rows are the same band applied to the same EBITDA, so a
+  clause could not tell them apart by shape (a synthesis row can also lose its method row to a
+  net-debt or negative-equity drop). Consequence, and it is deliberate: **every stored row predates
+  the tag and is therefore read as consulted**, so `C8`'s 7 instances keep their withhold exactly as
+  measured above (§9.3 — the archive is annotated on read, never rewritten). The tag changes what
+  artifacts written from 2026-10-14 onward can be judged on.
+- Still open — make the synthesis' band a **precondition**: the directional call does not proceed
+  without the band it is required to consult, or it records that it had none (the `Withheld`
+  measure of §6). That is the closure that removes the back-fill's *cause*; the tag only stops the
+  row from being misread.
 
 Armed, `C8` refuses to publish what instance B published; that is the verification half, and as of
 the 2026-10-14 promotion it is live.
@@ -712,6 +737,15 @@ Phase 1 (§7); the archive treatment in §9.3 is the only part that is not a cod
   payload under today's registry, never a verdict on the record**: the record keeps its bytes, and
   the artifact's own `[CONTRACT/*]` warnings — present only on reports written after the clauses
   were armed — are the shipped side of the distinction.
+
+  **Measured 2026-10-14, after the promotion (the page half's real scope).** The banner surfaces
+  the HARD form only: `parseSurfacedContractFindings` keeps `[CONTRACT/Cn] evidence` and drops the
+  `/note`, `/withheld` and `/internal` sub-tags by design. A live run through the promoted gate
+  proves the split — `art_…22:36:07_BMRN_…_211597` carries three soft notes (`C6b`, `C10d`,
+  `C12a`) in `outputs.warnings`, and the artifact page's banner renders none of them. So today the
+  soft clauses' annotations are machine evidence that reaches no reader surface, and the page badge
+  is the only channel that can show them: its `annotate` column is not decoration, it is the
+  reader-facing half of `S`.
   Note the `archived` column shows `no` everywhere: nothing in the store has aged past the 24h
   no-view window yet, so the column is exercised but not yet populated.
 - **The page badge was gated on the promotion, not on the plumbing — the promotion is now in

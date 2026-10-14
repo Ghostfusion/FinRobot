@@ -1060,10 +1060,13 @@ export interface paths {
      *     Selection runs over the SAME rows the cards show (the instant cache-only
      *     overview, which already carries the global owned flags) through the shared
      *     :func:`select_targets` predicate, so "what you filtered" and "what re-runs"
-     *     never disagree. The batch runs in the background at the concurrency the LIVE
-     *     provider chain allows (see :func:`resolve_run_concurrency`); the rest wait in
-     *     its queue. Returns the batch's initial progress (poll
-     *     ``GET /batches/{batch_id}`` for live counts).
+     *     never disagree. Two axes reach that predicate: the filter triple
+     *     (``owned``/``ratings``/``tickers``) from the body — where ``tickers`` is the
+     *     per-card checkbox selection and ``None`` means "no filter" — and the group's
+     *     membership, which bounds both. The batch runs in the background at the
+     *     concurrency the LIVE provider chain allows (see
+     *     :func:`resolve_run_concurrency`); the rest wait in its queue. Returns the
+     *     batch's initial progress (poll ``GET /batches/{batch_id}`` for live counts).
      */
     post: operations['rerun_group_api_coverage_groups__group_id__rerun_post']
     delete?: never
@@ -2324,6 +2327,12 @@ export interface components {
        * @description Caveat for a cross-check whose own-history band spans a structural EBITDA break (engine.primitives.historical_valuation.EbitdaStructuralBreak) — e.g. a 5-year window that opens on the pre-ramp year, so its P25/P90 blend two earnings regimes. A quantile-only cross-check (low/mid/high + basis) cannot disclose that, and the 2026-10-13 NVDA auditor read exactly such a row ($493, +115%, 'CHEAP' off a p25 distorted by the FY2023 EBITDA base) as a clean signal. Renderers MUST show this beside the row; None when the window holds no break. The SAME string is published as technical_analysis.historical_bands.classification_caveat and as HistoricalBandSpread.structural_break_caveat, so the surfaces cannot disagree.
        */
       band_break_caveat?: string | null
+      /**
+       * Consulted By Verdict
+       * @description Whether the DECISION had this row when it was written. True for the synthesis' own row (the own-history band the verdict read). False marks the audit BACK-FILL — audit.publish_band_cross_check publishes a row AFTER the verdict, from the technical chapter's frozen band, when the synthesis' own band fetch came back empty (run 99cdca, 2026-10-14: the band resolved to 0 samples pre-verdict and 948 eight minutes later). Such a row is display-only: the output-contract clause C8 does not read it against the call, and renderers must not present it as corroboration of a call that never saw it. Absent on artifacts predating 2026-10-14 → read as consulted.
+       * @default true
+       */
+      consulted_by_verdict: boolean
     }
     /**
      * DCFInputs
@@ -3114,6 +3123,8 @@ export interface components {
       operating_margin?: number | null
       /** Operating Income */
       operating_income?: number | null
+      /** Nci Earnings */
+      nci_earnings?: number | null
       /** Depreciation Amortization */
       depreciation_amortization?: number | null
       /** Capital Expenditure */
@@ -3909,12 +3920,19 @@ export interface components {
      *     ``None`` means "no filter on this axis". ``ratings`` tokens are the verdicts
      *     the artifact store records (uppercase) plus ``UNRATED`` for names with no
      *     verdict yet.
+     *
+     *     ``tickers`` is the card-level "re-run selected" axis: an explicit set from the
+     *     per-card checkboxes, intersected with the group's rows. ``None`` = no set
+     *     filter; an empty list selects NOTHING (never "no filter") — see
+     *     :func:`finrobot.coverage.batch.select_targets`.
      */
     RerunRequest: {
       /** Owned */
       owned?: boolean | null
       /** Ratings */
       ratings?: ('BUY' | 'HOLD' | 'SELL' | 'UNRATED')[] | null
+      /** Tickers */
+      tickers?: string[] | null
       /**
        * Pipeline Type
        * @default research

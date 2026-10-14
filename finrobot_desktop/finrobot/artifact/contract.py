@@ -546,6 +546,25 @@ def _is_usable(check: dict[str, Any]) -> bool:
     return low > 0 and high > low and low <= mid <= high
 
 
+def _consulted(check: dict[str, Any]) -> bool:
+    """Whether the DECISION had this cross-check row when it was written (§5).
+
+    ``consulted_by_verdict`` is False only for the audit BACK-FILL: a row published
+    after the verdict, from the technical chapter's frozen band, because the
+    synthesis' own band fetch came back empty (instance B `99cdca`: the band held 0
+    samples pre-verdict and 948 eight minutes later, so the report printed a
+    cross-check its own call had never read). Such a row is display-only, and only
+    the tag makes it distinguishable from a synthesis row — the two are otherwise the
+    same band applied to the same EBITDA, so inferring from the shape would misfile
+    every synthesis row that lost its method row.
+
+    Absent tag = the pre-2026-10-14 archive. Read as consulted, which keeps every
+    clause's historical reading unchanged (§9.3: the archive is annotated on read,
+    never rewritten).
+    """
+    return check.get("consulted_by_verdict") is not False
+
+
 # ── readers the C10–C14 clauses share ────────────────────────────────────────
 
 #: (numerator, ratio) pairs whose ratio cannot mean anything without its
@@ -709,6 +728,15 @@ def _clause_c8_verdict_vs_cross_checks(artifact: "Artifact") -> Finding | None:
     the design names and it is NOT here: its band is `-2.97 .. -1.23`, which
     ``_is_usable`` rejects, so ``C9`` owns it. The two clauses cover §1.1's list
     only as a pair.
+
+    A DISPLAY-ONLY row is not evidence against the call (§5, ``_consulted``): a row
+    published after the verdict is one the decision never had, so it cannot be the
+    thing the decision ignored. The exclusion is tag-only, and every one of the 7
+    instances above is pre-fix and untagged — so this clause reads the archive exactly
+    as it did before the tag existed (43 of the 49 stored rows are back-fill-shaped,
+    all 7 instances included, but the shape alone cannot decide it). Artifacts written
+    from 2026-10-14 onward carry the tag, and the 6 C8-only instances stay withheld
+    until §5's precondition lands.
     """
     structured = _structured(artifact)
     thesis = structured.get("thesis")
@@ -721,7 +749,7 @@ def _clause_c8_verdict_vs_cross_checks(artifact: "Artifact") -> Finding | None:
     price = synthesis.get("current_price")
     if not isinstance(price, int | float) or isinstance(price, bool) or price <= 0:
         return None
-    checks = [c for c in _cross_checks(synthesis) if _is_usable(c)]
+    checks = [c for c in _cross_checks(synthesis) if _is_usable(c) and _consulted(c)]
     if not checks:
         return None
 
@@ -938,6 +966,17 @@ def _clause_c6b_note_vs_cross_checks(artifact: "Artifact") -> Finding | None:
     lowered = note.lower()
     if not any(phrase in lowered for phrase in _NO_CROSS_CHECK_PHRASES):
         return None
+    # C6b reads what the report PRINTS, so a display-only row counts (§5): the
+    # reader sees the row and the note denying it, whatever the decision saw. When
+    # every printed row is display-only, the note is TRUE of the decision and the
+    # publication is the thing that needs the qualifier — say which.
+    provenance = (
+        ""
+        if any(_consulted(c) for c in checks)
+        else " (every printed row is display-only: published after the call, so the "
+        "disclosure is true of the decision and the PUBLICATION is what needs the "
+        "qualifier)"
+    )
     price = synthesis.get("current_price")
     labels = ", ".join(_band_label(c) for c in checks)
     brackets = ""
@@ -955,7 +994,7 @@ def _clause_c6b_note_vs_cross_checks(artifact: "Artifact") -> Finding | None:
         evidence=(
             f"the report claims it had no cross-validation while publishing "
             f"{len(checks)} cross-check(s) ({labels}){brackets} — the note is derived from "
-            f"the method count, not from the evidence"
+            f"the method count, not from the evidence{provenance}"
         ),
     )
 

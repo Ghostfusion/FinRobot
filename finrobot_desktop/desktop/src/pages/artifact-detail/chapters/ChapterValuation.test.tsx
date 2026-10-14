@@ -582,6 +582,63 @@ describe('ChapterValuation own-history band caveat', () => {
     )
   })
 
+  it('names the cross-check that was published after the call was written', () => {
+    render(
+      <ChapterValuation
+        dcf={DCF}
+        thesis={null}
+        valuationSynthesis={{
+          ...METHODS,
+          cross_checks: [
+            {
+              name: 'ev_ebitda_band',
+              label: 'Own 5-year EV/EBITDA',
+              low: 317,
+              mid: 492,
+              high: 825,
+              basis: 'Own 5-year EV/EBITDA band applied to TTM EBITDA.',
+              consulted_by_verdict: false,
+            },
+          ],
+        }}
+        forwardEstimates={null}
+        sotpBreakdown={null}
+        quoteCurrency="USD"
+        reportingCurrency="USD"
+      />,
+    )
+    expect(screen.getByTestId('football-cross-check-not-consulted').textContent).toContain(
+      'Own 5-year EV/EBITDA',
+    )
+  })
+
+  it('keeps quiet for a row the verdict did read', () => {
+    render(
+      <ChapterValuation
+        dcf={DCF}
+        thesis={null}
+        valuationSynthesis={{
+          ...METHODS,
+          cross_checks: [
+            {
+              name: 'ev_ebitda_band',
+              label: 'Own 5-year EV/EBITDA',
+              low: 317,
+              mid: 492,
+              high: 825,
+              basis: 'Own 5-year EV/EBITDA band applied to TTM EBITDA.',
+            },
+          ],
+        }}
+        forwardEstimates={null}
+        sotpBreakdown={null}
+        quoteCurrency="USD"
+        reportingCurrency="USD"
+      />,
+    )
+    expect(screen.queryByTestId('football-cross-check-not-consulted')).not.toBeInTheDocument()
+  })
+
   it('does not print the cross-check caveat twice when the row basis already carries it', () => {
     render(
       <ChapterValuation

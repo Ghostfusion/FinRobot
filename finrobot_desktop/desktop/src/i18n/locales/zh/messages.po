@@ -577,6 +577,10 @@ msgid "chapter.valuation.empty"
 msgstr "该研报缺 DCF 输出 — 重新生成可得到完整估值模型。"
 
 #. js-lingui-explicit-id
+msgid "chapter.valuation.crossCheckNotConsulted"
+msgstr "在本报告结论写成之后才发布 — 决策并未读取：{rows}"
+
+#. js-lingui-explicit-id
 msgid "chapter.cashflowMethods.notApplicableForFinancials"
 msgstr "现金流估值——DCF、Monte Carlo、EV/EBITDA、P/FCF——不适用于资产负债表型金融机构(银行/保险):当存款、浮存金、准备金是经营原料而非资本结构时,自由现金流与 EV 属于类别错误。本标的以 P/B · P/E · residual income · DDM 估值,详见估值 football field。"
 

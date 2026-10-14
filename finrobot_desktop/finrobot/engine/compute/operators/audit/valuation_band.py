@@ -114,6 +114,14 @@ def publish_band_cross_check(structured: dict[str, Any], raw_data: dict[str, Any
     is the better-sourced one) and never fabricates one: every input is read
     from the frozen artifact, and a missing one leaves the list untouched.
 
+    The row is tagged ``consulted_by_verdict=False`` (design §5): it is published
+    *after* the verdict, from a band the verdict never saw, so it is display-only
+    evidence. Nothing here is fabricated (the band is the same run's own data), but
+    the tag is what keeps the two cases apart — the reader is not shown a
+    cross-check that reads as corroboration of a call that never saw it, and the
+    output-contract clause C8 does not read it against the call. An untagged row
+    means the opposite: the synthesis built it while deciding.
+
     Returns True when a row was added.
     """
     synthesis = structured.get("valuation_synthesis")
@@ -169,6 +177,9 @@ def publish_band_cross_check(structured: dict[str, Any], raw_data: dict[str, Any
             if isinstance(band.get("classification_caveat"), str)
             else None
         ),
+        # Display-only (design §5): this row is published after the verdict, so the
+        # call was already written when it appeared. The tag is provenance, not value.
+        consulted_by_verdict=False,
     )
     if check is None:
         return False

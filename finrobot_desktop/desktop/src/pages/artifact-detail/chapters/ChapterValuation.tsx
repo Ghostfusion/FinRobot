@@ -203,6 +203,14 @@ export function ValuationBody({
     (valuationSynthesis?.cross_checks ?? []).find(
       (c) => c.band_break_caveat && !(c.basis ?? '').includes(c.band_break_caveat),
     )?.band_break_caveat ?? null
+  // Display-only cross-check rows (design §5): the audit back-fill publishes a row
+  // AFTER the verdict was written (the synthesis' own band fetch came back empty and
+  // the technical chapter's frozen band filled in), so the published call never read
+  // it. The reader must not take it as corroboration of the target beside it — so the
+  // tagged rows are named. A slate can mix, hence the label list rather than a flag.
+  const displayOnlyCrossChecks = (valuationSynthesis?.cross_checks ?? [])
+    .filter((c) => c.consulted_by_verdict === false)
+    .map((c) => c.label)
   // The band block's own caveat (slice D): same sentence as the cross-check row's
   // when both describe the same band, so it is rendered only when distinct.
   const bandOwnHistoryCaveat = historicalBand?.classification_caveat ?? null
@@ -620,6 +628,13 @@ export function ValuationBody({
           {crossCheckCaveat && (
             <p data-testid="football-cross-check-caveat" style={footballCaveatStyle}>
               {crossCheckCaveat}
+            </p>
+          )}
+          {displayOnlyCrossChecks.length > 0 && (
+            <p data-testid="football-cross-check-not-consulted" style={footballCaveatStyle}>
+              {t('chapter.valuation.crossCheckNotConsulted', {
+                rows: displayOnlyCrossChecks.join(' · '),
+              })}
             </p>
           )}
           {forwardEstimates?.source && (

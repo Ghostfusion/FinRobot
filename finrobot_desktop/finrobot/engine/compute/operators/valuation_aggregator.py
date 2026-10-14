@@ -241,6 +241,7 @@ def ev_ebitda_band_cross_check(
     window_years: int | None,
     sample_count: int | None,
     band_break_caveat: str | None = None,
+    consulted_by_verdict: bool = True,
 ) -> CrossCheck | None:
     """Own-history EV/EBITDA band × TTM EBITDA → a per-share CROSS-CHECK row.
 
@@ -255,6 +256,11 @@ def ev_ebitda_band_cross_check(
     caveat. It is copied onto the row field AND appended to ``basis`` so the row
     cannot read as a clean distribution even for a consumer that ignores the field.
     The per-share values themselves are untouched.
+
+    ``consulted_by_verdict`` (additive, optional): False only for the audit back-fill,
+    which publishes the row AFTER the verdict has been written. The row is the same
+    band applied to the same EBITDA — it is provenance, not value: it tells the reader
+    (and C8) that this is display-only evidence no decision read.
 
     Returns None when any input is missing or non-positive — a cross-check is
     dropped, never fabricated as a 0 band (a fabricated comparison is worse than
@@ -314,6 +320,7 @@ def ev_ebitda_band_cross_check(
         basis=basis,
         note=note,
         band_break_caveat=band_break_caveat,
+        consulted_by_verdict=consulted_by_verdict,
     )
 
 

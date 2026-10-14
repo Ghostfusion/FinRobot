@@ -1201,6 +1201,95 @@ def test_c8_does_not_read_a_band_c9_has_rejected() -> None:
     assert _closure_finding("C9", art) is not None
 
 
+def test_c8_does_not_read_a_row_the_verdict_never_had() -> None:
+    """§5's tag: the SAME band that fires above, marked ``consulted_by_verdict=False``
+    — the audit back-fill, published after the call — is display-only. C8's claim is
+    that the verdict contradicted evidence it HAD; a row it never had cannot be that."""
+    art = _artifact(
+        structured={
+            "thesis": {"recommendation": "BUY"},
+            "valuation_synthesis": {
+                "current_price": 271.6,
+                "cross_checks": [
+                    {
+                        "name": "ev_ebitda_band",
+                        "low": 70.0,
+                        "mid": 219.8,
+                        "high": 255.3,
+                        "consulted_by_verdict": False,
+                    }
+                ],
+            },
+        }
+    )
+    assert _CLOSURE["C8"].check(art) is None
+
+
+def _cross_check_slate(*rows: dict, recommendation: str = "BUY", price: float = 200.0) -> Artifact:
+    return _artifact(
+        structured={
+            "thesis": {"recommendation": recommendation},
+            "valuation_synthesis": {"current_price": price, "cross_checks": list(rows)},
+        }
+    )
+
+
+def _display_only(low: float, mid: float, high: float) -> dict:
+    return {
+        "name": "ev_ebitda_band",
+        "low": low,
+        "mid": mid,
+        "high": high,
+        "consulted_by_verdict": False,
+    }
+
+
+def test_c8_reads_the_consulted_rows_of_a_mixed_slate() -> None:
+    """The filter drops display-only rows and NOTHING else: a corroborating row the
+    verdict did have still vetoes (below 200 is a BUY's way), and a contradicting one
+    it did have still fires even beside a display-only row."""
+    corroborated = _cross_check_slate(
+        _display_only(10.0, 20.0, 30.0),
+        {"name": "ev_ebitda_band", "low": 150.0, "mid": 260.0, "high": 300.0},
+    )
+    assert _CLOSURE["C8"].check(corroborated) is None
+
+    contradicting = _cross_check_slate(
+        _display_only(500.0, 600.0, 700.0),  # ignores display-only: it points the call's way
+        {"name": "ev_ebitda_band", "low": 10.0, "mid": 20.0, "high": 30.0},
+        price=400.0,
+    )
+    assert _closure_finding("C8", contradicting) is not None
+
+
+def test_c6b_names_the_provenance_when_every_printed_row_is_display_only() -> None:
+    """C6b reads what the report PRINTS, so a back-filled row still counts — but then
+    the note is true of the decision and the PUBLICATION is what needs the qualifier.
+    The finding has to say which, or the analyst "fixes" a derivation that is correct."""
+
+    def _with_row(row: dict) -> Artifact:
+        return _artifact(
+            structured={
+                "thesis": {"recommendation": "BUY"},
+                "valuation_synthesis": {
+                    "methods": [{"name": "dcf"}],
+                    "cross_checks": [row],
+                    "current_price": 271.6,
+                    "degradation_note": (
+                        "single method dcf with no cross-validation — band widened."
+                    ),
+                },
+            }
+        )
+
+    row = {"name": "ev_ebitda_band", "low": 70.0, "mid": 219.8, "high": 255.3}
+    assert (
+        "display-only"
+        in _closure_finding("C6b", _with_row({**row, "consulted_by_verdict": False})).evidence
+    )
+    assert "display-only" not in _closure_finding("C6b", _with_row(row)).evidence
+
+
 def test_c9_fires_on_a_non_positive_band() -> None:
     art = _artifact(
         structured={
