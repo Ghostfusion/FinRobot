@@ -11,8 +11,10 @@ import logging
 import math
 import re
 from datetime import date, datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
+from finrobot.engine.data.asof import current_run_as_of
+from finrobot.engine.data.sec_holdings_cache import period_completeness_sync
 from finrobot.engine.models.sec import (
     FilingProvenance,
     InsiderSale,
@@ -1107,26 +1109,101 @@ def build_institutional_holdings(raw_holdings: dict[str, Any]) -> list[Instituti
     return rows
 
 
-def build_schedule13_alerts(raw_schedule13: dict[str, Any]) -> list[ScheduleThirteenAlert]:
+# A split is inferred only for a factor within this inclusive integer range —
+# below 2 the implied class size is no split, above 20 the divergence is far more
+# likely a wrong denominator than a real split.
+_SPLIT_FACTOR_MIN = 2
+_SPLIT_FACTOR_MAX = 20
+# Tolerance around an integer factor. The filing's ``pct_of_class`` is rounded
+# (2 dp) AND the issuer's shares outstanding has moved since the filing date
+# (buybacks / issuance), so an exact integer comparison would never fire: NVDA
+# BlackRock implied 2.47B vs current 24.1B → ratio 9.74, i.e. 2.6% off 10.
+_SPLIT_FACTOR_TOLERANCE = 0.10
+
+# A Schedule 13G annual amendment is due within 45 days of year-end, so a filing
+# older than this has missed at least one annual amendment window — its stake
+# may no longer reflect the filer's position.
+_SCHEDULE13_STALE_DAYS = 400
+
+
+def _infer_split_basis(
+    shares: int,
+    pct_of_class: float | None,
+    shares_outstanding: float | None,
+) -> tuple[Literal["pre_split", "post_split"] | None, float | None, int | None]:
+    """Infer a filing's split basis from its own numbers.
+
+    Returns ``(share_basis, split_factor, shares_adjusted)``. ``shares`` is
+    divided by the reported ``pct_of_class`` to recover the class size the filer
+    measured against; if that implied size is smaller than the issuer's CURRENT
+    shares outstanding by an integer factor in 2..20, the filing predates a
+    split → ``"pre_split"`` with that factor and the split-adjusted count.
+    Otherwise the count is already on the current basis → ``"post_split"``. A
+    filing with no parsed percentage gets ``None`` (basis unknowable).
+    """
+    if pct_of_class is None or pct_of_class <= 0:
+        return None, None, None
+    if shares <= 0 or shares_outstanding is None or shares_outstanding <= 0:
+        return ("post_split", None, None) if shares > 0 else (None, None, None)
+    implied_class_shares = shares / (pct_of_class / 100.0)
+    if implied_class_shares <= 0:
+        return None, None, None
+    ratio = shares_outstanding / implied_class_shares
+    factor = round(ratio)
+    if (
+        _SPLIT_FACTOR_MIN <= factor <= _SPLIT_FACTOR_MAX
+        and abs(ratio - factor) / factor <= _SPLIT_FACTOR_TOLERANCE
+    ):
+        return "pre_split", float(factor), round(shares * factor)
+    return "post_split", None, None
+
+
+def _filing_age_days(filing_date: date, as_of_date: date | None) -> int | None:
+    """Age of a filing in days, or None when no as-of clock is available (never a
+    fabricated age)."""
+    if as_of_date is None:
+        return None
+    return (as_of_date - filing_date).days
+
+
+def build_schedule13_alerts(
+    raw_schedule13: dict[str, Any],
+    *,
+    shares_outstanding: float | None = None,
+    as_of_date: date | None = None,
+) -> list[ScheduleThirteenAlert]:
     """Build 5%+ beneficial-ownership alerts from SC 13D/13G fetch payload.
 
     Each row already carries a parsed share count (the provider skips filings
-    where it couldn't read one), so ``shares`` here is always a real figure.
+    where it couldn't read one), so ``shares`` here is always a real figure. The
+    row's own numbers are used to detect a pre-split basis (see
+    :func:`_infer_split_basis`), and ``as_of_date`` dates the filing for the
+    staleness label.
     """
     rows: list[ScheduleThirteenAlert] = []
     for a in raw_schedule13.get("alerts") or []:
+        filing_date = _parse_date(a["filing_date"])
+        pct_of_class = float(a["pct_of_class"]) if a.get("pct_of_class") not in (None, "") else None
+        shares = int(a.get("shares") or 0)
+        share_basis, split_factor, shares_adjusted = _infer_split_basis(
+            shares, pct_of_class, shares_outstanding
+        )
+        age = _filing_age_days(filing_date, as_of_date)
         rows.append(
             ScheduleThirteenAlert(
                 filer_name=str(a.get("filer_name") or ""),
                 filer_cik=a.get("filer_cik"),
-                filing_date=_parse_date(a["filing_date"]),
+                filing_date=filing_date,
                 accession_no=str(a.get("accession_no") or ""),
                 schedule_type="13D" if str(a.get("schedule_type")).upper() == "13D" else "13G",
-                shares=int(a.get("shares") or 0),
-                pct_of_class=(
-                    float(a["pct_of_class"]) if a.get("pct_of_class") not in (None, "") else None
-                ),
+                shares=shares,
+                pct_of_class=pct_of_class,
                 transaction_summary=str(a.get("transaction_summary") or ""),
+                share_basis=share_basis,
+                split_factor=split_factor,
+                shares_adjusted=shares_adjusted,
+                filing_age_days=age,
+                stale=age is not None and age > _SCHEDULE13_STALE_DAYS,
             )
         )
     return rows
@@ -1297,6 +1374,32 @@ def _institutional_coverage(
     return listed, listed / shares_outstanding * 100.0
 
 
+def _resolve_holdings_period_complete(
+    institutional_data: dict[str, Any] | None,
+    override: bool | None,
+    institutions: list[InstitutionalHolding],
+) -> bool | None:
+    """Whether the cached 13F period these holders came from is complete.
+
+    ``override`` (an explicit caller answer) wins. Otherwise, when the payload
+    actually came from the local 13F index (``source == "local_index"``), probe
+    the cache's completion marker for the served period; any other payload
+    (hand-built / legacy provider) leaves completeness UNKNOWN (None) so we never
+    label data partial on a guess. Cache/DB errors degrade to None, never raise.
+    """
+    if override is not None:
+        return override
+    if not institutions:
+        return None
+    if (institutional_data or {}).get("source") != "local_index":
+        return None
+    try:
+        probe = period_completeness_sync(institutions[0].period_end)
+    except (OSError, ValueError):
+        return None
+    return bool(probe.get("complete"))
+
+
 def compute_ownership_governance(
     *,
     insider_data: dict[str, Any] | None,
@@ -1305,6 +1408,8 @@ def compute_ownership_governance(
     schedule13_data: dict[str, Any] | None = None,
     cert_data: dict[str, Any] | None = None,
     shares_outstanding: float | None = None,
+    as_of_date: date | None = None,
+    holdings_period_complete: bool | None = None,
 ) -> OwnershipGovernanceAnalysis:
     degraded_sections: list[str] = []
 
@@ -1391,13 +1496,26 @@ def compute_ownership_governance(
         degraded_sections.append("proxy_compensation")
         proxy = None
 
+    # The run's as-of clock dates each 13D/13G filing for the staleness label.
+    # On a live run the runner pins ``current_run_as_of`` at the start of the run;
+    # off-run (tests / scripts) it is None and the age stays None rather than a
+    # fabricated number. An explicit ``as_of_date`` wins for deterministic callers.
+    resolved_as_of = as_of_date
+    if resolved_as_of is None:
+        run_as_of = current_run_as_of()
+        resolved_as_of = run_as_of.date() if run_as_of is not None else None
+
     # schedule13_data None = "not requested" (legacy callers) → leave empty,
     # not degraded. Only mark degraded when a fetch was attempted and failed;
     # a successful fetch with zero filings is genuinely "no 5%+ events" and
     # the UI shows that plainly rather than a degraded placeholder.
     schedule13_alerts: list[ScheduleThirteenAlert] = []
     if schedule13_data is not None:
-        schedule13_alerts = build_schedule13_alerts(schedule13_data)
+        schedule13_alerts = build_schedule13_alerts(
+            schedule13_data,
+            shares_outstanding=shares_outstanding,
+            as_of_date=resolved_as_of,
+        )
         if not schedule13_alerts and schedule13_data.get("available") is False:
             degraded_sections.append("schedule13_alerts")
 
@@ -1411,10 +1529,27 @@ def compute_ownership_governance(
             if warning not in warnings:
                 warnings.append(warning)
 
+    # Stale 13G filings: no annual amendment within the expected window means the
+    # reported stake may no longer reflect the filer's position. One line naming
+    # every stale filer (with its age) so the reader can weigh each.
+    stale_alerts = [a for a in schedule13_alerts if a.stale]
+    if stale_alerts:
+        listed = ", ".join(
+            f"{a.filer_name} ({a.filing_age_days}d, filed {a.filing_date.isoformat()})"
+            for a in stale_alerts
+        )
+        warnings.append(
+            f"{len(stale_alerts)} Schedule 13D/13G filing(s) are stale (older than "
+            f"{_SCHEDULE13_STALE_DAYS} days; a 13G annual amendment is due within 45 days of "
+            f"year-end): {listed}. The reported holdings may no longer reflect the filer's "
+            "current position — verify against a newer filing before relying on them."
+        )
+
     # Implausibly low 13F coverage: the index is missing filers for this period,
     # so the listed rows understate the institutional base and any concentration
     # ratio computed from them is meaningless. Say so plainly rather than let the
     # reader infer a 97% top-5 concentration from a partial table.
+    coverage_warning_fired = False
     if (
         institutional_coverage_pct is not None
         and institutional_coverage_pct < _INSTITUTIONAL_COVERAGE_MIN_PCT
@@ -1426,6 +1561,25 @@ def compute_ownership_governance(
             f"outstanding ({institutional_shares_listed:,} shares) — holder concentration "
             "cannot be asserted from a partial index; refresh the 13F cache "
             "(scripts/refresh_sec_holdings.py) for full coverage."
+        )
+        coverage_warning_fired = True
+
+    # Completion-marker check on the cached 13F period. Independent of coverage:
+    # a period can be incomplete yet still clear the 20% floor. When incomplete,
+    # the coverage % / top-5 concentration are computed over a PARTIAL index and
+    # the analysis is flagged so the reader labels them. The coverage warning
+    # above already says "partial index" — only add a completeness-specific line
+    # when it did NOT fire, so the reader is never told the same thing twice.
+    index_complete = _resolve_holdings_period_complete(
+        institutional_data, holdings_period_complete, institutions
+    )
+    if index_complete is False and not coverage_warning_fired:
+        period = institutions[0].period_end.isoformat() if institutions else "the period"
+        warnings.append(
+            f"13F index for period {period} is a PARTIAL refresh (no completion marker — the "
+            f"refresh was interrupted or capped): the {len(institutions)} cached holder row(s) "
+            "are a subset of the quarter's filers, so the coverage percentage and any top-5 "
+            "concentration are computed over a partial index."
         )
 
     return OwnershipGovernanceAnalysis(
@@ -1441,6 +1595,7 @@ def compute_ownership_governance(
         insider_largest_sale=insider_largest_sale,
         institutional_shares_listed=institutional_shares_listed,
         institutional_coverage_pct=institutional_coverage_pct,
+        institutional_index_partial=index_complete is False,
         degraded_sections=degraded_sections,
         warnings=warnings,
     )

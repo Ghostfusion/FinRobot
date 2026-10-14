@@ -384,3 +384,26 @@ async def test_period_completeness_for_an_unpopulated_period(_isolated_cache) ->
     assert probe["complete"] is False
     assert probe["row_count"] == 0
     assert probe["filer_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_period_completeness_sync_mirrors_the_async_probe(_isolated_cache) -> None:  # type: ignore[no-untyped-def]
+    """The sync accessor (used by the sync ownership compute operator) reports the
+    SAME marker state as the async probe."""
+    await cache_mod.bulk_upsert_holdings([_row(period_end=date(2026, 3, 31))])
+    probe = cache_mod.period_completeness_sync(date(2026, 3, 31))
+    assert probe["period_end"] == "2026-03-31"
+    assert probe["complete"] is False
+    assert probe["row_count"] == 1
+    await cache_mod.mark_period_complete(date(2026, 3, 31), filings_processed=1)
+    assert cache_mod.period_completeness_sync(date(2026, 3, 31))["complete"] is True
+
+
+def test_period_completeness_sync_missing_cache_is_not_an_error(tmp_path: Path) -> None:
+    """A cache file that does not exist yet → the same empty/incomplete report as
+    the async probe, never a raise."""
+    probe = cache_mod.period_completeness_sync(date(2026, 3, 31), db_path=tmp_path / "absent.db")
+    assert probe["period_end"] is None
+    assert probe["complete"] is False
+    assert probe["row_count"] == 0
+    assert probe["filer_count"] == 0

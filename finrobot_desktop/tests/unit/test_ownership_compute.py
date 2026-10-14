@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 
 from finrobot.engine.compute.operators.ownership import (
     _canonical_transaction_type,
@@ -1088,3 +1089,260 @@ def test_compute_ownership_governance_no_warnings_field_defaults_empty() -> None
         proxy_data={"proxy": None},
     )
     assert analysis.warnings == []
+
+
+# ---------------------------------------------------------------------------
+# Slice C — 13D/13G split basis, staleness, partial-index labelling
+# ---------------------------------------------------------------------------
+
+# NVDA's current shares outstanding (post the 10:1 split) as a live run passes it.
+_NVDA_SHARES_OUT = 24_100_000_000.0
+_AS_OF = date(2026, 10, 13)
+
+# The two real cases: BlackRock's 2024 filing predates the 10:1 split (its own
+# numbers imply a class ~10× smaller than today's); FMR's is already post-split.
+_NVDA_13G_PAYLOAD = {
+    "alerts": [
+        {
+            "filer_name": "BlackRock Inc.",
+            "filer_cik": "1364742",
+            "schedule_type": "13G",
+            "filing_date": "2024-01-26",
+            "accession_no": "0001086364-24-004712",
+            "shares": 180_593_555,
+            "pct_of_class": 7.3,
+        },
+        {
+            "filer_name": "FMR LLC",
+            "filer_cik": "315066",
+            "schedule_type": "13G",
+            "filing_date": "2024-11-12",
+            "accession_no": "0000315066-24-002826",
+            "shares": 998_190_803,
+            "pct_of_class": 4.069,
+        },
+        {
+            "filer_name": "VANGUARD GROUP INC",
+            "filer_cik": "102909",
+            "schedule_type": "13G",
+            "filing_date": "2024-02-13",
+            "accession_no": "0001104659-24-021596",
+            "shares": 204_504_938,
+            "pct_of_class": None,
+        },
+    ]
+}
+
+
+def test_schedule13_blackrock_flagged_pre_split_and_adjusted() -> None:
+    """BlackRock 180,593,555 at 7.30% ⇒ implied class 2.47B, ~10× below the
+    issuer's current 24.1B ⇒ pre-10:1-split; the as-filed count stays, the
+    adjusted count is added."""
+    alerts = build_schedule13_alerts(
+        _NVDA_13G_PAYLOAD, shares_outstanding=_NVDA_SHARES_OUT, as_of_date=_AS_OF
+    )
+    blackrock = alerts[0]
+    assert blackrock.shares == 180_593_555  # as-filed, unchanged
+    assert blackrock.share_basis == "pre_split"
+    assert blackrock.split_factor == 10.0
+    assert blackrock.shares_adjusted == 1_805_935_550
+
+
+def test_schedule13_fmr_not_adjusted_when_already_post_split() -> None:
+    """FMR 998,190,803 at 4.069% ⇒ implied class ~24.5B ≈ the issuer's current
+    shares outstanding ⇒ already post-split; the adjustment must NOT fire."""
+    alerts = build_schedule13_alerts(
+        _NVDA_13G_PAYLOAD, shares_outstanding=_NVDA_SHARES_OUT, as_of_date=_AS_OF
+    )
+    fmr = alerts[1]
+    assert fmr.shares == 998_190_803
+    assert fmr.share_basis == "post_split"
+    assert fmr.split_factor is None
+    assert fmr.shares_adjusted is None
+
+
+def test_schedule13_no_percentage_leaves_basis_unknown() -> None:
+    """A 13G whose cover-page percentage could not be parsed gets no basis — the
+    implied class size is unknowable, so never a fabricated 'post_split'."""
+    alerts = build_schedule13_alerts(
+        _NVDA_13G_PAYLOAD, shares_outstanding=_NVDA_SHARES_OUT, as_of_date=_AS_OF
+    )
+    vanguard = alerts[2]
+    assert vanguard.pct_of_class is None
+    assert vanguard.share_basis is None
+    assert vanguard.shares_adjusted is None
+
+
+def test_schedule13_huge_implied_class_is_not_a_split() -> None:
+    """A filing whose implied class is LARGER than current outstanding (ratio
+    < 2) is not a split — guard the 2..20 window's lower bound."""
+    alerts = build_schedule13_alerts(
+        {
+            "alerts": [
+                {
+                    "filer_name": "Big Filer",
+                    "schedule_type": "13G",
+                    "filing_date": "2026-01-05",
+                    "accession_no": "x",
+                    "shares": 1_000_000,
+                    "pct_of_class": 0.01,  # implied 10B vs 24.1B current → ratio 2.41?
+                }
+            ]
+        },
+        shares_outstanding=_NVDA_SHARES_OUT,
+        as_of_date=_AS_OF,
+    )
+    # implied = 1e6 / 0.0001 = 1e10; ratio = 2.41 → not within 10% of an int → no adjust
+    assert alerts[0].share_basis == "post_split"
+    assert alerts[0].shares_adjusted is None
+
+
+def test_schedule13_staleness_from_run_as_of() -> None:
+    """filing_age_days is dated from the run's as-of; >400 days (a missed 13G
+    annual amendment) marks the filing stale."""
+    alerts = build_schedule13_alerts(
+        _NVDA_13G_PAYLOAD, shares_outstanding=_NVDA_SHARES_OUT, as_of_date=_AS_OF
+    )
+    blackrock = alerts[0]
+    assert blackrock.filing_age_days == (_AS_OF - date(2024, 1, 26)).days
+    assert blackrock.stale is True
+    fmr = alerts[1]
+    assert fmr.filing_age_days == (_AS_OF - date(2024, 11, 12)).days
+    assert fmr.stale is (fmr.filing_age_days > 400)
+
+    # No as-of clock → no fabricated age, and never stale on an unknown age.
+    undated = build_schedule13_alerts(_NVDA_13G_PAYLOAD)
+    assert undated[0].filing_age_days is None
+    assert undated[0].stale is False
+
+
+def test_compute_emits_one_stale_warning_naming_the_filers() -> None:
+    analysis = compute_ownership_governance(
+        insider_data=None,
+        institutional_data=None,
+        proxy_data=None,
+        schedule13_data=_NVDA_13G_PAYLOAD,
+        shares_outstanding=_NVDA_SHARES_OUT,
+        as_of_date=_AS_OF,
+    )
+    stale_alerts = [a for a in analysis.schedule13_alerts if a.stale]
+    assert {a.filer_name for a in stale_alerts} == {
+        "BlackRock Inc.",
+        "FMR LLC",
+        "VANGUARD GROUP INC",
+    }
+    stale_lines = [w for w in analysis.warnings if "filing(s) are stale" in w]
+    assert len(stale_lines) == 1  # ONE line, not one per filer
+    line = stale_lines[0]
+    assert line.startswith(f"{len(stale_alerts)} Schedule")
+    # Every stale filer in the payload is named in the single warning.
+    assert all(a.filer_name in line for a in stale_alerts)
+
+
+def _high_coverage_holdings_payload() -> dict[str, object]:
+    """50M of 100M shares listed = 50% coverage → clears the 20% floor, so the
+    low-coverage warning does NOT fire and the partial-index path is isolated."""
+
+    def row(holder_cik: str, shares: int, value_usd: float) -> dict[str, object]:
+        return {
+            "holder_name": f"Holder {holder_cik}",
+            "holder_cik": holder_cik,
+            "cusip": "67066G104",
+            "name_of_issuer": "NVIDIA CORP",
+            "shares": shares,
+            "value_usd": value_usd,
+            "period_end": "2026-06-30",
+            "filing_date": "2026-08-14",
+            "accession_no": f"acc-{holder_cik}",
+        }
+
+    return {
+        "holders": [row("1", 30_000_000, 5e9), row("2", 20_000_000, 3e9)],
+        "source": "local_index",
+    }
+
+
+def test_partial_13f_index_flagged_and_disclosed() -> None:
+    """A servable-complete override of False marks the analysis partial and emits
+    the completeness disclosure (coverage clears 20%, so nothing else warns)."""
+    analysis = compute_ownership_governance(
+        insider_data=None,
+        institutional_data=_high_coverage_holdings_payload(),
+        proxy_data=None,
+        shares_outstanding=100_000_000.0,
+        holdings_period_complete=False,
+        as_of_date=_AS_OF,
+    )
+    assert analysis.institutional_index_partial is True
+    partial_lines = [w for w in analysis.warnings if "PARTIAL refresh" in w]
+    assert len(partial_lines) == 1
+    assert "2026-06-30" in partial_lines[0]
+
+
+def test_partial_13f_index_probed_from_local_index(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """When the payload came from the local index, completeness is read from the
+    cache's completion marker (period_completeness_sync)."""
+    import finrobot.engine.compute.operators.ownership as ow
+
+    monkeypatch.setattr(
+        ow,
+        "period_completeness_sync",
+        lambda *_a, **_k: {"period_end": "2026-06-30", "complete": False},
+    )
+    analysis = compute_ownership_governance(
+        insider_data=None,
+        institutional_data=_high_coverage_holdings_payload(),
+        proxy_data=None,
+        shares_outstanding=100_000_000.0,
+        as_of_date=_AS_OF,
+    )
+    assert analysis.institutional_index_partial is True
+
+
+def test_complete_index_is_not_labelled_partial() -> None:
+    analysis = compute_ownership_governance(
+        insider_data=None,
+        institutional_data=_high_coverage_holdings_payload(),
+        proxy_data=None,
+        shares_outstanding=100_000_000.0,
+        holdings_period_complete=True,
+        as_of_date=_AS_OF,
+    )
+    assert analysis.institutional_index_partial is False
+    assert not any("PARTIAL refresh" in w for w in analysis.warnings)
+
+
+def test_low_coverage_does_not_duplicate_the_partial_disclosure() -> None:
+    """The low-coverage warning already says the index is partial; the
+    completeness path must not append a second, near-identical line."""
+    from finrobot.engine.compute.operators.ownership import _institutional_coverage
+
+    payload = {
+        "holders": [
+            {
+                "holder_name": "Tiny Fund",
+                "holder_cik": "9",
+                "cusip": "67066G104",
+                "name_of_issuer": "NVIDIA CORP",
+                "shares": 2_000_000,
+                "value_usd": 5e8,
+                "period_end": "2026-06-30",
+                "filing_date": "2026-08-14",
+                "accession_no": "acc-9",
+            }
+        ],
+        "source": "local_index",
+    }
+    analysis = compute_ownership_governance(
+        insider_data=None,
+        institutional_data=payload,
+        proxy_data=None,
+        shares_outstanding=100_000_000.0,
+        holdings_period_complete=False,
+        as_of_date=_AS_OF,
+    )
+    assert analysis.institutional_index_partial is True
+    assert len(analysis.institutional_holdings) == 1
+    assert _institutional_coverage(analysis.institutional_holdings, 100_000_000.0)[1] < 20.0
+    index_lines = [w for w in analysis.warnings if "13F index" in w]
+    assert len(index_lines) == 1  # only the coverage warning, no duplicate

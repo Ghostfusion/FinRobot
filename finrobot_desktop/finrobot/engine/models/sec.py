@@ -208,6 +208,26 @@ class ScheduleThirteenAlert(BaseModel):
     pct_of_class: float | None = None  # 0..100
     transaction_summary: str = ""  # short prose pulled from the filing
 
+    # --- Split-basis provenance --------------------------------------------
+    # ``shares`` stays the AS-FILED count (never silently rewritten). A 13G filed
+    # before an issuer's stock split reports a pre-split share count that is not
+    # comparable to the issuer's current shares outstanding (NVDA: BlackRock's
+    # 2024 filing showed 180,593,555 at 7.30% — implied class 2.47B, the
+    # pre-10:1-split basis — while FMR's 998,190,803 at 4.069% already implies
+    # ~24.5B, the post-split basis). ``share_basis`` records which basis the
+    # as-filed count is on; when "pre_split", ``shares_adjusted`` is the
+    # split-adjusted count (``shares`` × ``split_factor``).
+    share_basis: Literal["pre_split", "post_split"] | None = None
+    split_factor: float | None = None
+    shares_adjusted: int | None = None
+
+    # Days between the filing date and the run's as-of date. A 13G annual
+    # amendment is due within 45 days of year-end, so an age beyond 400 days
+    # means no amendment for over a year → ``stale`` (the stake may no longer
+    # reflect the filer's current position).
+    filing_age_days: int | None = None
+    stale: bool = False
+
 
 class InsiderSale(BaseModel):
     """The largest single attributable insider sale in the window.
@@ -260,6 +280,14 @@ class OwnershipGovernanceAnalysis(BaseModel):
     # while Vanguard/BlackRock — ~10% each per their 13Gs — were absent).
     institutional_shares_listed: int | None = None
     institutional_coverage_pct: float | None = None  # percentage units (5.4 → 5.4%)
+    # True when the cached 13F period the holder rows came from has NO completion
+    # marker — i.e. ``sec_holdings_cache.period_completeness`` reports a PARTIAL
+    # refresh (interrupted / ``--max-filings`` capped / rate-limited). The
+    # coverage % above and any top-5 concentration are then computed over a
+    # partial index and MUST be labelled as such by the reader. This is the
+    # completeness of the SOURCE; ``institutional_coverage_pct`` is only its
+    # magnitude — a period can be incomplete yet cover >20% of the shares.
+    institutional_index_partial: bool = False
 
     # Marks degraded sub-sections so the UI can render a "data unavailable"
     # placeholder instead of a misleading empty table.

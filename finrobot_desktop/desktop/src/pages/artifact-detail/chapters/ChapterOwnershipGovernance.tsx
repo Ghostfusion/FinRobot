@@ -34,6 +34,7 @@ import {
   formatCompactNumber,
   formatCurrencyCompact,
   formatDate,
+  formatInteger,
   formatPercent,
 } from '../../../utils/format'
 
@@ -89,6 +90,10 @@ export function ChapterOwnershipGovernance({
         : rawCoverage
       : null
   const partialCoverage = coveragePct !== null && coveragePct < 0.99
+  // The cached 13F period has no completion marker → the index is a PARTIAL
+  // refresh; coverage/concentration are then computed over a partial index and
+  // must be labelled even when the coverage magnitude itself looks full.
+  const indexPartial = ownership.institutional_index_partial === true
   const sharesListed =
     typeof ownership.institutional_shares_listed === 'number' &&
     Number.isFinite(ownership.institutional_shares_listed)
@@ -127,6 +132,7 @@ export function ChapterOwnershipGovernance({
           insiders={showInsiderFlow ? insiders : []}
           holdings={showConcentration ? holdings : []}
           coveragePct={partialCoverage ? coveragePct : null}
+          indexPartial={indexPartial}
           sharesListed={sharesListed}
           locale={locale}
           t={t}
@@ -268,6 +274,7 @@ function OwnershipSignalStrip({
   insiders,
   holdings,
   coveragePct,
+  indexPartial,
   sharesListed,
   locale,
   t,
@@ -277,6 +284,10 @@ function OwnershipSignalStrip({
   /** Fraction (0–1) of institutionally-held shares the list covers, when it is
    *  a PARTIAL sample; null when full/unknown. */
   coveragePct: number | null
+  /** The cached 13F period is a partial refresh (no completion marker) — label
+   *  the concentration as computed over a partial index even if coverage looks
+   *  full. */
+  indexPartial: boolean
   /** Total shares across the listed institutional holders — the true denominator
    *  the concentration is measured against, when supplied. */
   sharesListed: number | null
@@ -369,11 +380,13 @@ function OwnershipSignalStrip({
               )}
             </span>
           </div>
-          {coveragePct !== null && (
+          {(coveragePct !== null || indexPartial) && (
             <div data-testid="ownership-coverage-caveat" style={signalCaveat}>
-              {t('chapter.ownership.signal.coveragePartial', {
-                pct: (coveragePct * 100).toFixed(0),
-              })}
+              {coveragePct !== null
+                ? t('chapter.ownership.signal.coveragePartial', {
+                    pct: (coveragePct * 100).toFixed(0),
+                  })
+                : 'Cached 13F index is a partial refresh — this concentration is measured over the cached rows only, not the quarter’s full filer set.'}
             </div>
           )}
         </div>
@@ -755,6 +768,24 @@ function AlertList({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {rows.map((r, i) => {
         const isActivist = r.schedule_type === '13D'
+        const adjusted =
+          typeof r.shares_adjusted === 'number' && Number.isFinite(r.shares_adjusted)
+            ? r.shares_adjusted
+            : null
+        const factor =
+          typeof r.split_factor === 'number' && Number.isFinite(r.split_factor)
+            ? r.split_factor
+            : null
+        const basis = r.share_basis ?? null
+        const basisLabel =
+          basis === 'pre_split'
+            ? factor !== null
+              ? `PRE-SPLIT ×${factor}`
+              : 'PRE-SPLIT'
+            : basis === 'post_split'
+              ? 'POST-SPLIT'
+              : null
+        const stale = r.stale === true
         return (
           <div
             // accession+filer alone collides when one filer has multiple 13D/13G
@@ -807,10 +838,38 @@ function AlertList({
               }}
             >
               {formatCompactNumber(r.shares, locale)} {t('chapter.ownership.alert.shares')}
+              {/* Split-adjusted count is ADDITIVE — the as-filed count above stays.
+                  The exact as-filed figure is attributable via the title attr. */}
+              {adjusted !== null && (
+                <span
+                  data-testid="ownership-shares-adjusted"
+                  title={`As filed: ${formatInteger(r.shares, locale)} shares`}
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  {' · '}
+                  {formatCompactNumber(adjusted, locale)}
+                  {factor !== null ? ` ×${factor}` : ''} split-adjusted
+                </span>
+              )}
               {r.pct_of_class !== null && r.pct_of_class !== undefined
                 ? ` · ${formatPercent(r.pct_of_class, locale, 2, true)} ${t('chapter.ownership.alert.ofClass')}`
                 : ''}
             </div>
+            {(basisLabel !== null || stale) && (
+              <div style={alertBadgeRow}>
+                {basisLabel !== null && (
+                  <span data-testid="ownership-basis-badge" style={basisBadgeStyle}>
+                    {basisLabel}
+                  </span>
+                )}
+                {stale && (
+                  <span data-testid="ownership-stale-marker" style={staleBadgeStyle}>
+                    STALE
+                    {typeof r.filing_age_days === 'number' ? ` · ${r.filing_age_days}d` : ''}
+                  </span>
+                )}
+              </div>
+            )}
             {r.transaction_summary && (
               <div style={{ marginTop: 6, fontSize: 12.5 }}>{r.transaction_summary}</div>
             )}
@@ -925,6 +984,35 @@ const thStyle: CSSProperties = {
   color: 'var(--text-muted)',
   fontWeight: 500,
   borderBottom: '1px solid var(--border-soft)',
+}
+
+const alertBadgeRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  marginTop: 5,
+}
+
+// Split-basis badge — same pill language as the schedule-type badge above it.
+const basisBadgeStyle: CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10,
+  letterSpacing: '0.08em',
+  padding: '2px 7px',
+  borderRadius: 999,
+  background: 'color-mix(in srgb, var(--accent-cyan) 18%, transparent)',
+  color: 'var(--accent-cyan)',
+}
+
+// Staleness marker — warning tone: the stake may no longer reflect the filing.
+const staleBadgeStyle: CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10,
+  letterSpacing: '0.08em',
+  padding: '2px 7px',
+  borderRadius: 999,
+  background: 'var(--warning-soft)',
+  color: 'var(--warning)',
 }
 
 const tdStyle: CSSProperties = {

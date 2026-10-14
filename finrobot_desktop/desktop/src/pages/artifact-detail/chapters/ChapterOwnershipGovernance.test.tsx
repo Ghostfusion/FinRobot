@@ -417,3 +417,139 @@ describe('ChapterOwnershipGovernance partial 13F coverage', () => {
     expect(screen.getByText('not extracted from proxy')).toBeInTheDocument()
   })
 })
+
+describe('ChapterOwnershipGovernance 13D/G split basis & staleness', () => {
+  const alert = (overrides: Partial<ScheduleThirteenAlertShape>): ScheduleThirteenAlertShape => ({
+    filer_name: 'BlackRock Inc.',
+    filing_date: '2024-01-26',
+    accession_no: '0001086364-24-004712',
+    schedule_type: '13G',
+    shares: 180_593_555,
+    pct_of_class: 7.3,
+    ...overrides,
+  })
+
+  it('shows the split-adjusted count alongside the as-filed count, plus a basis badge', () => {
+    render(
+      wrap(
+        <ChapterOwnershipGovernance
+          ownership={{
+            schedule13_alerts: [
+              alert({
+                share_basis: 'pre_split',
+                split_factor: 10,
+                shares_adjusted: 1_805_935_550,
+                filing_age_days: 991,
+                stale: true,
+              }),
+            ],
+            generated_at: '2026-10-13T23:04:06Z',
+            degraded_sections: [],
+          }}
+          reportingCurrency="USD"
+        />,
+      ),
+    )
+    // As-filed count is still on screen (180,593,555 → "180.59M").
+    expect(screen.getByText(/180\.59M/)).toBeInTheDocument()
+    const adjusted = screen.getByTestId('ownership-shares-adjusted')
+    expect(adjusted.textContent).toMatch(/1\.81B/)
+    expect(adjusted.textContent).toMatch(/×10 split-adjusted/)
+    // The exact as-filed figure stays attributable via the hover title.
+    expect(adjusted.getAttribute('title')).toMatch(/180,593,555/)
+    expect(screen.getByTestId('ownership-basis-badge').textContent).toBe('PRE-SPLIT ×10')
+    expect(screen.getByTestId('ownership-stale-marker').textContent).toMatch(/STALE/)
+    expect(screen.getByTestId('ownership-stale-marker').textContent).toMatch(/991d/)
+  })
+
+  it('renders a post-split badge but no adjusted count when no adjustment is needed', () => {
+    const ownership: OwnershipGovernanceShape = {
+      schedule13_alerts: [
+        alert({
+          filer_name: 'FMR LLC',
+          shares: 998_190_803,
+          pct_of_class: 4.069,
+          filing_date: '2024-11-12',
+          share_basis: 'post_split',
+          split_factor: null,
+          shares_adjusted: null,
+          filing_age_days: 700,
+          stale: true,
+        }),
+      ],
+      generated_at: '2026-10-13T23:04:06Z',
+      degraded_sections: [],
+    }
+    render(wrap(<ChapterOwnershipGovernance ownership={ownership} reportingCurrency="USD" />))
+    expect(screen.getByTestId('ownership-basis-badge').textContent).toBe('POST-SPLIT')
+    expect(screen.queryByTestId('ownership-shares-adjusted')).toBeNull()
+    expect(screen.getByTestId('ownership-stale-marker').textContent).toMatch(/700d/)
+  })
+
+  it('renders no basis badge or stale marker for a fresh, unparsed-basis filing', () => {
+    const ownership: OwnershipGovernanceShape = {
+      schedule13_alerts: [alert({ pct_of_class: null, share_basis: null, stale: false })],
+      generated_at: '2026-10-13T23:04:06Z',
+      degraded_sections: [],
+    }
+    render(wrap(<ChapterOwnershipGovernance ownership={ownership} reportingCurrency="USD" />))
+    expect(screen.queryByTestId('ownership-basis-badge')).toBeNull()
+    expect(screen.queryByTestId('ownership-stale-marker')).toBeNull()
+  })
+})
+
+describe('ChapterOwnershipGovernance partial 13F index', () => {
+  it('labels the concentration as computed over a partial index when the period is incomplete', () => {
+    const ownership: OwnershipGovernanceShape = {
+      institutional_holdings: [
+        {
+          holder_name: 'A',
+          cusip: '000000000',
+          name_of_issuer: 'ACME',
+          shares: 100_000,
+          value_usd: 30e9,
+          period_end: '2026-06-30',
+          provenance: baseProv('13F-HR'),
+        },
+      ],
+      institutional_shares_listed: 100_000,
+      // Coverage magnitude looks full (1.0) but the period had no completion
+      // marker → the index is still partial and must be labelled.
+      institutional_coverage_pct: 1.0,
+      institutional_index_partial: true,
+      generated_at: '2026-10-13T23:04:06Z',
+      degraded_sections: [],
+    }
+    const { container } = render(
+      wrap(<ChapterOwnershipGovernance ownership={ownership} reportingCurrency="USD" />),
+    )
+    const caveat = container.querySelector('[data-testid="ownership-coverage-caveat"]')
+    expect(caveat).not.toBeNull()
+    expect(caveat?.textContent).toMatch(/partial refresh/i)
+  })
+
+  it('does not label a complete index as partial', () => {
+    const ownership: OwnershipGovernanceShape = {
+      institutional_holdings: [
+        {
+          holder_name: 'A',
+          cusip: '000000000',
+          name_of_issuer: 'ACME',
+          shares: 100_000,
+          value_usd: 30e9,
+          period_end: '2026-06-30',
+          provenance: baseProv('13F-HR'),
+        },
+      ],
+      institutional_shares_listed: 100_000,
+      institutional_coverage_pct: 1.0,
+      institutional_index_partial: false,
+      generated_at: '2026-10-13T23:04:06Z',
+      degraded_sections: [],
+    }
+    const { container } = render(
+      wrap(<ChapterOwnershipGovernance ownership={ownership} reportingCurrency="USD" />),
+    )
+    expect(container.querySelector('[data-testid="ownership-coverage-caveat"]')).toBeNull()
+  })
+})

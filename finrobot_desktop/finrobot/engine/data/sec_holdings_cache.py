@@ -586,3 +586,60 @@ async def period_completeness(
         "filer_count": int(counts[1]) if counts else 0,
         "expected_period_end": expected,
     }
+
+
+def period_completeness_sync(
+    period_end: date | str | None = None,
+    *,
+    db_path: Path | None = None,
+) -> dict[str, Any]:
+    """Blocking mirror of :func:`period_completeness` for synchronous callers.
+
+    The ownership compute operator (``compute_ownership_governance``) runs on
+    the event loop and cannot ``await`` the async probe, but needs the same
+    yes/no "did this quarter's refresh finish" answer to label a PARTIAL index.
+    Opens a short-lived stdlib ``sqlite3`` connection (read-only SELECTs) and
+    returns the SAME dict shape as :func:`period_completeness`. A missing cache
+    file — or a cache predating the ``holdings_refresh_meta`` table — reports
+    ``period_end=None`` / ``complete=False`` and zero counts rather than raising.
+    """
+    expected = expected_latest_period_end(date.today()).isoformat()
+    empty: dict[str, Any] = {
+        "period_end": None,
+        "complete": False,
+        "row_count": 0,
+        "filer_count": 0,
+        "expected_period_end": expected,
+    }
+    path = Path(db_path) if db_path is not None else Path(_paths.SEC_HOLDINGS_DB)
+    if not path.exists():
+        return empty
+    conn = sqlite3.connect(str(path))
+    try:
+        if period_end is None:
+            row = conn.execute("SELECT MAX(period_end) FROM holdings").fetchone()
+            period_str = str(row[0]) if row is not None and row[0] is not None else None
+        else:
+            period_str = period_end.isoformat() if isinstance(period_end, date) else str(period_end)
+        if period_str is None:
+            return empty
+        counts = conn.execute(
+            "SELECT COUNT(*), COUNT(DISTINCT holder_cik) FROM holdings WHERE period_end = ?",
+            (period_str,),
+        ).fetchone()
+        marker = conn.execute(
+            "SELECT 1 FROM holdings_refresh_meta WHERE period_end = ?",
+            (period_str,),
+        ).fetchone()
+    except sqlite3.Error:
+        logger.debug("period_completeness_sync: cache probe failed for %s", path, exc_info=True)
+        return empty
+    finally:
+        conn.close()
+    return {
+        "period_end": period_str,
+        "complete": marker is not None,
+        "row_count": int(counts[0]) if counts else 0,
+        "filer_count": int(counts[1]) if counts else 0,
+        "expected_period_end": expected,
+    }
