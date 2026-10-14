@@ -39,11 +39,10 @@ from finrobot.artifact.models import (
     ArtifactMeta,
     ArtifactOutputs,
 )
-from finrobot.artifact.proposed_clauses import PROPOSED_CLAUSES
 
 _FIXTURE_DIR = Path(__file__).parent / "fixtures" / "contract"
 _FIXTURE_PATHS = sorted(_FIXTURE_DIR.glob("*.json"))
-_ALL_CLAUSES = (*CONTRACT_CLAUSES, *PROPOSED_CLAUSES)
+_ALL_CLAUSES = tuple(CONTRACT_CLAUSES)
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -104,7 +103,7 @@ def test_fixture_records_every_clause_verdict(path: Path) -> None:
 
 @pytest.mark.parametrize("path", _FIXTURE_PATHS, ids=lambda p: p.stem)
 def test_fixture_verdicts_are_unchanged(path: Path) -> None:
-    """THE ORACLE: every live and staged clause, re-run over the stored payload."""
+    """THE ORACLE: every registered clause, re-run over the stored payload."""
     fixture = _load(path)
     artifact = _artifact(fixture)
     expected = {cid: bool(fired) for cid, fired in fixture["verdicts"].items()}

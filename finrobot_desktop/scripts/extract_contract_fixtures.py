@@ -46,14 +46,13 @@ from finrobot.artifact.models import (
     ArtifactMeta,
     ArtifactOutputs,
 )
-from finrobot.artifact.proposed_clauses import PROPOSED_CLAUSES
 from finrobot.artifact.store import ArtifactStore
 
 _FIXTURE_DIR = (
     Path(__file__).resolve().parent.parent / "tests" / "artifact" / "fixtures" / "contract"
 )
 
-#: ``outputs.structured`` paths the clauses read, live and staged.
+#: ``outputs.structured`` paths the clauses read.
 _STRUCTURED_KEYS = (
     "thesis",
     "valuation_synthesis",
@@ -287,7 +286,7 @@ async def _run(limit: int | None) -> int:
 
             rebuilt = _to_artifact(artifact.id, artifact.ticker, artifact.type, structured, raw)
             verdicts: dict[str, bool] = {}
-            for clause in (*CONTRACT_CLAUSES, *PROPOSED_CLAUSES):
+            for clause in CONTRACT_CLAUSES:
                 verdicts[clause.id] = clause.check(rebuilt) is not None
             firing = {cid for cid, fired in verdicts.items() if fired}
             for clause_id in pinned_for:

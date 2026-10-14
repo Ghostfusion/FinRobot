@@ -36,7 +36,6 @@ from finrobot.artifact.models import (
     ArtifactMeta,
     ArtifactOutputs,
 )
-from finrobot.artifact.proposed_clauses import PROPOSED_CLAUSES
 from finrobot.artifact.summary_extractor import extract_target_price
 
 UTC = timezone.utc
@@ -524,7 +523,11 @@ def test_withheld_sell_thesis_passes_contract_verdict_unscrubbed() -> None:
     (price_target None) while still shipping a directional SELL verdict — with NO
     resurrected fallback slots — passes the contract un-scrubbed of its verdict
     (no C7 mutation, recommendation stays SELL). The value-integrity guardrails
-    only withhold the VALUE; they never refuse the judgment."""
+    only withhold the VALUE; they never refuse the judgment.
+
+    The slate carries BOTH writers' slots since 2026-10-14: the run path writes one
+    convention (root + synthesis), so a fixture that emits the root alone is itself
+    a C11 violation — which is the point of that clause, not a false positive."""
     art = _artifact(
         raw_data={"market": {"current_price": 50.0}},
         structured={
@@ -534,7 +537,11 @@ def test_withheld_sell_thesis_passes_contract_verdict_unscrubbed() -> None:
                 "price_target_basis": "single-method DCF, no cross-check available",
             },
             "valuation_withheld": True,
-            "valuation_synthesis": {"weighted_price": None, "methods": []},
+            "valuation_synthesis": {
+                "weighted_price": None,
+                "methods": [],
+                "valuation_withheld": True,
+            },
         },
         llm_narrative={"recommendation": "SELL", "company_overview": "body"},
     )
@@ -874,14 +881,16 @@ def test_c3_noop_when_dollar_amounts_have_no_conclusion_cue() -> None:
     assert out.model_dump() == before
 
 
-# ── Staged clauses: proposed_clauses.py (§7.2–§7.5) ──────────────────────────
+# ── §4 closure family (§7.2–§7.5, promoted 2026-10-14) ───────────────────────
 #
 # §7.4: one payload that passes and one that violates, per clause, plus the
 # invariant that a violation NEVER raises — a clause that raised at the persist
-# boundary would blank the run. The staged clauses are inert (nothing in the run
-# path imports them), so besides the read-only scanner
-# (``scripts/scan_artifact_contract.py --proposed``, which measured the same
-# predicates over the stored corpus — §7.1/§7.5) this is the only place they run.
+# boundary would blank the run. These fifteen clauses were staged inert and
+# quantified over the stored corpus (``scan_artifact_contract.py``, §7.1/§7.5)
+# before being appended to ``CONTRACT_CLAUSES``, so they now run in the live gate;
+# ``test_the_closure_family_runs_in_the_live_registry`` and the two
+# ``…_at_the_persist_boundary`` tests below pin that they are armed, at the
+# severity §9 locks, and that the gate acts on them.
 #
 # The payloads below are the shapes the corpus actually carries, reduced to the
 # paths each clause reads. The corpus-wide fixtures that prove the SAME predicates
@@ -889,12 +898,32 @@ def test_c3_noop_when_dollar_amounts_have_no_conclusion_cue() -> None:
 # OMITS ``valuation_withheld`` while the synthesis writes ``false`` — are §7.2's
 # job and live in ``tests/artifact/``.
 
-_STAGED = {clause.id: clause for clause in PROPOSED_CLAUSES}
+#: The fifteen §4 closure clauses, named so that a registry that lost one shows up
+#: here as a missing key rather than as silently fewer parametrized cases.
+_CLOSURE_IDS = (
+    "C6b",
+    "C8",
+    "C9",
+    "C10a",
+    "C10b",
+    "C10c",
+    "C10d",
+    "C11",
+    "C12a",
+    "C12b",
+    "C12c",
+    "C13b",
+    "C13c",
+    "C14a",
+    "C14b",
+)
+_CLOSURE = {c.id: c for c in CONTRACT_CLAUSES if c.id in _CLOSURE_IDS}
+assert len(_CLOSURE) == len(_CLOSURE_IDS), "the closure family is not fully registered"
 
 
-def _staged_finding(clause_id: str, art: Artifact):
+def _closure_finding(clause_id: str, art: Artifact):
     """Assert the clause fired, and that the finding is reportable."""
-    finding = _STAGED[clause_id].check(art)
+    finding = _CLOSURE[clause_id].check(art)
     assert finding is not None, f"{clause_id} did not fire"
     assert finding.check.startswith("contract_")
     assert finding.field_key
@@ -902,8 +931,8 @@ def _staged_finding(clause_id: str, art: Artifact):
     return finding
 
 
-def _staged_violating_artifact() -> Artifact:
-    """One artifact that trips several staged clauses and NO live one."""
+def _closure_soft_artifact() -> Artifact:
+    """One artifact that trips several SOFT closure clauses and no HARD one."""
     return _artifact(
         raw_data={
             "income": {"operating_margin": 0.18159},
@@ -925,6 +954,9 @@ def _staged_violating_artifact() -> Artifact:
                 "recommendation": "HOLD",
                 "narrative": "Insiders were net sellers of [target withheld].",
             },
+            # Both writers present and equal, so C11 (HARD) stays quiet and this
+            # payload isolates the SOFT annotations.
+            "valuation_withheld": False,
             "valuation_synthesis": {
                 "valuation_withheld": False,
                 "methods": [{"name": "dcf"}],
@@ -956,7 +988,7 @@ def test_every_clause_carries_a_renderable_title_and_doc() -> None:
     (and later the reason-code registry of §9.6) names the rule, not only its id. The
     title lives on the clause and nowhere else — a copy in a consumer is the drift
     class §4.4 exists to catch."""
-    for clause in (*CONTRACT_CLAUSES, *PROPOSED_CLAUSES):
+    for clause in CONTRACT_CLAUSES:
         assert clause.title, f"{clause.id} has no title"
         assert clause.doc, f"{clause.id} has no doc"
         assert len(clause.doc) < 120, f"{clause.id}'s doc is a spec, not a one-liner"
@@ -968,36 +1000,77 @@ def test_count_thresholds_are_declared_inert() -> None:
     fixture verdict oracle (tests/artifact/test_contract_fixtures.py) is unchanged by
     their presence. When the first clause arms one, its count carrier arrives with the
     `NumericClaim` fields of §6/§9.5 — that change owns this assertion."""
-    for clause in (*CONTRACT_CLAUSES, *PROPOSED_CLAUSES):
+    for clause in CONTRACT_CLAUSES:
         assert clause.warn_if is None
         assert clause.error_if is None
 
 
-def test_staged_registry_is_disjoint_from_the_live_gate() -> None:
-    """No staged id may already be live: a promotion diff that double-ran a clause
-    would report every violation twice."""
-    assert {clause.id for clause in CONTRACT_CLAUSES} & set(_STAGED) == set()
+def test_the_closure_family_runs_in_the_live_registry() -> None:
+    """THE PROMOTION PROOF. ``C8``/``C11`` withhold (H) because their locked
+    remediation IS a value-withhold; the other thirteen annotate (S) because their
+    locked shape — a count threshold, a sentence deletion, or (``C9``) a claim-scope
+    drop the gate cannot perform — is not expressible here yet. A clause that lost or
+    gained a severity is a silent change in what ships."""
+    expected = {
+        **dict.fromkeys(("C8", "C11"), "H"),
+        **dict.fromkeys(
+            (
+                "C6b",
+                "C9",
+                "C10a",
+                "C10b",
+                "C10c",
+                "C10d",
+                "C12a",
+                "C12b",
+                "C12c",
+                "C13b",
+                "C13c",
+                "C14a",
+                "C14b",
+            ),
+            "S",
+        ),
+    }
+    assert {cid: _CLOSURE[cid].severity for cid in _CLOSURE_IDS} == expected
 
 
-def test_staged_clauses_are_inert_at_the_persist_boundary() -> None:
-    """THE INERTNESS PROOF. An artifact that trips several staged clauses and no
-    live one comes out of ``enforce_artifact_contract`` byte-identical — no
-    withhold, no warning, no mutation. If this fails, a promotion landed without
-    its review diff (§7.1)."""
-    art = _staged_violating_artifact()
-    assert [c.id for c in PROPOSED_CLAUSES if c.check(art) is not None]
-    before = art.model_dump()
+def test_closure_hard_violation_withholds_at_the_persist_boundary() -> None:
+    """THE ARMED-HALF PROOF. Instance B's shape — the root OMITS ``valuation_withheld``
+    while the synthesis writes ``false`` — now withholds at the persist boundary where
+    it used to pass through untouched, and the record names the clause."""
+    art = _artifact(structured={"valuation_synthesis": {"valuation_withheld": False}})
+    assert _CLOSURE["C11"].check(art) is not None
     out = enforce_artifact_contract(art)
-    assert out.model_dump() == before
+    structured = out.outputs.structured
+    assert structured["valuation_withheld"] is True
+    assert structured["withheld_reason"] == "contract_C11"
+    assert any(w.startswith("[CONTRACT/C11] ") for w in out.outputs.warnings)
 
 
-@pytest.mark.parametrize("clause_id", sorted(_STAGED))
-def test_staged_clause_never_raises_on_any_shape(clause_id: str) -> None:
+def test_closure_soft_violations_only_annotate_at_the_persist_boundary() -> None:
+    """THE ARMED-SOFT-HALF PROOF. The same payload that used to come out byte-identical
+    is annotated once per SOFT violation and keeps its target: an S clause may add
+    evidence, it may never withhold a value (doctrine: a clause withholds a value,
+    never flips a verdict)."""
+    art = _closure_soft_artifact()
+    firing = {c.id for c in CONTRACT_CLAUSES if c.check(art) is not None}
+    hard = {cid for cid in firing if _CLOSURE[cid].severity == "H"}
+    assert firing & set(_CLOSURE_IDS), "the payload no longer exercises the closure family"
+    assert not hard, f"soft payload trips a HARD clause: {sorted(hard)}"
+    out = enforce_artifact_contract(art)
+    notes = [w for w in out.outputs.warnings if w.startswith("[CONTRACT/") and "/note] " in w]
+    assert {note.split("/")[1] for note in notes} == firing
+    assert out.outputs.structured.get("valuation_withheld") is not True
+
+
+@pytest.mark.parametrize("clause_id", sorted(_CLOSURE))
+def test_closure_clause_never_raises_on_any_shape(clause_id: str) -> None:
     """A clause must report a violation, never throw one, whatever the payload
     holds — this is the invariant the scanner relies on to sweep the store, and
     the reason the guard is a return value rather than an exception."""
     for art in _degenerate_artifacts():
-        _STAGED[clause_id].check(art)
+        _CLOSURE[clause_id].check(art)
 
 
 def _degenerate_artifacts() -> list[Artifact]:
@@ -1057,7 +1130,7 @@ def test_c6b_fires_when_the_note_denies_the_cross_check_it_publishes() -> None:
             },
         }
     )
-    finding = _staged_finding("C6b", art)
+    finding = _closure_finding("C6b", art)
     assert "ev_ebitda_band" in finding.evidence
     assert "none brackets" in finding.evidence
 
@@ -1073,7 +1146,7 @@ def test_c6b_quiet_when_the_note_and_the_evidence_agree() -> None:
             },
         }
     )
-    assert _STAGED["C6b"].check(art) is None
+    assert _CLOSURE["C6b"].check(art) is None
 
 
 def test_c8_fires_on_a_buy_whose_only_band_sits_below_the_tape() -> None:
@@ -1088,7 +1161,7 @@ def test_c8_fires_on_a_buy_whose_only_band_sits_below_the_tape() -> None:
             },
         }
     )
-    finding = _staged_finding("C8", art)
+    finding = _closure_finding("C8", art)
     assert "contradicts" in finding.evidence
 
 
@@ -1105,7 +1178,7 @@ def test_c8_quiet_when_a_band_brackets_the_tape() -> None:
             },
         }
     )
-    assert _STAGED["C8"].check(art) is None
+    assert _CLOSURE["C8"].check(art) is None
 
 
 def test_c8_does_not_read_a_band_c9_has_rejected() -> None:
@@ -1124,8 +1197,8 @@ def test_c8_does_not_read_a_band_c9_has_rejected() -> None:
             },
         }
     )
-    assert _STAGED["C8"].check(art) is None
-    assert _staged_finding("C9", art) is not None
+    assert _CLOSURE["C8"].check(art) is None
+    assert _closure_finding("C9", art) is not None
 
 
 def test_c9_fires_on_a_non_positive_band() -> None:
@@ -1138,7 +1211,7 @@ def test_c9_fires_on_a_non_positive_band() -> None:
             }
         }
     )
-    finding = _staged_finding("C9", art)
+    finding = _closure_finding("C9", art)
     assert "not positive" in finding.evidence
 
 
@@ -1150,7 +1223,7 @@ def test_c9_fires_on_a_band_that_is_not_monotone() -> None:
             }
         }
     )
-    assert "outside" in _staged_finding("C9", art).evidence
+    assert "outside" in _closure_finding("C9", art).evidence
 
 
 # ── C11: the mirrored slot ──────────────────────────────────────────────────
@@ -1160,7 +1233,7 @@ def test_c11_fires_when_one_writer_omits_the_mirrored_slot() -> None:
     """The corpus shape, and the one the first probe's ``is not None`` guard hid:
     the root OMITS the key while the synthesis writes ``false``."""
     art = _artifact(structured={"valuation_synthesis": {"valuation_withheld": False}})
-    finding = _staged_finding("C11", art)
+    finding = _closure_finding("C11", art)
     assert "omits the slot" in finding.evidence
 
 
@@ -1171,7 +1244,7 @@ def test_c11_fires_when_the_two_writers_disagree_on_the_value() -> None:
             "valuation_synthesis": {"valuation_withheld": True},
         }
     )
-    assert "disagree" in _staged_finding("C11", art).evidence
+    assert "disagree" in _closure_finding("C11", art).evidence
 
 
 def test_c11_quiet_when_the_writers_agree_or_both_stay_silent() -> None:
@@ -1182,8 +1255,8 @@ def test_c11_quiet_when_the_writers_agree_or_both_stay_silent() -> None:
         }
     )
     neither = _artifact(structured={"valuation_synthesis": {}})
-    assert _STAGED["C11"].check(both_true) is None
-    assert _STAGED["C11"].check(neither) is None
+    assert _CLOSURE["C11"].check(both_true) is None
+    assert _CLOSURE["C11"].check(neither) is None
 
 
 # ── C10a–C10d: conclusion ratios ────────────────────────────────────────────
@@ -1191,7 +1264,7 @@ def test_c11_quiet_when_the_writers_agree_or_both_stay_silent() -> None:
 
 def test_c10a_fires_on_a_margin_with_no_numerator() -> None:
     art = _artifact(raw_data={"income": {"operating_margin": 0.18159}})
-    finding = _staged_finding("C10a", art)
+    finding = _closure_finding("C10a", art)
     assert "operating_income" in finding.evidence
 
 
@@ -1199,7 +1272,7 @@ def test_c10a_quiet_when_both_operands_are_present() -> None:
     art = _artifact(
         raw_data={"income": {"operating_margin": 0.18159, "operating_income": 4_418_000_000.0}}
     )
-    assert _STAGED["C10a"].check(art) is None
+    assert _CLOSURE["C10a"].check(art) is None
 
 
 def test_c10b_fires_when_the_two_operands_come_from_different_sources() -> None:
@@ -1217,7 +1290,7 @@ def test_c10b_fires_when_the_two_operands_come_from_different_sources() -> None:
             }
         }
     )
-    finding = _staged_finding("C10b", art)
+    finding = _closure_finding("C10b", art)
     assert "different sources" in finding.evidence
 
 
@@ -1236,7 +1309,7 @@ def test_c10b_quiet_when_one_source_serves_both_operands() -> None:
             }
         }
     )
-    assert _STAGED["C10b"].check(art) is None
+    assert _CLOSURE["C10b"].check(art) is None
 
 
 def test_c10c_fires_when_the_identity_is_computable_but_unrecorded() -> None:
@@ -1249,7 +1322,7 @@ def test_c10c_fires_when_the_identity_is_computable_but_unrecorded() -> None:
             }
         }
     )
-    assert "not recorded" in _staged_finding("C10c", art).evidence
+    assert "not recorded" in _closure_finding("C10c", art).evidence
 
 
 def test_c10c_verifies_a_recorded_identity_and_quiet_when_it_closes() -> None:
@@ -1270,7 +1343,7 @@ def test_c10c_verifies_a_recorded_identity_and_quiet_when_it_closes() -> None:
             }
         }
     )
-    assert _STAGED["C10c"].check(art) is None
+    assert _CLOSURE["C10c"].check(art) is None
 
 
 def test_c10c_fires_on_a_recorded_identity_that_does_not_close() -> None:
@@ -1289,7 +1362,7 @@ def test_c10c_fires_on_a_recorded_identity_that_does_not_close() -> None:
             }
         }
     )
-    assert "does not close" in _staged_finding("C10c", art).evidence
+    assert "does not close" in _closure_finding("C10c", art).evidence
 
 
 def test_c10d_fires_on_an_accepted_caliber_divergent_decision() -> None:
@@ -1307,7 +1380,7 @@ def test_c10d_fires_on_an_accepted_caliber_divergent_decision() -> None:
             }
         }
     )
-    assert "caliber_divergent" in _staged_finding("C10d", art).evidence
+    assert "caliber_divergent" in _closure_finding("C10d", art).evidence
 
 
 def test_c10d_quiet_when_the_divergent_comparison_was_not_accepted() -> None:
@@ -1325,7 +1398,7 @@ def test_c10d_quiet_when_the_divergent_comparison_was_not_accepted() -> None:
             }
         }
     )
-    assert _STAGED["C10d"].check(art) is None
+    assert _CLOSURE["C10d"].check(art) is None
 
 
 # ── C12a–C12c: recency and window closure ───────────────────────────────────
@@ -1340,12 +1413,12 @@ def test_c12a_fires_on_the_artifact_s_own_staleness_disclosure() -> None:
             }
         }
     )
-    assert "stale" in _staged_finding("C12a", art).evidence
+    assert "stale" in _closure_finding("C12a", art).evidence
 
 
 def test_c12a_quiet_without_the_disclosure() -> None:
     art = _artifact(structured={"catalyst_analysis": {"sec_8k_window": {"count": 10}}})
-    assert _STAGED["C12a"].check(art) is None
+    assert _CLOSURE["C12a"].check(art) is None
 
 
 def test_c12b_fires_on_an_empty_news_window_carrying_a_populated_read() -> None:
@@ -1358,13 +1431,13 @@ def test_c12b_fires_on_an_empty_news_window_carrying_a_populated_read() -> None:
             }
         }
     )
-    finding = _staged_finding("C12b", art)
+    finding = _closure_finding("C12b", art)
     assert "news window is empty" in finding.evidence
 
 
 def test_c12b_quiet_when_the_window_has_news() -> None:
     art = _artifact(structured={"catalyst_analysis": {"news_window": {"count": 3}}})
-    assert _STAGED["C12b"].check(art) is None
+    assert _CLOSURE["C12b"].check(art) is None
 
 
 def test_c12c_fires_on_a_fact_the_producer_annotated_as_stale() -> None:
@@ -1383,7 +1456,7 @@ def test_c12c_fires_on_a_fact_the_producer_annotated_as_stale() -> None:
             }
         }
     )
-    assert "annotated as stale" in _staged_finding("C12c", art).evidence
+    assert "annotated as stale" in _closure_finding("C12c", art).evidence
 
 
 def test_c12c_quiet_on_a_derived_quarter_warning() -> None:
@@ -1402,7 +1475,7 @@ def test_c12c_quiet_on_a_derived_quarter_warning() -> None:
             }
         }
     )
-    assert _STAGED["C12c"].check(art) is None
+    assert _CLOSURE["C12c"].check(art) is None
 
 
 # ── C13b / C13c: independence ───────────────────────────────────────────────
@@ -1416,7 +1489,7 @@ def test_c13b_fires_when_a_self_centred_distribution_is_not_declared_dependent()
             }
         }
     )
-    assert "independent" in _staged_finding("C13b", art).evidence
+    assert "independent" in _closure_finding("C13b", art).evidence
 
 
 def test_c13b_quiet_when_the_declaration_is_present() -> None:
@@ -1432,7 +1505,7 @@ def test_c13b_quiet_when_the_declaration_is_present() -> None:
             }
         }
     )
-    assert _STAGED["C13b"].check(art) is None
+    assert _CLOSURE["C13b"].check(art) is None
 
 
 def test_c13c_fires_when_every_agreement_is_non_independent() -> None:
@@ -1449,7 +1522,7 @@ def test_c13c_fires_when_every_agreement_is_non_independent() -> None:
             }
         }
     )
-    assert "circular" in _staged_finding("C13c", art).evidence
+    assert "circular" in _closure_finding("C13c", art).evidence
 
 
 def test_c13c_quiet_when_an_independent_agreement_exists() -> None:
@@ -1463,7 +1536,7 @@ def test_c13c_quiet_when_an_independent_agreement_exists() -> None:
             }
         }
     )
-    assert _STAGED["C13c"].check(art) is None
+    assert _CLOSURE["C13c"].check(art) is None
 
 
 # ── C14a / C14b: prose grounding ────────────────────────────────────────────
@@ -1476,7 +1549,7 @@ def test_c14a_fires_when_a_direction_word_contradicts_the_leaf_sign() -> None:
             "ownership_governance": {"insider_net_flow": -49_991_274.0},
         }
     )
-    assert "contradicts the sign" in _staged_finding("C14a", art).evidence
+    assert "contradicts the sign" in _closure_finding("C14a", art).evidence
 
 
 def test_c14a_quiet_when_the_direction_word_matches() -> None:
@@ -1486,7 +1559,7 @@ def test_c14a_quiet_when_the_direction_word_matches() -> None:
             "ownership_governance": {"insider_net_flow": -49_991_274.0},
         }
     )
-    assert _STAGED["C14a"].check(art) is None
+    assert _CLOSURE["C14a"].check(art) is None
 
 
 def test_c14b_fires_when_the_placeholder_took_a_published_flow() -> None:
@@ -1500,7 +1573,7 @@ def test_c14b_fires_when_the_placeholder_took_a_published_flow() -> None:
             "ownership_governance": {"insider_net_flow": -4_413_467.0},
         }
     )
-    assert "insider-flow amount" in _staged_finding("C14b", art).evidence
+    assert "insider-flow amount" in _closure_finding("C14b", art).evidence
 
 
 def test_c14b_quiet_on_the_withheld_path_s_own_disclaimer() -> None:
@@ -1519,4 +1592,4 @@ def test_c14b_quiet_on_the_withheld_path_s_own_disclaimer() -> None:
             "ownership_governance": {"insider_net_flow": -4_413_467.0},
         }
     )
-    assert _STAGED["C14b"].check(art) is None
+    assert _CLOSURE["C14b"].check(art) is None

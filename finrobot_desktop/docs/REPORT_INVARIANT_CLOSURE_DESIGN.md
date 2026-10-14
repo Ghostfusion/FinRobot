@@ -1,8 +1,11 @@
 # Report Invariant Closure — Design
 
-Status: **accepted — the seven decisions were locked 2026-10-14 (§9)**. No code implements this
-yet; §4 is a rule inventory with pinned instances, not a change log, and Phase 1 (§7) is the
-next change.
+Status: **accepted — the seven decisions were locked 2026-10-14 (§9), and Phase 1's first
+increment has LANDED**: the fifteen §4 clauses are promoted into the live persist gate (`C9`
+excepted — it annotates, see §4.2), §4.4's writer unification ships with them, and §4 is still a
+rule inventory with pinned instances rather than a change log. §7 item 1 records what shipped and
+the readings before/after; what remains open is §5's second half (the back-fill tag), §9.3's page
+badge, and §6's ledger, which is what Phase 2 waits on.
 
 Scope: the output-contract gate (`finrobot/artifact/contract.py`), the numeric-audit rule set
 (`engine/compute/operators/audit/`), and the payload shapes they read. Phase 2 (§6) touches
@@ -210,12 +213,20 @@ exact payload paths (verified against stored artifacts, not guessed). IDs `C8+` 
   HMY's `1.22 … 3.74` against $16.71 (and NFLX/UTHR/THC's bands) are positive, monotone and
   fully sampled, so `C9` does not fire on them — they are `C8` instances. `C9` is the *usability*
   rule; proximity to the tape is `C8`'s business.
+- **Promoted `S` (2026-10-14), not the locked `H`.** The locked claim scope is "withhold the
+  cross-check entries; do not withhold the target on this clause alone", and
+  `enforce_artifact_contract` cannot drop a list entry: `_withhold` scrubs the headline slots. So an
+  `H` arming would take SKM's target off for a display defect §4.2 forbids withholding the target
+  for — and it would leave the nonsense band in `cross_checks` anyway, since the row is never
+  removed. Heavier *and* less effective than the locked remedy, which is the same test the
+  `C10`/`C12`/`C14` families fail. It annotates until the gate grows a claim-scope withhold (§9.2's
+  mechanism, which the numeric-audit path already has through `withhold_keys`).
 
 ### 4.3 `C10` — conclusion ratios: same-source operands, and a numerator must exist
 - **severity** `H`, **claim scope** (withhold the ratio leaves; promote the `FinancialData`
   finding to `blocked_field`). Count-thresholded per §9.2 (`error_if` for a published ratio,
-  `warn_if` for a display-only field). Locked. **Staged:** the predicates are staged `S`/annotate
-  until §9.2's count fields exist — the locked shape is the threshold, not a per-artifact veto, and
+  `warn_if` for a display-only field). Locked. **Promoted `S` (2026-10-14):** the predicates run as
+  `S`/annotate until §9.2's count fields exist — the locked shape is the threshold, not a per-artifact veto, and
   a `C10a` veto armed alone would withhold the target on 69% of the catalogue (§7.1).
 - **reads** `inputs.raw_data.income.{gross_margin, operating_margin, operating_income, revenue, ebitda, net_income, nci_earnings}`,
   the same leaves inside `inputs.raw_data.data_authority.decisions[].{metric, selected_source, status, period_end, comparability}`,
@@ -285,11 +296,19 @@ exact payload paths (verified against stored artifacts, not guessed). IDs `C8+` 
   DOM check (pre-change `c75ac2` vs post-change `81fd64`) is identical on every probed surface:
   `report-audit-banner` 1, `football-upside-withheld` 1, `report-data-authority` 1, cover text
   unchanged.
+- **The promotion diff found the THIRD writer.** `valuation_withheld` has three writers, not two:
+  the builders' mirror (above), the synthesis dial (`valuation_synthesis.py`), and — the one the
+  first pass missed — `contract._withhold` itself, which runs at the persist boundary *after* both
+  of them. Writing only the root there left root `True` beside a synthesis `False`, so the gate
+  inflicted a `C11` violation on its own output (it fired on the next read and on every
+  re-enforcement) and handed `technical_payload` a stale `has_anchor_target`. The promotion diff
+  syncs the mirrored slot there too. That is the same defect one level up, twice — which is
+  §7.1's argument for promoting a clause at all: arming `C11` is what *found* the third writer.
 
 ### 4.5 `C12` — recency and window closure
 - **severity** two-threshold (§9.7, locked): `error_if` when the stale or undated item carried a
   published number, `warn_if` when it only populated a catalogue (remediation: exclude +
-  disclose). **Staged:** `S`/annotate — the `warn_if` floor — until §9.2's fields exist; the
+  disclose). **Promoted `S` (2026-10-14):** runs `S`/annotate — the `warn_if` floor — until §9.2's fields exist; the
   `error_if` half is what withholds, and it is not expressible today (§7.1).
 - **reads** `outputs.structured.historical_metrics.*` against
   `outputs.structured.financial_modeling.inputs.ttm_period_end` and
@@ -320,8 +339,8 @@ exact payload paths (verified against stored artifacts, not guessed). IDs `C8+` 
 - **pinned instance** instance A: 21,491,326,290 ÷ 266.91 = 80,519,000.6 = the published count.
 
 ### 4.7 `C14` — prose grounding on direction, not just on digits
-- **severity** `H`, claim scope (delete the clause, never rewrite it). **Staged:** `S`/annotate —
-  the locked remediation has no implementation in the persist gate. `enforce_artifact_contract`
+- **severity** `H`, claim scope (delete the clause, never rewrite it). **Promoted `S`
+  (2026-10-14):** runs `S`/annotate — the locked remediation has no implementation in the persist gate. `enforce_artifact_contract`
   withholds VALUES (`_scrub_headline_slots`) and stamps the narrative; it cannot delete a sentence
   from `thesis.narrative`. Arming `C14` as `H` today would withhold the TARGET for a prose defect,
   which is not the locked remediation (§7.1).
@@ -347,9 +366,9 @@ synthesis' `degradation_note` quote it. This is the same defect class as the fro
 `ebitda_caliber` constant: a label that encodes a rule rather than a reading.
 
 **Staging note (2026-10-14) — "replaces" was one word too strong.** The fix has two halves and the
-staged set implements both, as a pair rather than as one rewritten clause:
+promoted set implements both, as a pair rather than as one rewritten clause:
 live `C6` fires when a single-method headline's basis carries **no** disclosure at all, and the
-staged `C6b` fires when the note **denies** a cross-check the payload prints (instance B's shape).
+promoted `C6b` fires when the note **denies** a cross-check the payload prints (instance B's shape).
 Those are different predicates over the same sentences, so neither replaces the other — the
 promotion diff keeps both, and additionally lets live `C6`'s evidence report the cross-check facts
 the way `C6b`'s already does. Read "replaces" above as "replaces the *derivation*, not the
@@ -402,16 +421,27 @@ What is still open is the second half, and it is exactly the back-fill: `publish
 synthesis' own fetch came back empty — reading the frozen technical band, which is the same run's
 data, so nothing is fabricated, but the ROW is still one the verdict never read. The pipeline's own
 log line names that shape (`… band unavailable (no EV/EBITDA method row, no cross-check)`).
+**Measured 2026-10-14, after the promotion (the reason the tag is not optional).** Of the 49 stored
+artifacts that publish a cross-check row, **43 publish it beside no EV/EBITDA method row** — the
+back-fill's signature, since the synthesis builds its own row from the same band as the method row,
+so the two normally arrive together. All **7** of `C8`'s instances are in that set, instance B
+(`99cdca`) among them. That means C8, armed at `H`, currently withholds on a row **the verdict never
+read** in 100% of its standing catch list, and its evidence string — *"contradicts every published
+cross-check"* — reads as though the call had the evidence and ignored it. The inference is the
+*shape*, not a marker (a synthesis row can also lose its method row to a net-debt or negative-equity
+drop while the cross-check survives); tagging at the back-fill site is exactly what makes those two
+cases distinguishable again, which is why the smaller closure ships first.
+
 Two closures are available and both are run-path edits, so they wait for the owner:
 
 - make the synthesis' band a **precondition** — the directional call does not proceed without the
   band it is required to consult, or it records that it had none (the `Withheld` measure of §6);
 - keep the back-fill **display-only** and tagged as not-consulted-by-the-verdict, so a reader is
   never shown a cross-check that reads as corroboration of a call that never saw it (`C6b` is the
-  clause that catches a note claiming otherwise, and it is staged).
+  clause that catches a note claiming otherwise, and it is live as of the 2026-10-14 promotion).
 
-Armed, `C8` refuses to publish what instance B published; that is the verification half, and it is
-staged pending the same go-ahead.
+Armed, `C8` refuses to publish what instance B published; that is the verification half, and as of
+the 2026-10-14 promotion it is live.
 
 ---
 
@@ -510,9 +540,12 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
    `C13b`'s 47 was a declaration rate, not a catch list, and `C14`'s placeholder had been tabulated
    in occurrences rather than artifacts (68 over 27, against the 10 the clause reports).
 
-   **Staged severity, and why three families are not armed at §9's locked severity.** `C8`/`C9`/`C11`
-   are staged at the severity §9 locks for them. `C10`/`C12`/`C14` are staged `S`/annotate although
-   §9 locks them `H`, because their locked shape is not a per-artifact veto: `C10` and `C12` are
+   **Promoted severity, and why four clauses did not enter at §9's locked severity.** `C8`/`C11`
+   entered at the severity §9 locks for them. `C9`, `C10`, `C12` and `C14` entered `S`/annotate
+   although §9 locks them `H`, because their locked shape is not a per-artifact veto: `C9`'s locked
+   claim scope is "drop the band entries, not the target" (§4.2) and the gate cannot drop a list
+   entry — an `H` arming would withhold SKM's target for a display defect while leaving the nonsense
+   band in `cross_checks`, i.e. heavier *and* less effective than the locked remedy. `C10` and `C12` are
    **count-thresholded** (`error_if` when the offending figure was *published*, `warn_if` when it only
    populated a catalogue or a display field) and `C14`'s locked remediation is "delete the sentence,
    never rewrite it" — which `enforce_artifact_contract` cannot perform, since it withholds VALUES and
@@ -527,6 +560,25 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
    catch list for those clauses can never reach 0; what has to reach 0 is the count of instances
    produced AFTER the fix. That is what the span column is for, and it is why the scanner (which
    sweeps history) is a promotion instrument rather than the promotion test.
+
+   **Promoted 2026-10-14.** The fifteen clauses are in `CONTRACT_CLAUSES` and
+   `artifact/proposed_clauses.py` is gone — quantifying outside the registry first is the *practice*
+   this section describes, not a second universe that ships. The severities are the ones argued
+   above: `C8`/`C11` at `H`, `C9` and the other eleven at `S`. Read over the store immediately before the
+   promotion (`--badge`: **0** withhold / **0** annotate / 105 clean) and immediately after
+   (**70** withhold / **31** annotate / **6** clean over the 107 artifacts then stored), the delta is the back catalogue's
+   `C11` population plus its `C8`/`C9` instances — every one of them written before its remediation
+   shipped, and §9.3 is how a reader sees that without a stored record being rewritten. The live
+   gate acts prospectively: on the two artifacts written after §4.4's unification, the promoted set
+   reads `REVIEW (C10d, C12a)` and withholds nothing. `C11`'s span closed at `…20:27:40` (§4.4),
+   which is the criterion this section sets — not a zero count.
+
+   Re-measured once `C9` moved to `S` with the store at **110** (the corpus grows as runs land):
+   **69** withhold / **35** annotate / **6** clean, **336** flags. The withhold set decomposes
+   exactly — 62 artifacts are `C11`-only, 6 are `C8`-only, and 1 (`99cdca`) carries both — so the
+   two armed clauses cover different artifacts rather than one subsuming the other. `C11`'s own
+   list runs from `…10-10T21:45:27` to `…20:27:40`.
+
 
    The corpus also re-confirms §1's table at HEAD: **170** `review` findings, **0**
    `blocked_field`, `withhold_valuation` never true, `withheld_reason` = `contract_C7` ×31 / null
@@ -543,7 +595,7 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
    **Shipped:** 16 payloads under `tests/artifact/fixtures/contract/`, written by
    `scripts/extract_contract_fixtures.py` (a declared path spec per artifact — a full row reaches
    3 MB, `insider_transactions` alone is 1 MB — values verbatim) and asserted by
-   `tests/artifact/test_contract_fixtures.py`, which re-runs every live and staged clause over
+   `tests/artifact/test_contract_fixtures.py`, which re-runs every registered clause over
    each payload and compares against the verdict map recorded at extraction. 665 KB total. Two
    fixtures exist to stay QUIET — SMCI's withheld-path disclaimer for `C14b` and AMZN's 2009-era
    long history for `C12c` — because a false-positive guard that is never tested is a guard that
@@ -648,30 +700,39 @@ Phase 1 (§7); the archive treatment in §9.3 is the only part that is not a cod
 
   | clause set | would withhold | would annotate | clean |
   |---|---|---|---|
-  | **live** (`C1`–`C7`) | **0** | 0 | 105 |
-  | **staged** (incl. `C8`/`C9`/`C11`) | **70** | 29 | 6 |
+  | **live before the promotion** (`C1`–`C7`, 105 artifacts) | **0** | 0 | 105 |
+  | **at the promotion** (all 22, 107 artifacts) | **70** | 31 | 6 |
+  | **after `C9` moved to `S`** (110 artifacts) | **69** | 35 | 6 |
 
-  The live row is the finding: the shipped rules would not have withheld a single one of the
-  contradicted artifacts. The staged row is the promotion risk, in the currency the badge uses —
-  and 63 of the 70 withholds are the `C11` non-withheld population (`WITHHOLD (C11)` on ordinary
-  reports that withheld nothing), which is why §4.4's unification must precede its promotion.
+  The first row is the finding: the shipped rules would not have withheld a single one of the
+  contradicted artifacts. The second and third are that same defect class, now counted — 62 of the
+  69 withholds are `C11`-only and 6 are `C8`-only (instance B carries both), which is why §4.4's
+  unification had to precede the promotion, and every one of the 69 was written before its own
+  remediation shipped. The badge is a **reading of the stored
+  payload under today's registry, never a verdict on the record**: the record keeps its bytes, and
+  the artifact's own `[CONTRACT/*]` warnings — present only on reports written after the clauses
+  were armed — are the shipped side of the distinction.
   Note the `archived` column shows `no` everywhere: nothing in the store has aged past the 24h
   no-view window yet, so the column is exercised but not yet populated.
-- **The page badge is gated on the promotion, not on the plumbing.** Reading the viewer settles
+- **The page badge was gated on the promotion, not on the plumbing — the promotion is now in
+  (2026-10-14), so the page half is unblocked.** Reading the viewer settles
   where the badge's input would come from: `ChapterAuditBanner` renders
   `outputs.structured.numeric_audit` plus the `[CONTRACT/*]` findings it parses out of
   `outputs.warnings` — i.e. the persist gate ALREADY surfaces contract findings to the page. The
   back catalogue has none of those warnings because the clauses were not armed when those
   artifacts were written, which is exactly why §9.3 asks for a *read-time* derivation: it has to
-  re-run the clause registry over the stored payload. Two consequences follow, and both are
-  reasons not to build the page half yet:
+  re-run the clause registry over the stored payload. Two consequences follow:
   - the derivation belongs in **Python** (the clauses are Python; a TypeScript re-implementation
     would be a second definition of every rule, doctrine 1) — a small read-time module reusing
-    `CONTRACT_CLAUSES`/`PROPOSED_CLAUSES` behind the artifact-detail route;
-  - its content is *"would-flag under the live clause set"*, and under the live set the reading
-    above is **0 of 105**. The badge is therefore empty until clauses are promoted, and promoting
-    `C11` first would make it scream `WITHHOLD` on 60% of ordinary reports (§4.4). The page half
-    lands with the promotion, not before it.
+    `CONTRACT_CLAUSES` behind the artifact-detail route, next to the `[CONTRACT/*]` findings the
+    banner already parses;
+  - its content is *"would-flag under the live clause set"*, and post-promotion that reading is
+    **70 withhold / 31 annotate / 6 clean over 107**. 63 of those withholds are the `C11`
+    population of §4.4 — ordinary reports, most of them healthy — so the badge's wording carries
+    the distinction the table above draws: it is a re-reading under today's rules, not a statement
+    that the report shipped withheld. A badge that reads `WITHHOLD` on a published report would be
+    the reader's first impression of a correct document, which is why the wording ships with the
+    derivation rather than after it.
 - **Why: the domain's own answer to a wrong filed report is an amendment, not an edit.**
   17 CFR 240.12b-15: an amendment is *"filed under cover of the form amended, marked with the
   letter 'A' … '10-K/A'"*, *"must set forth the complete text of each item as amended"*, and
@@ -719,7 +780,7 @@ Phase 1 (§7); the archive treatment in §9.3 is the only part that is not a cod
   unmeasurable — the property §7 item 1 depends on.
 - **Measured against HEAD (2026-10-14) — the first step was mis-stated by one level, and the
   correction matters.** `Finding` is the live vocabulary: the ten-odd audit verifiers,
-  `artifact/contract.py` and every staged clause import it. `NumericClaim` is imported by
+  `artifact/contract.py` and every clause in that registry import it. `NumericClaim` is imported by
   **nothing under `finrobot/` except its own module** — the only importer in the tree is
   `tests/unit/test_numeric_claim.py`. So this is not a ledger that lacks three fields; it is a
   model with no producer and no consumer. Adding `basis`/`is_proxy`/`derivation` today would be
@@ -770,7 +831,7 @@ behaviour.
 
 **Shipped 2026-10-14.** All four fields exist on the dataclass with defaults, and the decision's
 own claim — additive, behaviour-preserving — is what makes that safe to land ahead of their first
-user. The `title`/`doc` pair is populated for the seven live clauses and the fifteen staged ones
+user. The `title`/`doc` pair is populated for all 22 registered clauses
 and already has a consumer: `scripts/scan_artifact_contract.py` heads each catch list with the
 rule's name and its one-liner instead of a bare id, so the human-review payload reads the words
 the registry will serve. `warn_if`/`error_if` are **declared and inert** — no clause sets them,
