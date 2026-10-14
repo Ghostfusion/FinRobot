@@ -100,16 +100,29 @@ per fetch for cross-run disagreement tracking.
 
 **Where each record is published.** One fetch produces up to two reports — the FINANCIALS
 slate (revenue, net income, cash, market cap, shares, EBITDA, debt, margin) and the PRICE
-slate (current price, and only that). The artifact publishes the **FINANCIALS** report as
-`raw_data.data_authority` (the panel and the findings read that block); the PRICE decision
-rides its own canonical snapshot (`NormalizedPrice.reconciliation`) and the append-only log,
-and the price's reader-facing provenance stays where it already was: `MarketData.provenance`
-(`provider` + `as_of` + `degraded`), `quote_is_live` / `quote_as_of`, and the
-`price_field_divergences` → `price_divergence:<field>` marker when two feeds disagree. Both
-reports are in `~/.finrobot/metric_authority/<SYMBOL>.jsonl`. Publishing the price decision
-in the artifact as well (a `MarketData.data_authority` field) is the obvious next step and is
-NOT done here — the price's provider and basis are already published fields, so nothing is
-hidden; only the agreement dimension is reported through the marker rather than the panel.
+slate (current price, and only that). They are published as **separate keys**:
+
+- `raw_data.data_authority` — the FINANCIALS report, and NOTHING else. `None` means the
+  financial metrics have no decision record (a canonical served from a cache row written
+  before the field existed; that row's provenance gains the `authority_record_missing`
+  marker). A price-only record must never be presented as the financials authority — the
+  2026-10-13 NVDA report did exactly that: it showed a `current_price` decision list under
+  the financials heading and "0 conflicts" while `warnings` carried a 37% `total_cash`
+  divergence the decision list could not express.
+- `raw_data.price_authority` — the PRICE report, under its own label, so the authoritative
+  `current_price` selection is reader-visible without impersonating the financials block.
+- `raw_data.provenance` — the run's real standing, so the page cannot present a clean view
+  beside a divergence: the merged canonical `degraded` markers, `metrics_decided` /
+  `metrics_without_record` (how much of the compared slate actually has a decision record),
+  `divergence_warnings` (how many cross-source divergence lines the validator emitted — a
+  compared but NON-key field like `total_cash` produces prose only, never a marker),
+  `retrieved_at` / `from_cache` (the FINANCIALS feed), `price_retrieved_at` /
+  `price_from_cache` (the PRICE feed) and `session_as_of` (the quote's session close, =
+  `timestamp`). `inputs.data_fetched_at` stays what it always was — the data's vintage — and
+  the UI labels it as such instead of as a fetch.
+
+An append-only log (`~/.finrobot/metric_authority/<SYMBOL>.jsonl`) records one line per
+fetch for cross-run disagreement tracking.
 
 ## 6. Not implemented (deliberate, with reasons)
 
