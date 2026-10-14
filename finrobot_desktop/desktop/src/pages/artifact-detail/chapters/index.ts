@@ -75,6 +75,7 @@ export type {
 } from './types'
 
 export { ChapterAuditBanner, auditBannerContent } from './ChapterAuditBanner'
+export { AuditBadgeBlock } from './AuditBadgeBlock'
 export type { AuditBannerContent } from './ChapterAuditBanner'
 export { ChapterFilings } from './ChapterFilings'
 export { ChapterAnalysisSummary } from './ChapterAnalysisSummary'

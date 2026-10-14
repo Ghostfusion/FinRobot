@@ -1,11 +1,12 @@
 # Report Invariant Closure — Design
 
-Status: **accepted — the seven decisions were locked 2026-10-14 (§9), and Phase 1's first
-increment has LANDED**: the fifteen §4 clauses are promoted into the live persist gate (`C9`
-excepted — it annotates, see §4.2), §4.4's writer unification ships with them, and §4 is still a
-rule inventory with pinned instances rather than a change log. §7 item 1 records what shipped and
-the readings before/after; what remains open is §5's second half (the back-fill tag), §9.3's page
-badge, and §6's ledger, which is what Phase 2 waits on.
+Status: **accepted — the seven decisions were locked 2026-10-14 (§9), and Phase 1 has now landed
+end to end**: the fifteen §4 clauses are promoted into the live persist gate (`C9` excepted — it
+annotates, see §4.2), §4.4's writer unification ships with them, §5's back-fill tag closes the
+ordering hole that produced instance B, and §9.3's `audit_badge` renders the read-time re-reading
+on the artifact page. §4 is still a rule inventory with pinned instances rather than a change log.
+What remains open is §6's ledger — the typed measurement and the reason-code registry — which is
+what Phase 2 waits on.
 
 Scope: the output-contract gate (`finrobot/artifact/contract.py`), the numeric-audit rule set
 (`engine/compute/operators/audit/`), and the payload shapes they read. Phase 2 (§6) touches
@@ -719,15 +720,22 @@ Phase 1 (§7); the archive treatment in §9.3 is the only part that is not a cod
 - **Shipped (2026-10-14):** the report half is `--badge`, which transposes the per-clause catch
   lists into the artifact's own unit — one line per artifact with the clauses that would withhold
   it (`H`) or annotate it (`S`), plus the `archived` column read from the summary (archive is a
-  24h-no-view staleness flag and lives on the summary, not on the payload a clause reads). The
-  artifact-page badge itself is not built yet. Two readings, and they are the argument for the
-  whole design:
+  24h-no-view staleness flag and lives on the summary, not on the payload a clause reads).
+  **The artifact-page badge shipped 2026-10-14 too** — the second half is described below. Two
+  readings, and they are the argument for the whole design:
 
   | clause set | would withhold | would annotate | clean |
   |---|---|---|---|
   | **live before the promotion** (`C1`–`C7`, 105 artifacts) | **0** | 0 | 105 |
   | **at the promotion** (all 22, 107 artifacts) | **70** | 31 | 6 |
   | **after `C9` moved to `S`** (110 artifacts) | **69** | 35 | 6 |
+  | **at the badge ship** (120 artifacts) | **69** | 45 | 6 |
+
+  The last two rows are the criterion this section argues for, measured: the withhold count is
+  FROZEN at 69 across ten newly written artifacts, while the annotation count rose 35 → 45 over
+  those same ten. The `H` clauses fire only on the pre-remediation back catalogue (their defect
+  classes are closed going forward), while the `S` clauses keep finding the live store — which is
+  what "a closed span, not a zero count" means for a rule whose cause has shipped.
 
   The first row is the finding: the shipped rules would not have withheld a single one of the
   contradicted artifacts. The second and third are that same defect class, now counted — 62 of the
@@ -742,31 +750,44 @@ Phase 1 (§7); the archive treatment in §9.3 is the only part that is not a cod
   the HARD form only: `parseSurfacedContractFindings` keeps `[CONTRACT/Cn] evidence` and drops the
   `/note`, `/withheld` and `/internal` sub-tags by design. A live run through the promoted gate
   proves the split — `art_…22:36:07_BMRN_…_211597` carries three soft notes (`C6b`, `C10d`,
-  `C12a`) in `outputs.warnings`, and the artifact page's banner renders none of them. So today the
-  soft clauses' annotations are machine evidence that reaches no reader surface, and the page badge
-  is the only channel that can show them: its `annotate` column is not decoration, it is the
-  reader-facing half of `S`.
+  `C12a`) in `outputs.warnings`, and the artifact page's banner renders none of them. So the soft
+  clauses' annotations are machine evidence reaching no reader surface, and the badge is the only
+  channel that can show them — which is exactly what it is for: its `annotate` half is not
+  decoration, it is the reader-facing half of `S`.
   Note the `archived` column shows `no` everywhere: nothing in the store has aged past the 24h
   no-view window yet, so the column is exercised but not yet populated.
-- **The page badge was gated on the promotion, not on the plumbing — the promotion is now in
-  (2026-10-14), so the page half is unblocked.** Reading the viewer settles
-  where the badge's input would come from: `ChapterAuditBanner` renders
+- **Shipped 2026-10-14 — the page badge, and it shipped the way the plan above said it had to.**
+  Reading the viewer settled where the input would come from: `ChapterAuditBanner` renders
   `outputs.structured.numeric_audit` plus the `[CONTRACT/*]` findings it parses out of
-  `outputs.warnings` — i.e. the persist gate ALREADY surfaces contract findings to the page. The
-  back catalogue has none of those warnings because the clauses were not armed when those
-  artifacts were written, which is exactly why §9.3 asks for a *read-time* derivation: it has to
-  re-run the clause registry over the stored payload. Two consequences follow:
-  - the derivation belongs in **Python** (the clauses are Python; a TypeScript re-implementation
-    would be a second definition of every rule, doctrine 1) — a small read-time module reusing
-    `CONTRACT_CLAUSES` behind the artifact-detail route, next to the `[CONTRACT/*]` findings the
-    banner already parses;
-  - its content is *"would-flag under the live clause set"*, and post-promotion that reading is
-    **70 withhold / 31 annotate / 6 clean over 107**. 63 of those withholds are the `C11`
-    population of §4.4 — ordinary reports, most of them healthy — so the badge's wording carries
-    the distinction the table above draws: it is a re-reading under today's rules, not a statement
-    that the report shipped withheld. A badge that reads `WITHHOLD` on a published report would be
-    the reader's first impression of a correct document, which is why the wording ships with the
-    derivation rather than after it.
+  `outputs.warnings` — so the persist gate ALREADY surfaces contract findings to the page, and the
+  back catalogue has none of those warnings because the clauses were not armed when it was
+  written. That is exactly why this decision asks for a *read-time* derivation, and it has three
+  parts:
+  - **Python, behind the artifact route.** `artifact/audit_badge.py::derive_audit_badge` re-runs
+    `CONTRACT_CLAUSES` over the stored payload; `GET /api/artifacts/{id}/audit-badge` serves the
+    result. It is deliberately NOT a field on `GET /{id}`: the record's bytes stay exactly as
+    stored, so nothing derived can be round-tripped back into the archive by a writer that
+    re-posts what it fetched — and a TypeScript re-implementation would be a second definition of
+    every rule (doctrine 1).
+  - **One reading, two facts.** `surface=False` clauses are excluded (their evidence is plumbing
+    the reader surface must not render; they still gate the record), and the record's own
+    `shipped_withheld` / `shipped_withheld_reason` rides every response — a surface cannot show
+    what today's rules would do without the record's own answer beside it. Verified live on
+    stored artifacts: instance B (`99cdca`) reads *"Today's rules would withhold the target:*
+    `C8` … `C11` …" with both evidence strings and closes with *"As shipped: nothing was
+    withheld"*; the `contract_C7` artifacts (`81fd64`) read the annotate half only, with *"As
+    shipped: the target was withheld (contract_C7)"*; and a report the promoted gate wrote
+    (`9d0bc3`) reproduces the gate's own three notes (`C6b`, `C10d`, `C12a`) as annotations — the
+    badge and the persist gate agree, as they must, because they run the same registry.
+  - **The wording carries the table above's distinction** — a re-reading under today's rules,
+    never a statement that the report shipped withheld (a badge reading `WITHHOLD` on a published
+    report would be the reader's first impression of a correct document). The block renders beside
+    `ChapterAuditBanner`, not inside it: the banner's visibility is defined by THIS report's
+    findings, while the reading has to render whatever they say. And it renders nothing when
+    nothing fires — the absence of a finding is not news.
+  Its reading is *"would-flag under the live clause set"*: **70 withhold / 31 annotate / 6 clean
+  over 107** at the promotion, 63 of those withholds being the `C11` population of §4.4 — ordinary
+  reports, most of them healthy.
 - **Why: the domain's own answer to a wrong filed report is an amendment, not an edit.**
   17 CFR 240.12b-15: an amendment is *"filed under cover of the form amended, marked with the
   letter 'A' … '10-K/A'"*, *"must set forth the complete text of each item as amended"*, and

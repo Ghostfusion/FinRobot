@@ -365,6 +365,26 @@ msgid "report.audit.notesTitle"
 msgstr "Valuation Notes"
 
 #. js-lingui-explicit-id
+msgid "report.auditBadge.title"
+msgstr "Output contract, re-read under today's rules — this report itself is unchanged"
+
+#. js-lingui-explicit-id
+msgid "report.auditBadge.wouldWithhold"
+msgstr "Today's rules would withhold the target:"
+
+#. js-lingui-explicit-id
+msgid "report.auditBadge.wouldAnnotate"
+msgstr "Today's rules would annotate:"
+
+#. js-lingui-explicit-id
+msgid "report.auditBadge.shipped"
+msgstr "As shipped: the target was withheld ({reason})."
+
+#. js-lingui-explicit-id
+msgid "report.auditBadge.shippedClean"
+msgstr "As shipped: nothing was withheld."
+
+#. js-lingui-explicit-id
 msgid "report.audit.note.financialSectorEv"
 msgstr "Bank valuation — {fields} aren't meaningful for a deposit-funded institution (deposits are operating raw material, not capital structure, and there's no clean EBITDA). Valued on P/B, P/TBV, ROTCE and DDM instead."
 

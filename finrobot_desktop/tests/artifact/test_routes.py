@@ -3,6 +3,8 @@
 Coverage:
 - GET  /api/artifacts        — list, filter, empty
 - GET  /api/artifacts/{id}   — 200 with correct fields; 404 on missing
+- GET  /api/artifacts/{id}/audit-badge — read-time re-reading under today's clauses;
+  the record's own withheld state beside it; nothing enforced; 404 on missing
 - DELETE /api/artifacts/{id} — 200 + 404
 - GET  /api/artifacts/{a}/diff/{b} — correct FieldDiff output + 404
 - POST /api/artifacts/{id}/view — 200; 404 on missing
@@ -17,6 +19,7 @@ import pytest
 from fastapi.testclient import TestClient
 from fastapi import FastAPI
 
+from finrobot.artifact.contract import CONTRACT_CLAUSES
 from finrobot.artifact.models import Artifact
 from finrobot.artifact.store import ArtifactStore
 from finrobot.routes.artifacts import router as artifacts_router
@@ -144,6 +147,104 @@ class TestGetArtifact:
 
     def test_404_for_missing_artifact(self, client: TestClient) -> None:
         resp = client.get("/api/artifacts/nonexistent_id")
+        assert resp.status_code == 404
+        assert "nonexistent_id" in resp.json()["detail"]
+
+
+class TestAuditBadge:
+    """GET /api/artifacts/{id}/audit-badge — the read-time re-reading (design §9.3).
+
+    The endpoint's contract has three parts, and each has a test here: it re-reads the
+    STORED payload under today's registry (so a rule armed after the report was written
+    still shows), it reports the record's own withheld state beside that reading (so a
+    surface cannot accuse a published report), and it changes nothing — the record
+    keeps its bytes.
+    """
+
+    def _stored(self, store: ArtifactStore, **structured: object) -> Artifact:
+        art = _make_artifact(id="art_badge_1", type="equity_research")
+        art.outputs.structured.update(structured)
+        _save_sync(store, art)
+        return art
+
+    def test_reports_a_soft_clause_that_only_todays_registry_catches(
+        self, client: TestClient, store: ArtifactStore
+    ) -> None:
+        """The badge's reason for existing: a payload already in the store, written
+        before the rule was armed, reads as a violation under today's clauses. This is
+        the live BMRN shape — a single-method report whose note denies the
+        cross-validation it prints, with the band bracketing the tape so no H clause
+        fires and the finding is annotation-only.
+        """
+        art = self._stored(
+            store,
+            thesis={"recommendation": "HOLD"},
+            valuation_synthesis={
+                "methods": [{"name": "ev_ebitda"}],
+                "cross_checks": [
+                    {"name": "ev_ebitda_band", "low": 10.44, "mid": 49.07, "high": 80.35}
+                ],
+                "current_price": 55.14,
+                "degradation_note": "single method with no cross-validation — band widened.",
+            },
+        )
+        data = client.get(f"/api/artifacts/{art.id}/audit-badge").json()
+        assert [e["id"] for e in data["would_annotate"]] == ["C6b"]
+        assert data["would_withhold"] == []
+        assert data["shipped_withheld"] is False
+        entry = data["would_annotate"][0]
+        # The badge never invents a name for a rule: the title is the registry's own.
+        assert entry["title"] == next(c.title for c in CONTRACT_CLAUSES if c.id == "C6b")
+        assert "no cross-validation" in entry["evidence"]  # instance-level, not the doc
+
+    def test_reports_a_hard_clause_without_enforcing_it(
+        self, client: TestClient, store: ArtifactStore
+    ) -> None:
+        """A BUY whose only band sits below the tape: C8 (H) fires in the reading. The
+        record must be untouched — this endpoint re-reads, it does not gate, and the
+        artifact keeps the target it shipped (the whole point of §9.3's split)."""
+        art = self._stored(
+            store,
+            thesis={"recommendation": "BUY", "price_target": 271.6},
+            valuation_synthesis={
+                "current_price": 271.6,
+                "cross_checks": [
+                    {"name": "ev_ebitda_band", "low": 70.0, "mid": 219.8, "high": 255.3}
+                ],
+            },
+        )
+        data = client.get(f"/api/artifacts/{art.id}/audit-badge").json()
+        assert [e["id"] for e in data["would_withhold"]] == ["C8"]
+        assert data["shipped_withheld"] is False
+
+        stored = client.get(f"/api/artifacts/{art.id}").json()["outputs"]["structured"]
+        assert stored["thesis"]["price_target"] == pytest.approx(271.6)
+        assert "valuation_withheld" not in stored
+        assert not any(
+            "[CONTRACT/" in w
+            for w in client.get(f"/api/artifacts/{art.id}").json()["outputs"]["warnings"]
+        )
+
+    def test_reports_the_records_own_withheld_state_beside_the_reading(
+        self, client: TestClient, store: ArtifactStore
+    ) -> None:
+        """A record withheld by an INTERNAL clause: C7 scrubs and tags under a
+        non-surfacing form, so nothing reader-facing fires and the reading is empty —
+        while the record's own state says withheld. Both are reported, and neither is
+        inferred from the other."""
+        art = self._stored(
+            store,
+            valuation_withheld=True,
+            withheld_reason="contract_C7",
+        )
+        data = client.get(f"/api/artifacts/{art.id}/audit-badge").json()
+        assert data["would_withhold"] == []
+        assert data["would_annotate"] == []
+        assert data["shipped_withheld"] is True
+        assert data["shipped_withheld_reason"] == "contract_C7"
+
+    def test_404_for_missing_artifact(self, client: TestClient) -> None:
+        resp = client.get("/api/artifacts/nonexistent_id/audit-badge")
         assert resp.status_code == 404
         assert "nonexistent_id" in resp.json()["detail"]
 

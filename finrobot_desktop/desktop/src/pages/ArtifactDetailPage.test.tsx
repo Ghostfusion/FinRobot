@@ -32,9 +32,16 @@ const detail = {
   error: null as unknown,
 }
 
+// The read-time audit badge (design §9.3) is fetched beside the artifact; the page
+// hands it to the body, and the body decides whether to render it.
+const badge = {
+  data: undefined as unknown,
+}
+
 vi.mock('../hooks/useV5Artifacts', () => ({
   useArtifactDetail: () => detail,
   useV5ArtifactTimeline: () => ({ data: [] }),
+  useAuditBadge: () => badge,
 }))
 
 // i18n + heavy shell/chapter children are irrelevant to the redirect logic.
@@ -86,7 +93,9 @@ vi.mock('./artifact-detail/shell/ReportLeftRail', () => ({
   ReportLeftRail: () => <div data-testid="mock-left-rail" />,
 }))
 vi.mock('./artifact-detail/ReportChapters', () => ({
-  ReportChapters: () => <div data-testid="mock-report-chapters" />,
+  ReportChapters: ({ auditBadge }: { auditBadge?: unknown }) => (
+    <div data-testid="mock-report-chapters" data-has-badge={auditBadge ? 'yes' : 'no'} />
+  ),
 }))
 
 import { ArtifactDetailPage } from './ArtifactDetailPage'
@@ -211,6 +220,51 @@ describe('ArtifactDetailPage type branch (BUG-039)', () => {
     expect(screen.getByTestId('mock-report-chapters')).toBeTruthy()
     expect(screen.getByTestId('mock-left-rail')).toBeTruthy()
     expect(screen.queryByTestId('compact-artifact-viewer')).toBeNull()
+  })
+})
+
+describe('ArtifactDetailPage audit badge (design §9.3)', () => {
+  beforeEach(() => {
+    navigateSpy.mockClear()
+    params.ticker = 'AAPL'
+    params.artifactId = 'art-aapl-eq'
+    detail.data = {
+      id: 'art-aapl-eq',
+      ticker: 'AAPL',
+      type: 'equity_research',
+      created_at: '2026-06-01T00:00:00Z',
+      outputs: {},
+      inputs: {},
+      assumptions: {},
+      meta: {},
+    }
+    detail.isLoading = false
+    detail.isError = false
+    badge.data = undefined
+  })
+
+  it('hands the read-time reading to the report body', () => {
+    badge.data = {
+      would_withhold: [],
+      would_annotate: [
+        { id: 'C6b', title: 'Note vs cross-checks', evidence: 'the note denies what it prints' },
+      ],
+      shipped_withheld: false,
+    }
+
+    renderPage()
+
+    // The page fetches the reading beside the artifact and passes it down; the body
+    // owns whether it renders at all.
+    expect(screen.getByTestId('mock-report-chapters')).toHaveAttribute('data-has-badge', 'yes')
+  })
+
+  it('renders the report without a reading when the fetch has nothing', () => {
+    renderPage()
+
+    // Additional context, never a gate on the report: an absent (or failed) fetch
+    // must leave the body mounted exactly as before.
+    expect(screen.getByTestId('mock-report-chapters')).toHaveAttribute('data-has-badge', 'no')
   })
 })
 

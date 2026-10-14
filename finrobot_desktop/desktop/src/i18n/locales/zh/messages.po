@@ -365,6 +365,26 @@ msgid "report.audit.notesTitle"
 msgstr "估值说明"
 
 #. js-lingui-explicit-id
+msgid "report.auditBadge.title"
+msgstr "输出契约 — 按今天的规则重读；报告本身未改动"
+
+#. js-lingui-explicit-id
+msgid "report.auditBadge.wouldWithhold"
+msgstr "按今天的规则，目标价会被扣留："
+
+#. js-lingui-explicit-id
+msgid "report.auditBadge.wouldAnnotate"
+msgstr "按今天的规则会附加标注："
+
+#. js-lingui-explicit-id
+msgid "report.auditBadge.shipped"
+msgstr "实际发布状态：目标价已扣留（{reason}）。"
+
+#. js-lingui-explicit-id
+msgid "report.auditBadge.shippedClean"
+msgstr "实际发布状态：未扣留任何数值。"
+
+#. js-lingui-explicit-id
 msgid "report.audit.note.financialSectorEv"
 msgstr "银行估值 —— {fields} 对存款型机构不适用（存款是经营原料，而非资本结构，也没有干净的 EBITDA）。改用 P/B、P/TBV、ROTCE、DDM 估值。"
 

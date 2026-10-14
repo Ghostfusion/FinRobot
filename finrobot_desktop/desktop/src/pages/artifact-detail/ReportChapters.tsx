@@ -17,7 +17,7 @@
 // at VersionDiffBanner, which is chrome and therefore NOT rendered here — it is
 // mounted by ArtifactDetailPage above this body. The export has no such section.
 
-import type { ArtifactDetail } from '../../hooks/useV5Artifacts'
+import type { ArtifactDetail, AuditBadgeShape } from '../../hooks/useV5Artifacts'
 import type { ArtifactSummaryV5 } from '../../types/v5'
 import { useI18n } from '../../i18n'
 import { deriveReportData, parseSurfacedContractFindings, layerComputeWarnings } from './reportData'
@@ -27,6 +27,7 @@ import { DataAuthorityPanel } from './DataAuthorityPanel'
 import {
   ChapterAnalysisSummary,
   ChapterAuditBanner,
+  AuditBadgeBlock,
   ChapterCover,
   ChapterFilings,
   ChapterThesis,
@@ -51,9 +52,14 @@ import {
 function EquityReportChapters({
   artifact,
   timeline,
+  auditBadge = null,
 }: {
   artifact: ArtifactDetail
   timeline: ArtifactSummaryV5[]
+  /** The read-time re-reading under today's clauses (design §9.3), fetched by the page
+   *  beside the artifact. Absent in the standalone export, which has no server to
+   *  re-read against and ships a frozen document. */
+  auditBadge?: AuditBadgeShape | null
 }): React.ReactElement {
   const { locale, t } = useI18n()
   const d = deriveReportData(artifact, timeline, locale)
@@ -98,6 +104,11 @@ function EquityReportChapters({
     // <main> (export/viewer.tsx), so the landmark is never lost.
     <div style={{ minWidth: 0, padding: '12px 0 60px' }}>
       <ChapterAuditBanner audit={d.numericAudit} contractFindings={contractFindings} />
+      {/* Beside the banner, not inside it: the banner's content is THIS report's own
+          findings, while the badge is what today's clause registry makes of the stored
+          payload — a reading the page fetches separately (design §9.3). It renders
+          nothing when nothing fires. */}
+      <AuditBadgeBlock badge={auditBadge} />
       {/* The metric-authority decision record (`raw_data.data_authority` is now
           FINANCIALS-ONLY): who else supplied each number and why the canonical one
           won. `raw_data.price_authority` carries the PRICE canonical's own record
@@ -298,13 +309,15 @@ function EquityReportChapters({
 export function ReportChapters({
   artifact,
   timeline,
+  auditBadge = null,
 }: {
   artifact: ArtifactDetail
   timeline: ArtifactSummaryV5[]
+  auditBadge?: AuditBadgeShape | null
 }): React.ReactElement {
   return artifact.type === 'fund_research' ? (
     <FundReportChapters artifact={artifact} />
   ) : (
-    <EquityReportChapters artifact={artifact} timeline={timeline} />
+    <EquityReportChapters artifact={artifact} timeline={timeline} auditBadge={auditBadge} />
   )
 }

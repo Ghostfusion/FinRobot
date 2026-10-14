@@ -735,6 +735,48 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/api/artifacts/{artifact_id}/audit-badge': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Get Audit Badge
+     * @description Re-read the STORED payload under today's output-contract clauses (design §9.3).
+     *
+     *     The persist gate judges an artifact once, on the way in; this is the other
+     *     reading — what today's registry makes of a payload already in the store — so the
+     *     reader can see a defect a rule armed *after* the report was written. It is
+     *     deliberately its own endpoint rather than a field on ``GET /{artifact_id}``: the
+     *     record's bytes stay exactly as stored (nothing derived can be round-tripped back
+     *     into the archive by a writer that re-posts what it fetched), and the response is
+     *     small enough to fetch beside the report.
+     *
+     *     The payload returned carries BOTH readings — ``would_withhold`` /
+     *     ``would_annotate`` from the re-read, and the record's own ``shipped_*`` state — so
+     *     a surface can never show one without the other to qualify it.
+     *
+     *     Args:
+     *         artifact_id: The artifact id, exactly as ``GET /{artifact_id}`` takes it.
+     *
+     *     Returns:
+     *         The badge: the clauses that would fire today, plus the shipped state.
+     *
+     *     Raises:
+     *         404: If the artifact was never stored.
+     *         410: If the row exists but its payload is unreadable (schema drift).
+     */
+    get: operations['get_audit_badge_api_artifacts__artifact_id__audit_badge_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
   '/api/artifacts/{a_id}/diff/{b_id}': {
     parameters: {
       query?: never
@@ -1761,6 +1803,53 @@ export interface components {
       contribution: number
       /** Formatted Contribution */
       formatted_contribution: string
+    }
+    /**
+     * AuditBadge
+     * @description The stored payload re-read under today's registry (design §9.3).
+     */
+    AuditBadge: {
+      /**
+       * Would Withhold
+       * @description H clauses that fire on the stored payload (the record is untouched).
+       */
+      would_withhold?: components['schemas']['AuditBadgeEntry'][]
+      /**
+       * Would Annotate
+       * @description S clauses that fire — findings that only annotate.
+       */
+      would_annotate?: components['schemas']['AuditBadgeEntry'][]
+      /**
+       * Shipped Withheld
+       * @description The record's own valuation_withheld flag, i.e. what the report shipped as.
+       */
+      shipped_withheld: boolean
+      /**
+       * Shipped Withheld Reason
+       * @description The record's own withheld_reason, when it withheld.
+       */
+      shipped_withheld_reason?: string | null
+    }
+    /**
+     * AuditBadgeEntry
+     * @description One clause that fires on the stored payload, as the reader should see it.
+     */
+    AuditBadgeEntry: {
+      /**
+       * Id
+       * @description Clause id, e.g. ``C11``.
+       */
+      id: string
+      /**
+       * Title
+       * @description The clause's own renderable title (declared once in the registry).
+       */
+      title: string
+      /**
+       * Evidence
+       * @description The finding's evidence for THIS artifact — the instance-level reason.
+       */
+      evidence: string
     }
     /**
      * BalanceSheet
@@ -5553,6 +5642,37 @@ export interface operations {
           'application/json': {
             [key: string]: string
           }
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_audit_badge_api_artifacts__artifact_id__audit_badge_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        artifact_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['AuditBadge']
         }
       }
       /** @description Validation Error */

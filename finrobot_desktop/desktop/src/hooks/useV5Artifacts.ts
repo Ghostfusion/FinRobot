@@ -94,6 +94,51 @@ export interface ArtifactDetail {
   meta: Record<string, unknown>
 }
 
+/** One clause that fires on a stored payload, as the reader should see it.
+ *
+ * A READING of stored bytes under TODAY's clause registry (design §9.3), never a
+ * verdict on the record: `would_*` is what today's rules make of the payload the
+ * archive kept, `shipped_*` is what the report itself published. Every surface shows
+ * them together — a badge that read only the first half would accuse published
+ * reports. The id, title and evidence all come from the Python registry, so a surface
+ * cannot drift from the rule it describes. */
+export interface AuditBadgeEntryShape {
+  id: string
+  title: string
+  evidence: string
+}
+
+export interface AuditBadgeShape {
+  /** H clauses that fire on the stored payload. */
+  would_withhold: AuditBadgeEntryShape[]
+  /** S clauses that fire — findings that only annotate. */
+  would_annotate: AuditBadgeEntryShape[]
+  /** The record's own flag: what the report shipped as. */
+  shipped_withheld: boolean
+  shipped_withheld_reason?: string | null
+}
+
+/** What TODAY's output-contract rules make of a stored artifact (design §9.3).
+ *
+ * Backed by `GET /api/artifacts/{id}/audit-badge`, which re-runs the live Python
+ * clause registry over the STORED payload. Its own endpoint rather than a field on the
+ * detail response: the record's bytes stay exactly as stored, so nothing derived can
+ * be round-tripped back into the archive by a writer that re-posts what it fetched.
+ *
+ * Cached, but far shorter than the detail: the artifact's bytes never change, while
+ * this answer is a function of the DEPLOYED rule set — a long cache would keep a
+ * newly armed clause invisible for the whole session. */
+export function useAuditBadge(artifactId: string | null | undefined) {
+  return useQuery<AuditBadgeShape, Error>({
+    queryKey: ['artifact-audit-badge', artifactId],
+    queryFn: ({ signal }) =>
+      getJson<AuditBadgeShape>(`${BASE_URL}/api/artifacts/${artifactId}/audit-badge`, signal),
+    enabled: !!artifactId,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  })
+}
+
 export function useArtifactDetail(artifactId: string | null | undefined) {
   return useQuery<ArtifactDetail, Error>({
     queryKey: ['artifact-detail', artifactId],

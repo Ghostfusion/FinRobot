@@ -24,7 +24,7 @@
 
 import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { useArtifactDetail, useV5ArtifactTimeline } from '../hooks/useV5Artifacts'
+import { useArtifactDetail, useAuditBadge, useV5ArtifactTimeline } from '../hooks/useV5Artifacts'
 import { useNavMemoryStore } from '../stores/navMemoryStore'
 import { useToastStore } from '../stores/toastStore'
 import { VersionDiffBanner } from '../components/VersionDiffBanner'
@@ -61,6 +61,11 @@ export function ArtifactDetailPage(): React.ReactElement {
   const location = useLocation()
   const navigate = useNavigate()
   const { data, isLoading, isError, error } = useArtifactDetail(artifactId)
+  // What TODAY's output-contract rules make of this stored payload (design §9.3): a
+  // reading fetched beside the artifact, so a rule armed after the report was written
+  // still speaks about it without the archive being rewritten. Absent/failed fetch
+  // simply renders nothing — it is additional context, never a gate on the report.
+  const { data: auditBadge } = useAuditBadge(artifactId)
 
   // The artifact id is the real identity; the URL ticker is only routing
   // context. Visiting /stocks/AAPL/runs/<NVDA-artifact-id> must NOT render
@@ -419,7 +424,11 @@ export function ArtifactDetailPage(): React.ReactElement {
             }}
             currentTargetWithheld={valuationSynthesis?.valuation_withheld === true}
           />
-          <ReportChapters artifact={data} timeline={timeline ?? []} />
+          <ReportChapters
+            artifact={data}
+            timeline={timeline ?? []}
+            auditBadge={auditBadge ?? null}
+          />
         </div>
       </div>
     </div>

@@ -21,9 +21,11 @@ structurally blind to:
   · C6b–C14b — the §4 closure family, promoted 2026-10-14 from the staged module
     the design doc's §7.1 kept them in while each was quantified over the stored
     corpus. Their docstrings carry each rule's measured catch list and the
-    severity §9 locks for it: ``C8``/``C9``/``C11`` withhold, the other twelve
-    annotate, because their locked remediation (a count threshold per §9.2, or a
-    sentence the gate cannot rewrite) is not a per-artifact value-withhold.
+    severity they actually ship at: ``C8`` and ``C11`` withhold; the other thirteen
+    annotate, because their locked remediation — a count threshold per §9.2, a
+    sentence the gate cannot rewrite, or (``C9``'s case) a claim-scope withhold that
+    drops the offending band entries rather than the headline target — is not a
+    per-artifact value-withhold.
 
 A violated HARD clause is a VALUE-withhold: it degrades through the existing
 withhold machinery — null the target slot(s) + ``valuation_withheld`` +

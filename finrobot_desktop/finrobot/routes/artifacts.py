@@ -3,6 +3,7 @@
 Endpoints:
   GET    /api/artifacts                        — list/filter all artifacts
   GET    /api/artifacts/{id}                   — fetch full artifact
+  GET    /api/artifacts/{id}/audit-badge       — re-read it under today's clauses
   DELETE /api/artifacts/{id}                   — remove artifact
   GET    /api/artifacts/{a_id}/diff/{b_id}     — field-level diff
   POST   /api/artifacts/{id}/view              — update last_viewed_at
@@ -14,6 +15,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 from starlette.requests import Request
 
+from finrobot.artifact.audit_badge import AuditBadge, derive_audit_badge
 from finrobot.artifact.semantic_diff import SemanticDelta, build_semantic_delta
 from finrobot.artifact.models import Artifact, ArtifactSummary, ArtifactType
 from finrobot.artifact.store import ArtifactStore
@@ -152,6 +154,37 @@ async def get_artifact(artifact_id: str, request: Request) -> Artifact:
     """
     store = _store(request)
     return await _load_artifact_or_raise(store, artifact_id)
+
+
+@router.get("/{artifact_id}/audit-badge", response_model=AuditBadge)
+async def get_audit_badge(artifact_id: str, request: Request) -> AuditBadge:
+    """Re-read the STORED payload under today's output-contract clauses (design §9.3).
+
+    The persist gate judges an artifact once, on the way in; this is the other
+    reading — what today's registry makes of a payload already in the store — so the
+    reader can see a defect a rule armed *after* the report was written. It is
+    deliberately its own endpoint rather than a field on ``GET /{artifact_id}``: the
+    record's bytes stay exactly as stored (nothing derived can be round-tripped back
+    into the archive by a writer that re-posts what it fetched), and the response is
+    small enough to fetch beside the report.
+
+    The payload returned carries BOTH readings — ``would_withhold`` /
+    ``would_annotate`` from the re-read, and the record's own ``shipped_*`` state — so
+    a surface can never show one without the other to qualify it.
+
+    Args:
+        artifact_id: The artifact id, exactly as ``GET /{artifact_id}`` takes it.
+
+    Returns:
+        The badge: the clauses that would fire today, plus the shipped state.
+
+    Raises:
+        404: If the artifact was never stored.
+        410: If the row exists but its payload is unreadable (schema drift).
+    """
+    store = _store(request)
+    artifact = await _load_artifact_or_raise(store, artifact_id)
+    return derive_audit_badge(artifact)
 
 
 @router.delete("/{artifact_id}")
