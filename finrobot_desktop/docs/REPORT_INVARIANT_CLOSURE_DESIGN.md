@@ -41,6 +41,12 @@ The contradicted-verdict row is the architecture's problem in one number. It is 
 report; it is a recurring shape the gate is structurally unable to see, because **no clause
 compares the verdict direction to the cross-checks the same payload prints.**
 
+**This is a snapshot, not a constant.** The store is live and gains an artifact per run, so
+every count here is an as-of number taken at `…20:37:52_THC_…`. A run that landed at 21:12 took
+the same measurements to 105 artifacts / 91 with findings / 173 `review` / `contract_C7` ×32 /
+the single-method note in 62 — which is why §7.1's catch lists carry a span rather than a bare
+total.
+
 ### 1.1 Three pinned instances
 
 All three are real stored artifacts; every number below was read from the payload.
@@ -59,7 +65,9 @@ reads off the nearest published range bound ($549.05), not the withheld interior
 
 **B — `art_2026-10-14T20:27:40_THC_equity_research_99cdca`** (the run *after* the β fix; BUY,
 target **published**) — the sharpest one, because it is a post-fix artifact:
-`valuation_withheld = null`, `withheld_reason = null`, target $541.80 published,
+`structured.valuation_withheld = null` **while `valuation_synthesis.valuation_withheld = false`**
+(the duplicated slots disagree on the representation of "not withheld" — C11's first real catch
+list, below), `withheld_reason = null`, target $541.80 published,
 band $406.35–$677.25, `current_price = 271.60`, and `cross_checks[0] = 70.16 … 255.26` in the
 same object. `degradation_note` = *"single method dcf with no cross-validation — band widened,
 confidence medium"* — **the report asserts it had no cross-validation while printing one**,
@@ -153,8 +161,8 @@ docstring states the design contract:
 | resurrection scrub | `C7` (H, internal) | fired ×31 | working as designed | keep |
 | **verdict vs its own published cross-checks** | *nobody* | **8 artifacts shipped a contradicted BUY/SELL** | no clause reads `cross_checks` against the direction | **`C8`** |
 | **cross-check band plausibility** | *nobody* | SKM published a cross-check band of **−$2.97 … −$1.23** against a $34.42 price — degenerate; HMY's $1.22–$3.74 against $16.71 is positive and fully sampled but sits ~5× below the tape, which `C8` catches, not `C9` | a band that is negative or degenerate is published as if it were evidence | **`C9`** |
-| **conclusion-ratio operands (source / caliber / period) and numerator presence** | numeric audit on `FinancialData` only (`ev_bridge`, `ttm_period`, `currency_caliber`) | `ev_bridge_unverified` ×106 (review) | ratios whose operands come from **different providers** or whose numerator is `null` (THC `operating_margin = 0.18159` beside `operating_income = null`); the balance-sheet identity A = L + E (DQC_0004) is hand-written in one operator, not a clause | **`C10`** |
-| **single definition** | *nobody* | `valuation_withheld` duplicated across two slots; band computed at 3 call sites; catalogue copy vs backend warning | two definitions of one quantity drift with nothing to catch it | **`C11`** |
+| **conclusion-ratio operands (source / caliber / period) and numerator presence** | numeric audit on `FinancialData` only (`ev_bridge`, `ttm_period`, `currency_caliber`) | `ev_bridge_unverified` ×105 (review) | ratios whose operands come from **different providers** or whose numerator is `null` (THC `operating_margin = 0.18159` beside `operating_income = null`); the balance-sheet identity A = L + E (DQC_0004) is hand-written in one operator, not a clause | **`C10`** |
+| **single definition** | *nobody* | `valuation_withheld` duplicated across two slots and the two writers already disagree in **63** of 98 artifacts (`null` vs `false`); band computed at 3 call sites; catalogue copy vs backend warning | two definitions of one quantity drift with nothing to catch it | **`C11`** |
 | **recency and window closure** | `ttm_period` audits the TTM period only | FY2010 fact; 8-K inside a 30-day window | selection policy is a library default; a merged event list is filtered per source, not per predicate | **`C12`** |
 | **independence / non-circularity** | `agreement_is_independent` exists in `data_authority`; `band_break_caveat` exists and is `null` everywhere observed | no consumer | MC centred on its own base case; `market_cap` derived from `shares × price` | **`C13`** |
 | **prose direction grounding** (not just malformed amounts) | `C2`, `report_drift`, `narrative_numeric_grounding` (a digit must exist) | drift found 1 orphan in the audited THC artifact; `insider_flow_amount_corrected` ×21 (a repair, at `review`) | "insiders were net **sellers** of $X" is checked on magnitude and on the noun, never on the direction word; the reconciler may *insert* the target — and did, 21 times | **`C14`** |
@@ -227,10 +235,15 @@ exact payload paths (verified against stored artifacts, not guessed). IDs `C8+` 
 - **predicate** mirrored slots must be equal, or one of them must be absent. Divergence is a
   finding; the duplicate is removed in favour of a single writer.
 - **pinned instance** the two `shares_outstanding` slots in every THC artifact; the two
-  `valuation_withheld` slots; the +174% the frontend computed from a withheld point. Measured
-  catch list: **0** over the corpus — neither slot has diverged. `financial_modeling.assumptions`
-  is `null` in every artifact, so the third slot an earlier draft named does not exist; the
-  clause ships as prevention, with the divergence it would catch as its justification.
+  `valuation_withheld` slots; the +174% the frontend computed from a withheld point.
+- **measured catch list** — **63** of 98 equity artifacts: the two slots disagree, always in the
+  same shape, `structured.valuation_withheld = null` against
+  `valuation_synthesis.valuation_withheld = false` (3 artifacts leave both `null`; the 32
+  withholding artifacts write `true` to both). Two writers, two representations of one quantity —
+  the *Duplication* class exactly, and it is why the clause is not preventive. The divergence
+  never changed a verdict: both readings mean "not withheld", so the defect is representational —
+  which is precisely what makes it invisible without a clause. `financial_modeling.assumptions`
+  is `null` in every artifact, so the third slot an earlier draft named does not exist.
 
 ### 4.5 `C12` — recency and window closure
 - **severity** two-threshold (§9.7, locked): `error_if` when the stale or undated item carried a
@@ -368,9 +381,10 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
    back catalogue is over-broad and gets re-calibrated first. The scanner is read-only by
    construction; use it as the promotion gate.
 
-   **Measured 2026-10-14** — read-only, over the 97 stored `equity_research` artifacts (the
-   corpus tail is `…20:37:52_THC_…`); 44 carry `cross_checks` and 23 BUY/SELL artifacts carry
-   none at all, so they are out of `C8`'s scope by construction. **Live** = the shape is still
+   **Measured 2026-10-14** — read-only, over the 97 stored `equity_research` artifacts present at
+   the measurement (98 after the 21:12 run; see §1's snapshot note). 44 carry `cross_checks` and
+   23 BUY/SELL artifacts carry none at all, so they are out of `C8`'s scope by construction.
+   **Live** = the shape is still
    produced by HEAD's code; **historical** = it stops at a timestamp, i.e. a shipped fix already
    closed it and the clause's value there is regression protection.
 
@@ -384,7 +398,7 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
    | `C10c` DQC_0004 identity | **73** / 24 tickers | 10-10T21:45 … **10-14T19:59** | `Assets`/`Liabilities`/`StockholdersEquity` present with `_equity_identity` **absent** — the identity is computed on one path only |
    | `C10d` caliber-divergent accepted | **33** artifacts / 96 decisions / 18 tickers | 10-13T22:53 … **20:37:52** | **live**: decisions accepted while `comparability = "caliber_divergent"`, several whose `basis` text names a provider other than `selected_source` |
    | `C10b` cross-provider operands | **0** | — | one `selected_source` per artifact (34 yfinance, 4 eodhd); no ratio pair crosses sources today |
-   | `C11` mirrored slots | **0** | — | neither slot has ever diverged — preventive, no catch to quote |
+   | `C11` mirrored slots | **63** / 98 equity | all | the two slots always disagree the same way — `null` vs `false` for "not withheld"; representational, never verdict-changing |
    | `C12a` 8-K in the window | **9** / 5 tickers | 10-14T06:21 … **20:37:52** | **live**, and already *disclosed* as a warning string in two shapes; `C12` turns the disclosure into a gate |
    | `C12b` `news_window.count = 0` | **14** / 8 tickers | 10-14T00:23 … **20:37:52** | **live** — the empty feed is not THC-specific |
    | `C13a` `market_cap = shares × price` | **97 / 97** | all | universal, so it cannot be a per-artifact finding — only a rule about the `basis` label |
@@ -396,8 +410,12 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
    Two calibration consequences the table forces, beyond §4.1/§4.2:
    `C13a` **cannot** be a per-artifact finding (97/97 — it would flag the whole catalogue, which
    is the over-broad case §7.1 exists to catch), so it becomes a rule about whether the `basis`
-   label declares the derivation; and `C11`/`C13c` ship with **no** catch list, i.e. as
-   preventive clauses whose justification is the divergence they would detect, not one they have.
+   label declares the derivation; and `C13c` ships with **no** catch list, i.e. as a
+   preventive clause whose justification is the inconsistency it would detect, not one it
+   has. `C11`, by contrast, turned out to have 63 live instances the first probe missed — because
+   the probe tested `a != b` behind an `is not None` guard, and the whole divergence is
+   `null`-vs-`false`. That mistake is the argument for §7.2's "fixtures as payloads": a
+   hand-written fixture would have carried the same guard, and a real payload does not.
 
    The corpus also re-confirms §1's table at HEAD: **170** `review` findings, **0**
    `blocked_field`, `withhold_valuation` never true, `withheld_reason` = `contract_C7` ×31 / null
