@@ -1,8 +1,8 @@
 # Report Invariant Closure — Design
 
-Status: **proposed**. Nothing in this document is implemented. §9 lists the decisions the
-owner has to make before any of it ships; §4 is a rule inventory with pinned instances, not a
-change log.
+Status: **accepted — the seven decisions were locked 2026-10-14 (§9)**. No code implements this
+yet; §4 is a rule inventory with pinned instances, not a change log, and Phase 1 (§7) is the
+next change.
 
 Scope: the output-contract gate (`finrobot/artifact/contract.py`), the numeric-audit rule set
 (`engine/compute/operators/audit/`), and the payload shapes they read. Phase 2 (§6) touches
@@ -169,7 +169,7 @@ exact payload paths (verified against stored artifacts, not guessed). IDs `C8+` 
 
 ### 4.1 `C8` — the verdict may not contradict its own published cross-checks
 - **severity** `H` (headline scope: withhold the target, keep the verdict; the synthesis' own
-  contradiction rule then publishes HOLD from the compute side, so the two agree).
+  contradiction rule then publishes HOLD from the compute side, so the two agree) — locked §9.1.
 - **reads** `outputs.structured.thesis.recommendation`,
   `outputs.structured.valuation_synthesis.{current_price, cross_checks[].{low,mid,high,name,label}}`,
   `outputs.structured.valuation_synthesis.methods[]`.
@@ -198,7 +198,8 @@ exact payload paths (verified against stored artifacts, not guessed). IDs `C8+` 
 
 ### 4.3 `C10` — conclusion ratios: same-source operands, and a numerator must exist
 - **severity** `H`, **claim scope** (withhold the ratio leaves; promote the `FinancialData`
-  finding to `blocked_field`).
+  finding to `blocked_field`). Count-thresholded per §9.2 (`error_if` for a published ratio,
+  `warn_if` for a display-only field). Locked.
 - **reads** `inputs.raw_data.income.{gross_margin, operating_margin, operating_income, revenue, ebitda, net_income, nci_earnings}`,
   the same leaves inside `inputs.raw_data.data_authority.decisions[].{metric, selected_source, status, period_end, comparability}`,
   `inputs.raw_data.balance.noncontrolling_interest`, `inputs.raw_data.valuation.{ev_ebitda, ev_ebitda_reported}`.
@@ -223,7 +224,9 @@ exact payload paths (verified against stored artifacts, not guessed). IDs `C8+` 
   `valuation_withheld` slots; the +174% the frontend computed from a withheld point.
 
 ### 4.5 `C12` — recency and window closure
-- **severity** `H` when the stale fact feeds a published number, `S` otherwise.
+- **severity** two-threshold (§9.7, locked): `error_if` when the stale or undated item carried a
+  published number, `warn_if` when it only populated a catalogue (remediation: exclude +
+  disclose).
 - **reads** `outputs.structured.historical_metrics.*` against
   `outputs.structured.financial_modeling.inputs.ttm_period_end` and
   `inputs.raw_data.market.quote_as_of`; `outputs.structured.thesis.catalysts[]` and the raw
@@ -235,8 +238,9 @@ exact payload paths (verified against stored artifacts, not guessed). IDs `C8+` 
   inside a "30-day window".
 
 ### 4.6 `C13` — independence and non-circularity
-- **severity** `S` (with one hard case: a validator whose operands are a subset of the
-  validated quantity's derivation may not be the **sole** corroboration for a direction).
+- **severity** `S`, with the hard case **locked** (§9.4): a validator whose operands are a
+  subset of the validated quantity's derivation — or whose `agreement_is_independent` is `false`
+  — may not be the **sole** corroboration for a direction.
 - **reads** `inputs.raw_data.data_authority.decisions[].{agreement_is_independent, candidates[]}`,
   `inputs.raw_data.market.market_cap` vs `{shares_outstanding, current_price}`,
   `outputs.structured.technical_analysis.monte_carlo.assumptions_used.{centered_on, independent}`.
@@ -336,6 +340,12 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
 - `SelectionPolicy`: every library default crossing into the domain is re-expressed as an
   explicit, tested policy (the FY2010 fact was edgartools' `(filing_date, period_end)` default,
   nobody's decision).
+- **Sequencing (§9.5, locked).** The three missing `NumericClaim` fields ship *with* the Phase-1
+  clauses, because they are the clauses' input; the strict `Measure` type is enforced only once
+  every producer populates them — expand → migrate → contract, with the exit criterion written
+  down as "the scanner reports 0 claims whose `basis` is empty". Parallel change's own caveat is
+  the reason for writing it down: a contract phase that never runs leaves two vocabularies live
+  forever, which is the state this section exists to end.
 
 ---
 
@@ -375,17 +385,135 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
 
 ---
 
-## 9. Open decisions for the owner
+## 9. Decision record — locked 2026-10-14
 
-| # | Decision | Options |
-|---|---|---|
-| 1 | Severity of `C8` | `H` (withhold the target, keep the verdict) — recommended, consistent with doctrine 1 — or `S` (banner only), which reproduces today's behaviour |
-| 2 | `C10` scope | Claim-scope withhold of the ratio leaves + promote the `FinancialData` findings to `blocked_field` (**recommended**) vs a banner |
-| 3 | Do the 8 contradicted artifacts get re-run / badged? | (a) leave the archive, fix forward; (b) badge them with a `C8` note on read; (c) delete |
-| 4 | `C13` hard case | Should a non-independent validator be *unable* to be the sole corroboration for a direction? (**recommended**) or advisory only |
-| 5 | Phase-2 `Measure` | adopt now across `beta`/`shares`/margins/`nci`/`market_cap`, or defer until §4 has run in production for a release |
-| 6 | Reason-code vocabulary | one registry for `withheld_reason` (`contract_C7` says nothing today) — needed for the coverage UI |
-| 7 | `C12` catalogs | a hard clause on dated series vs soft, given the 8-K staleness is a data-availability issue, not a calc error |
+All seven decisions were resolved in favour of the recommended option. Each entry gives the
+choice, the reasoning, what it changes in §4, and the source that settles it. Implementation is
+Phase 1 (§7); the archive treatment in §9.3 is the only part that is not a code change.
+
+### 9.1 `C8` severity — **`H`**: withhold the target, keep the verdict
+
+- **Why.** (a) It is the doctrine already in the codebase — *"corrupt data withholds the value,
+  never the judgment"* — and the fix that shipped in `4e1a75f` puts the dial on the same side:
+  it returns HOLD and withholds the point, so an `H` clause agrees with compute instead of
+  overriding it. (b) A published recommendation needs a *reasonable basis*; when the model's own
+  cross-check sits entirely the other side of the price, the basis is absent — CFA Institute
+  Standard V(A) *Diligence and Reasonable Basis* is the profession's statement of that
+  obligation. (c) The information cost of withholding is small: target prices' short-term
+  informativeness concentrates in the revision and the implied return, not in the level of the
+  point estimate (Brav & Lehavy 2003). (d) Withholding is what the pipeline already does for the
+  out-of-band case — 7 of the 8 corpus instances carry `withheld_reason = contract_C7` — so `H`
+  makes the contradicted case consistent with the case that already works, and closes the one
+  gap in that behaviour (instance B, where nothing was withheld).
+- **What it changes in §4.** As written in §4.1: `H`, headline scope.
+- **Rejected alternative.** `S` (banner). The corpus says a banner is ignored: 23
+  `target_multiple_outside_band` findings and 171 findings in total, and zero withholds.
+
+### 9.2 `C10` scope — **claim-scope withhold, count-thresholded**
+
+- **Choice.** Promote the ratio findings from `review` to `blocked_field`, so
+  `_attach_numeric_audit` nulls the leaf through the existing `withhold_keys` / `rich_withhold`
+  path; the headline target is withheld only when a *published conclusion* rests on the bad leaf.
+- **Thresholds are counts, not booleans** (dbt's `severity: error|warn` + `error_if`/`warn_if`
+  shape): a scalar-vs-frame mismatch on a *published* ratio is an error; the same mismatch on a
+  display-only field is a warning. `ContractClause` gains optional `warn_if`/`error_if` count
+  fields so a clause can be "over-broad but reviewed" while it is calibrated.
+- **Why hard.** A ratio whose numerator the artifact itself reports as `null` is not a number
+  with a caveat; it is a number that does not exist. The SEC's own filing-validation regime
+  treats *this* class — the identity that must hold (DQC_0004), values that cannot be negative
+  (DQC_0015), the dimensional-equivalence check (DQC_0011) — as errors, not notes. Matching that
+  severity keeps the report's own arithmetic accountable to the same standard as the filings it
+  reads.
+
+### 9.3 The eight contradicted artifacts — **leave the record, annotate on read; never rewrite**
+
+- **Choice.** No re-run, no delete, no in-place edit. `scripts/scan_artifact_contract.py`
+  (read-only, already the promotion instrument) gains a "would-flag under the live clause set"
+  report, and the artifact page renders a derived `audit_badge` computed at read time from the
+  stored payload. New reports are prevented by `C8`; the eight stay as the evidence of the flaw
+  that motivated it.
+- **Why: the domain's own answer to a wrong filed report is an amendment, not an edit.**
+  17 CFR 240.12b-15: an amendment is *"filed under cover of the form amended, marked with the
+  letter 'A' … '10-K/A'"*, *"must set forth the complete text of each item as amended"*, and
+  *"must be numbered sequentially and be filed separately for each statement or report
+  amended"* — the original filing is never revised. For the retention mechanics,
+  17 CFR 240.17a-4(f)(2)(i) permits exactly two designs: an electronic recordkeeping system with
+  *"a complete time-stamped audit trail that includes all modifications to and deletions of the
+  record … and will permit re-creation of the original record if it is modified or deleted"*, or
+  one that preserves records *"exclusively in a non-rewriteable, non-erasable format"*. The badge
+  is the first branch; `artifact/seal.py` already seals the payload, so the second is available
+  to us as well.
+- **Also the ethics frame.** The IIA Code of Ethics, Objectivity Rule 2.3 — *"Shall disclose all
+  material facts known to them that, if not disclosed, may distort the reporting of activities
+  under review"* — is precisely a badge obligation, not a rewrite obligation.
+- **Explicitly not chosen:** re-running the eight. A re-run produces a *new* artifact and leaves
+  the contradicted one in place anyway; it changes no record and costs 8 × ~3 minutes of
+  provider calls. Deleting them destroys the audit trail that this design cites as evidence.
+
+### 9.4 `C13` hard case — **a non-independent validator cannot be the sole corroboration**
+
+- **Choice.** An independent check may *confirm* a direction; a self-reviewing one may only *fail
+  to contradict* it. Implementation: a candidate with `agreement_is_independent: false` is
+  excluded from the corroboration count the clauses read, and `C13` reports the resulting count.
+- **Why.** This is a named threat category, not a preference. SR 26-2 requires effective
+  challenge to be *"performed by individuals with the appropriate expertise … sufficient
+  independence to maintain objectivity"*; the IIA Rules of Conduct 2.1–2.3 prohibit participating
+  in *"any activity or relationship that may impair or be presumed to impair their unbiased
+  assessment"* — the self-review threat. A Monte Carlo centred on the DCF it is validating, and a
+  `market_cap` derived from `shares × price`, are both self-review: the "agreement" is an
+  identity, not evidence.
+
+### 9.5 Phase-2 `Measure` timing — **expand now, contract on an exit criterion**
+
+- **Choice.** The three missing `NumericClaim` fields (`basis`, `is_proxy`, `derivation`) ship in
+  the same release as the Phase-1 clauses — they are the clauses' input, so they cannot be
+  deferred without the clauses reading raw dict paths. The strict `Measure` type is enforced only
+  after every producer populates those fields.
+- **Why phased.** Expand → migrate → contract is the standard way to make a breaking change
+  without a big bang, and its own caveat is the reason the exit criterion is written into the
+  doc: *"during the migrate phase the supplier has to support two different versions … If the
+  contract phase is not executed you might end up in a worse state than you started."* Our exit
+  criterion: `scan_artifact_contract.py` reports **0 claims with an empty `basis`**.
+- **Explicitly rejected:** adopting the type everywhere now. The numeric core would have to
+  change in the same release as the gate, which makes the gate's own effect on the corpus
+  unmeasurable — the property §7 item 1 depends on.
+
+### 9.6 Reason-code registry — **one enumerated vocabulary keyed by `(reason_code, domain)`**
+
+- **Spec** (mirrors `google.rpc.ErrorInfo`, AIP-193): `reason_code` is UPPER_SNAKE_CASE, ≤63
+  characters, matching `[A-Z][A-Z0-9_]+[A-Z0-9]`, **stable forever**; `domain` groups it
+  (`contract`, `data_authority`, `drift`, `audit`); every dynamic number lives in `metadata`,
+  never in the code; the `(reason_code, domain)` pair is unique per logical cause and must not be
+  reused for a different one.
+- **What changes.** `withheld_reason: str` becomes
+  `{reason_code, domain, metadata, help_url}`. `contract_C7` splits into at least two causes —
+  the resurrection scrub and the out-of-band target — because one pair for two logically
+  different errors is exactly the lossiness measured in §6, and AIP-193 forbids it. The
+  coverage/report UI renders the code; the reader-facing sentence is generated from `metadata`.
+- **Sources.** AIP-193 (`ErrorInfo`, and the `Help{description, url}` payload for the doc link);
+  RFC 9457 for the URL-shaped variant (`type` as the stable problem identifier, with the IANA
+  "HTTP Problem Types" registry as the precedent for a public registry). The XBRL US DQC rule ids
+  (`DQC_0004`, `DQC_0015`, …) are the same idea in this domain: a stable id, versioned, with a
+  published remediation.
+
+### 9.7 `C12` catalogs — **two thresholds (`warn_after` / `error_after` shape)**
+
+- **Choice.** `error_if` when the stale-or-undated item *carried a published number*; `warn_if`
+  when it only populated a catalogue (news/8-K list), where the remediation is exclusion plus
+  disclosure.
+- **Why two thresholds.** Freshness policy in practice is two-threshold with a count and a
+  period (dbt's `warn_after`/`error_after` = `{count, period}`) because the cost of staleness
+  depends on what consumes the data. The SEC's own version of this rule for facts — DQC_0005,
+  context dates after the period end — is an error only for the filing's own required facts. Our
+  analogue: an FY2010 net income feeding a published multiple is an error; a February 8-K inside
+  a "30-day window" catalogue is a warning with an exclusion footnote.
+
+### 9.8 Cross-cutting consequence
+
+`ContractClause` needs two additions to carry these decisions: optional `warn_if` / `error_if`
+count thresholds (§9.2), and a `title`/`doc` pair so the reason-code registry (§9.6) has a
+renderable name per clause. Both are additive and neither changes the existing seven clauses'
+behaviour.
 
 ---
 
@@ -425,3 +553,31 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
   [applied to banking software](https://www.cs.montana.edu/izurieta/pubs/IRI_2023.pdf) — §7.3.
 - [FActScore](https://arxiv.org/abs/2305.14251) — atomic decomposition as the measurement of
   prose grounding (§4.7).
+
+**Decision sources (§9)**
+
+- CFA Institute, [Standard V(A) Diligence and Reasonable Basis](https://www.cfainstitute.org/standards/professionals/code-ethics-standards/standards-of-practice-v-a) —
+  §9.1: a recommendation must rest on adequate research; a target its own evidence contradicts
+  has no basis.
+- Brav & Lehavy, [An Empirical Analysis of Analysts' Target Prices](https://webuser.bus.umich.edu/rlehavy/BL.pdf)
+  (*Journal of Finance*, 2003) — §9.1: target-price informativeness concentrates in revisions and
+  implied returns, not in the level of the point estimate, so withholding one costs little.
+- [dbt: severity, error_if, warn_if](https://docs.getdbt.com/reference/resource-configs/severity)
+  and [dbt: freshness](https://docs.getdbt.com/reference/resource-configs/freshness) —
+  §9.2 and §9.7: count-based thresholds (`error_if: ">1000"`, `warn_if: ">10"`;
+  `warn_after`/`error_after` as `{count, period}`) rather than a binary severity per rule.
+- Danilo Sato / Martin Fowler, [Parallel Change (expand → migrate → contract)](https://martinfowler.com/bliki/ParallelChange.html) —
+  §9.5, including the caveat about an unfinished contract phase.
+- Google, [AIP-193: Errors](https://google.aip.dev/193) (`google.rpc.ErrorInfo`: `reason` as a
+  stable UPPER_SNAKE identifier, unique `(reason, domain)` pairs, metadata carrying every dynamic
+  value) and [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457.html) with the
+  [IANA HTTP Problem Types registry](https://www.iana.org/assignments/http-problem-types) —
+  §9.6.
+- IIA, [Global Code of Ethics](https://www.theiia.org/en/standards/what-are-the-standards/mandatory-guidance/code-of-ethics/) —
+  §9.3 (Rule 2.3: disclose material facts that would distort the reporting) and §9.4 (Rules
+  2.1–2.3: no activity that "may impair or be presumed to impair their unbiased assessment").
+- 17 CFR [§ 240.12b-15](https://www.law.cornell.edu/cfr/text/17/240.12b-15) (amendments must
+  carry the complete amended text, be numbered, and be filed separately — the original is never
+  revised) and 17 CFR [§ 240.17a-4(f)(2)(i)](https://www.law.cornell.edu/cfr/text/17/240.17a-4)
+  (an electronic recordkeeping system keeps either a complete time-stamped audit trail that can
+  re-create the original record, or records in a non-rewriteable, non-erasable format) — §9.3.
