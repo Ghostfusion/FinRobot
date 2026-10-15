@@ -78,6 +78,7 @@ from finrobot.engine.compute.coordinators.credit_payload import (
 from finrobot.engine.compute.coordinators.extractor import (
     net_income_divergence_warning,
     normalize_financials_to_usd,
+    xbrl_fiscal_divergence_warning,
 )
 from finrobot.engine.compute.coordinators.historical_extractor import fetch_historical_metrics
 from finrobot.engine.data.historical_loaders import (
@@ -253,6 +254,48 @@ async def _execute_data_collection_with_sec(
         )
         if _divergence and _divergence not in financial_output.structured.warnings:
             financial_output.structured.warnings.append(_divergence)
+
+        # ONE fiscal year, TWO authorities — the ANNUAL sibling of the TTM pair above.
+        # The TTM window feeds the ratios; the annual bars feed the financial chapter's
+        # charts and the XBRL chapter prints the filing facts beside them, and the two
+        # can disagree widely with neither being wrong (a filer tags a concept on its
+        # own caliber). TROW 2026-10-15 (owner review) shipped THREE FY2025 operating
+        # incomes and reconciled none: 2,188,800,000 (XBRL fact → a 29.9% margin),
+        # 2,477,400,000 (the provider's annual bar → 33.9%) and 2,615,100,000 (TTM →
+        # 34.4%) — while the DCF's 42% EBITDA-margin assumption rides the provider
+        # caliber, so a reader who took the XBRL side recomputed the thesis ~12% lower
+        # with nothing telling them which number the model used.
+        #
+        # Annual net income is deliberately NOT compared here: the provider's annual
+        # net_income is attributable to the parent while ``us-gaap:NetIncomeLoss`` is
+        # consolidated, so every issuer with a noncontrolling interest would raise a
+        # false alarm. The TTM pair above names that cause (nci_earnings).
+        _historical = structured_context.get("historical_metrics")
+        if isinstance(_historical, HistoricalMetrics):
+            _provider = (
+                financial_output.structured.provenance.provider
+                if financial_output.structured.provenance is not None
+                else None
+            )
+            for _label, _key, _series in (
+                ("Revenue", "latest_revenue", _historical.revenue),
+                ("Gross profit", "latest_gross_profit", _historical.gross_profit),
+                ("Operating income", "latest_operating_income", _historical.operating_income),
+            ):
+                _fact = xbrl.get(_key) if isinstance(xbrl, dict) else None
+                _annual_divergence = xbrl_fiscal_divergence_warning(
+                    label=_label,
+                    concept=str(_fact.get("concept") or _key) if isinstance(_fact, dict) else _key,
+                    provider_series=_series,
+                    provider_years=_historical.years,
+                    provider_source=_provider,
+                    xbrl_fact=_fact,
+                )
+                if (
+                    _annual_divergence
+                    and _annual_divergence not in financial_output.structured.warnings
+                ):
+                    financial_output.structured.warnings.append(_annual_divergence)
 
     return financial_output
 

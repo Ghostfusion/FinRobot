@@ -17,6 +17,7 @@ from finrobot.engine.compute.coordinators.extractor import (
     PE_BASIS_NET_INCOME,
     extract_financial_data,
     net_income_divergence_warning,
+    xbrl_fiscal_divergence_warning,
 )
 from finrobot.engine.data.interface import DataResult
 from finrobot.engine.data.normalize.financials import normalize_financials
@@ -248,3 +249,112 @@ class TestQuoteBasis:
         )
         fd = extract_financial_data(_ehc_fin(), price)
         assert fd.market.quote_is_live is True
+
+
+class TestXbrlFiscalDivergenceWarning:
+    """One fiscal year, two authorities — the annual sibling of the TTM net-income pair.
+
+    Owner review 2026-10-15 (TROW): the report printed THREE FY2025 operating incomes
+    (XBRL fact 2,188,800,000 → 29.9%; provider annual 2,477,400,000 → 33.9%; provider
+    TTM 2,615,100,000 → 34.4%) and reconciled none of them, while the DCF's 42%
+    EBITDA-margin assumption rode the provider caliber.
+    """
+
+    _TROW_YEARS = [2022, 2023, 2024, 2025]
+    _TROW_OP_INCOME = [2_496_000_000.0, 2_038_000_000.0, 2_476_600_000.0, 2_477_400_000.0]
+
+    def _warning(self, **overrides):
+        kwargs = dict(
+            label="Operating income",
+            concept="us-gaap:OperatingIncomeLoss",
+            provider_series=self._TROW_OP_INCOME,
+            provider_years=self._TROW_YEARS,
+            provider_source="yfinance",
+            xbrl_fact={
+                "concept": "us-gaap:OperatingIncomeLoss",
+                "value": 2_188_800_000.0,
+                "period_end": "2025-12-31",
+                "units": "USD",
+            },
+        )
+        kwargs.update(overrides)
+        return xbrl_fiscal_divergence_warning(**kwargs)
+
+    def test_divergence_names_the_year_both_values_and_both_sources(self) -> None:
+        warning = self._warning()
+        assert warning is not None
+        assert "FY2025" in warning
+        assert "2,477,400,000" in warning
+        assert "2,188,800,000" in warning
+        assert "yfinance" in warning
+        assert "us-gaap:OperatingIncomeLoss" in warning
+        # |2,477.4M − 2,188.8M| / 2,477.4M (the larger magnitude) = 11.6%
+        assert "11.6%" in warning
+
+    def test_the_same_year_agreeing_is_silent(self) -> None:
+        # TROW's revenue: the provider's FY2025 bar and the XBRL fact are the same figure.
+        assert (
+            self._warning(
+                label="Revenue",
+                concept="us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                provider_series=[
+                    6_488_400_000.0,
+                    6_460_500_000.0,
+                    7_093_600_000.0,
+                    7_314_800_000.0,
+                ],
+                xbrl_fact={
+                    "value": 7_314_800_000.0,
+                    "period_end": "2025-12-31",
+                    "units": "USD",
+                },
+            )
+            is None
+        )
+
+    def test_a_fact_from_a_year_the_series_does_not_carry_is_silent(self) -> None:
+        """TROW's ``us-gaap:GrossProfit`` fact is filed for 2011 — the provider series
+        starts at 2022, so there is no same-year figure to compare against and the
+        disclosure must stay silent rather than invent one."""
+        assert (
+            self._warning(
+                label="Gross profit",
+                concept="us-gaap:GrossProfit",
+                provider_series=[
+                    3_566_000_000.0,
+                    3_206_100_000.0,
+                    3_684_100_000.0,
+                    3_750_300_000.0,
+                ],
+                xbrl_fact={"value": 2_747_100_000.0, "period_end": "2011-12-31", "units": "USD"},
+            )
+            is None
+        )
+
+    def test_missing_or_malformed_inputs_are_silent(self) -> None:
+        assert self._warning(xbrl_fact=None) is None
+        assert self._warning(xbrl_fact={}) is None
+        assert self._warning(xbrl_fact={"value": None, "period_end": "2025-12-31"}) is None
+        assert self._warning(xbrl_fact={"value": "n/a", "period_end": "2025-12-31"}) is None
+        assert self._warning(provider_years=None) is None
+        assert self._warning(provider_years=[]) is None
+        assert self._warning(provider_series=None) is None
+        # The fact's year is in the series but the provider omitted that year's figure.
+        assert self._warning(provider_series=[1.0, 2.0, 3.0, None]) is None
+
+    def test_zero_and_non_finite_values_are_silent(self) -> None:
+        # BOTH sides zero is the one pairing with no ratio to compare (0/0).
+        assert (
+            self._warning(
+                provider_series=[1.0, 2.0, 3.0, 0.0],
+                xbrl_fact={"value": 0.0, "period_end": "2025-12-31"},
+            )
+            is None
+        )
+        assert self._warning(provider_series=[1.0, 2.0, 3.0, float("inf")]) is None
+        assert self._warning(xbrl_fact={"value": float("nan"), "period_end": "2025-12-31"}) is None
+
+    def test_a_period_end_given_as_a_bare_year_aligns(self) -> None:
+        # Some concepts carry a 'YYYY' period_end rather than a full date.
+        warning = self._warning(xbrl_fact={"value": 2_188_800_000.0, "period_end": "2025"})
+        assert warning is not None and "FY2025" in warning

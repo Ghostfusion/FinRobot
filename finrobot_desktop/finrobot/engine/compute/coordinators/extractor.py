@@ -13,6 +13,8 @@ receive raw ``DataResult`` slices from ``fetch_historical`` wrap them with
 """
 
 import math
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 from finrobot.engine.data.instrument import FundInstrumentError, is_fund_quote_type
 from finrobot.engine.data.normalize.contracts import NormalizedFinancials, NormalizedPrice
@@ -129,6 +131,77 @@ _OPERATING_MARGIN_SUPERSEDE_TOL = 0.001
 # differ by a few days, so small gaps are noise; >5% is a caliber difference the
 # narrative must not absorb silently.
 _NET_INCOME_DIVERGENCE_TOL = 0.05
+
+# Relative gap between an SEC XBRL ANNUAL fact and the provider's fiscal-year figure
+# for the SAME year above which the difference is DISCLOSED (see
+# ``xbrl_fiscal_divergence_warning``). Same 5% bar as the TTM net-income pair and for
+# the same reason: a filing fact is one authority and the provider series another.
+_XBRL_FISCAL_DIVERGENCE_TOL = 0.05
+
+
+def xbrl_fiscal_divergence_warning(
+    *,
+    label: str,
+    concept: str,
+    provider_series: Sequence[float | None] | None,
+    provider_years: Sequence[int] | None,
+    provider_source: str | None,
+    xbrl_fact: Mapping[str, Any] | None,
+) -> str | None:
+    """Disclose a >5% gap between an SEC XBRL ANNUAL fact and the provider's same year.
+
+    Why this exists (owner review 2026-10-15, TROW): the report printed THREE FY2025
+    operating incomes and reconciled none of them — the XBRL chapter's
+    ``us-gaap:OperatingIncomeLoss`` fact (2,188,800,000 → a 29.9% margin), the
+    financial chapter's provider annual bar (2,477,400,000 → 33.9%), and the TTM
+    income block (2,615,100,000 → 34.4%) — while the DCF's 42% EBITDA-margin
+    assumption rests on the provider caliber. A reader comparing the XBRL chapter
+    against the margin chart was left to guess which number the thesis used, and a
+    reviewer recomputed the operating margin ~5 points lower off the XBRL fact
+    (which moves the DCF ~12%: the target is the same order, the thesis is not).
+
+    Matches the fact to the provider series by the fiscal year the period ENDS in —
+    the same key ``HistoricalMetrics.years`` carries (``_year_of(fiscal_year|date)``
+    in the historical extractor) — so a June-FY filer aligns on its own year label.
+    Returns None when the fact's year is not in the provider's series (nothing to
+    compare against), when either side is missing/non-finite, or within tolerance.
+    Pure and side-effect free, like ``net_income_divergence_warning`` beside it.
+    """
+    if not isinstance(xbrl_fact, Mapping):
+        return None
+    xbrl_raw = xbrl_fact.get("value")
+    xbrl_value = float(xbrl_raw) if isinstance(xbrl_raw, (int, float)) else None
+    period_end = xbrl_fact.get("period_end")
+    if xbrl_value is None or not provider_years or not provider_series:
+        return None
+    # Match on the period END's year, as a string prefix: the same key the provider's
+    # annual arrays carry, and it needs no date parse (a 'YYYY' value works too).
+    end_year = str(period_end or "")[:4]
+    index = next(
+        (i for i, year_label in enumerate(provider_years) if str(year_label) == end_year),
+        None,
+    )
+    if index is None or index >= len(provider_series):
+        return None
+    provider_value = provider_series[index]
+    if provider_value is None:
+        return None
+    if not (math.isfinite(provider_value) and math.isfinite(xbrl_value)):
+        return None
+    denominator = max(abs(provider_value), abs(xbrl_value))
+    if denominator == 0:
+        return None
+    gap = abs(provider_value - xbrl_value) / denominator
+    if gap <= _XBRL_FISCAL_DIVERGENCE_TOL:
+        return None
+    return (
+        f"{label} disagreement for FY{end_year} ({gap:.1%}): this report's fiscal-year figure "
+        f"is {provider_value:,.0f} ({provider_source or 'provider'}) while the SEC XBRL "
+        f"fact {concept} for the same year (period end {period_end}) is {xbrl_value:,.0f}. "
+        f"The margins, multiples and the DCF's margin assumption are computed on the "
+        f"provider figure — state which of the two a number comes from instead of "
+        f"treating them as one figure."
+    )
 
 
 def _sanitize_margin(
