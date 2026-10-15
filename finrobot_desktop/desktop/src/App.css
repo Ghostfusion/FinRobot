@@ -7467,6 +7467,28 @@ body.app-bg .cosmic-stars.cosmic-stars-fast {
   letter-spacing: 0;
   font-variant-numeric: tabular-nums;
 }
+/* The target row's WITHHELD state: no point target was published, so the row shows
+   the artifact's published fair-value band instead of a gauge. Same row shape as
+   .target-gauge (label left, value right) so the wall stays aligned, but no track,
+   no marker and no green/red — a range is not a directional call. */
+.coverage-card__target-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 2px;
+}
+.coverage-card__target-range {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
 .coverage-card__footer {
   /* Two rows: the report summary on its own full-width line, then the status
      pill + owned checkbox beneath it. They used to share one row, which left the

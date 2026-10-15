@@ -28,6 +28,8 @@ function row(over: Partial<CoverageRow>): CoverageRow {
     currency: 'USD',
     latest_verdict: null,
     target_price: null,
+    target_low: null,
+    target_high: null,
     target_date: null,
     entry_price: null,
     upside_to_target_live: null,
@@ -169,6 +171,49 @@ describe('CoverageCard price-target gauge', () => {
   it('omits the gauge when there is no live price', () => {
     const el = renderC({ price: null, target_price: 195.04 }, true)
     expect(el).toBeNull()
+  })
+
+  // The withheld shape: the gate suppressed the point target, the artifact still
+  // published the fair-value band. The row keeps its place and shows the range.
+  function renderRow(over: Partial<CoverageRow>): HTMLElement | null {
+    const { container } = render(
+      <MemoryRouter>
+        <CoverageCard row={row(over)} density="comfort" onOpen={vi.fn()} />
+      </MemoryRouter>,
+    )
+    return container.querySelector('.coverage-card__target-row') as HTMLElement | null
+  }
+
+  it('shows the published fair-value band when the point target was withheld', () => {
+    const el = renderRow({ target_price: null, target_low: 78.19, target_high: 130.32 })
+    expect(el).not.toBeNull()
+    expect(el!.textContent).toContain('$78.19–$130.32')
+    // The withheld state's own words (the report's), not a second phrasing.
+    expect(el!.getAttribute('title')).toMatch(/point target withheld/)
+  })
+
+  it('never draws the band as gauge geometry — a range carries no direction', () => {
+    const el = renderRow({ target_price: null, target_low: 78.19, target_high: 130.32 })
+    expect(el!.querySelector('.target-gauge__track')).toBeNull()
+    expect(el!.querySelector('.target-gauge__mark')).toBeNull()
+  })
+
+  it('reads an inverted pair as a range and refuses to print a flat pair as a point', () => {
+    const inverted = renderRow({ target_price: null, target_low: 130.32, target_high: 78.19 })
+    expect(inverted!.textContent).toContain('$78.19–$130.32')
+
+    // low == high is the very number the gate withheld — the row does not become
+    // the point target by the back door.
+    const flat = renderRow({ target_price: null, target_low: 90, target_high: 90 })
+    expect(flat!.textContent).toContain('—')
+    expect(flat!.textContent).not.toContain('90')
+  })
+
+  it('keeps the row with the missing-value token when no band was published either', () => {
+    const el = renderRow({ target_price: null, target_low: null, target_high: null })
+    expect(el).not.toBeNull()
+    expect(el!.querySelector('.coverage-card__target-range')!.textContent).toBe('—')
+    expect(el!.getAttribute('title')).toBeNull()
   })
 })
 

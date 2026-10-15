@@ -47,6 +47,8 @@ function row(over: Partial<CoverageRow>): CoverageRow {
     currency: null,
     latest_verdict: null,
     target_price: null,
+    target_low: null,
+    target_high: null,
     target_date: null,
     entry_price: null,
     upside_to_target_live: null,

@@ -2257,6 +2257,10 @@ export interface components {
       latest_verdict?: string | null
       /** Target Price */
       target_price?: number | null
+      /** Target Low */
+      target_low?: number | null
+      /** Target High */
+      target_high?: number | null
       /** Target Date */
       target_date?: string | null
       /** Entry Price */
@@ -3210,6 +3214,8 @@ export interface components {
        * @description Operating margin as decimal; None when unavailable
        */
       operating_margin?: number | null
+      /** Operating Margin Basis */
+      operating_margin_basis?: string | null
       /** Operating Income */
       operating_income?: number | null
       /** Nci Earnings */
@@ -3521,6 +3527,8 @@ export interface components {
       growth_ceiling?: number | null
       /** Ceiling Price */
       ceiling_price?: number | null
+      /** Premium Driver */
+      premium_driver?: ('growth' | 'discount_rate') | null
     }
     /**
      * MarketImpliedNature

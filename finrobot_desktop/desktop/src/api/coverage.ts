@@ -98,6 +98,13 @@ export interface CoverageRow {
   currency: string | null
   latest_verdict: string | null
   target_price: number | null
+  // The latest research artifact's published cross-method fair-value band
+  // (USD/share) — the same artifact target_price comes from. A null target_price
+  // beside a non-null pair is the withheld shape: the gate suppressed the point
+  // and the band is the only published valuation, so the card's target row shows
+  // the range. Never derived from target_price, and no upside is read off a bound.
+  target_low: number | null
+  target_high: number | null
   target_date: string | null
   entry_price: number | null
   upside_to_target_live: number | null

@@ -173,6 +173,17 @@ class CoverageRow(BaseModel):
     # Research — from artifact store
     latest_verdict: str | None = None
     target_price: float | None = None
+    target_low: float | None = None
+    """Low end of the latest thesis-bearing artifact's published cross-method
+    fair-value band (USD/share), from the SAME artifact ``target_price`` comes from.
+    Non-null while ``target_price`` is null is the normal withheld shape: the
+    valuation gate suppressed the point target, and the band it did publish is the
+    only valuation on the card. Nothing here is ever derived from ``target_price``,
+    and ``upside_to_target_live`` is deliberately NOT read off a bound — a range
+    carries no direction (the report's football field refuses a per-method upside
+    on a withheld point for the same reason)."""
+    target_high: float | None = None
+    """High end of the published fair-value band (see ``target_low``)."""
     target_date: datetime | None = None
     entry_price: float | None = None
     upside_to_target_live: float | None = None

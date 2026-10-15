@@ -299,6 +299,13 @@ def _apply_research_fields(row: CoverageRow, summaries: list[ArtifactSummary]) -
         return
     row.latest_verdict = research.verdict
     row.target_price = research.target_price
+    # The published fair-value BAND rides with the point: both come from this same
+    # artifact, so the card can render the range the report's version row renders
+    # when the gate withheld the point, instead of an empty target row. Copied, not
+    # derived — a null point target does NOT make the band any less published, and
+    # a band does NOT become an upside (no direction is read off a bound).
+    row.target_low = research.target_low
+    row.target_high = research.target_high
     row.target_date = research.target_date
     row.entry_price = research.entry_price
     row.latest_artifact_id = research.id

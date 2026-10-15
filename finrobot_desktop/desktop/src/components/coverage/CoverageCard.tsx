@@ -8,6 +8,11 @@
 // market cap · revenue TTM · EV/EBITDA-or-P/E · live upside · warning/freshness ·
 // report count + latest report date. Live Upside is labelled "vs latest price"
 // in the inspector; on the dense card the column header carries that meaning.
+//
+// The target row renders one of two published states, never a guess: a POINT
+// target draws the gauge; a WITHHELD point draws the artifact's published
+// fair-value band as a range (muted — a range is not a directional call, so no
+// green/red and no bar geometry). Both keep the row, so the wall stays aligned.
 
 import { memo, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
@@ -368,16 +373,19 @@ export const CoverageCard = memo(function CoverageCard({
         </Metric>
       </div>
 
-      {!showShimmer && (
-        <TargetGauge
-          currentPrice={row.price}
-          targetPrice={row.target_price}
-          upside={row.upside_to_target_live}
-          source={row.sources?.upside_to_target_live ?? undefined}
-          ticker={row.ticker}
-          quoteCurrency={ccy}
-        />
-      )}
+      {!showShimmer &&
+        (row.target_price != null ? (
+          <TargetGauge
+            currentPrice={row.price}
+            targetPrice={row.target_price}
+            upside={row.upside_to_target_live}
+            source={row.sources?.upside_to_target_live ?? undefined}
+            ticker={row.ticker}
+            quoteCurrency={ccy}
+          />
+        ) : (
+          <WithheldTargetRow low={row.target_low} high={row.target_high} currency={ccy} />
+        ))}
 
       {!showShimmer && impliedView && (
         <div
@@ -711,6 +719,46 @@ function impliedNatureView(
     title: t('coverage.implied.fundamentalTitle', { g, n: nat.horizon_years }),
     tone: 'var(--text-secondary)',
   }
+}
+
+// The target row's WITHHELD state. The valuation gate suppressed the point target,
+// so there is no point to draw a gauge against (TargetGauge renders nothing without
+// one — its own documented rule), but the artifact still publishes the cross-method
+// fair-value band: the same pair the report's version rows and right rail print. Show
+// THAT, in the row's own shape, so the wall keeps one target row per card and the
+// reader gets the published range instead of an empty slot.
+//
+// Muted, no bar: the gauge's green/red + marker encode a DIRECTION from the current
+// price, and a range carries none. Bounds are sorted (an inverted pair still reads as
+// a range) and a degenerate pair (low == high) is NOT printed as a point — that is
+// exactly the number the gate withheld, so the row falls back to the card's
+// missing-value token.
+function WithheldTargetRow({
+  low,
+  high,
+  currency,
+}: {
+  low: number | null
+  high: number | null
+  currency: string
+}): React.ReactElement {
+  const { t, locale } = useI18n()
+  const hasRange = low != null && high != null && low !== high
+  const bottom = hasRange ? Math.min(low, high) : null
+  const top = hasRange ? Math.max(low, high) : null
+  // The range's own words ("point target withheld — showing the fair-value range")
+  // are the report's, reused verbatim: one definition of this state, two surfaces.
+  const title = hasRange ? t('report.timeline.withheldRange') : undefined
+  return (
+    <div className="coverage-card__target-row" title={title}>
+      <span className="target-gauge__label">{t('coverage.card.target')}</span>
+      <span className="coverage-card__target-range">
+        {bottom != null && top != null
+          ? `${formatCurrency(bottom, currency, locale)}–${formatCurrency(top, currency, locale)}`
+          : '—'}
+      </span>
+    </div>
+  )
 }
 
 function Shimmer(): React.ReactElement {
