@@ -895,6 +895,81 @@ def test_balance_sheet_concept_lists_hold_no_components_or_identity_totals() -> 
         assert [c for c in concepts if is_identity_total(c)] == []
 
 
+def _gross_profit_facts(concept: str, value: float, unit: Any, period_end: date):
+    return _FakeLatestFacts(
+        annual={
+            f"us-gaap:{concept}": _FakeFinancialFact(
+                f"us-gaap:{concept}", value, period_end, unit=unit, fiscal_period="FY"
+            )
+        }
+    )
+
+
+@pytest.mark.asyncio
+async def test_gross_profit_slot_rejects_a_unit_less_ratio_named_gross_margin() -> None:
+    """``GrossMargin`` is not a us-gaap element: it can only match a filer EXTENSION,
+    and that name commonly holds a RATIO. A fact that states no unit at all therefore
+    must not inherit the missing-unit default to USD — reading 0.42 as $0.42 of gross
+    profit. The slot abstains (-→ the declared provider_scalar / withheld margin path)
+    instead."""
+    p = EdgarToolsProvider("Jane Doe jane@example.com")
+    facts = _gross_profit_facts("GrossMargin", 0.42, "", date(2025, 6, 30))
+
+    c = MagicMock()
+    c.get_facts.return_value = facts
+    data, warnings = p._fetch_xbrl(c)
+
+    assert data["latest_gross_profit"] is None
+    assert any("states no unit" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+async def test_gross_profit_slot_still_admits_a_unit_less_us_gaap_gross_profit() -> None:
+    """The strict rule is per CONCEPT, not per slot: ``GrossProfit`` is a dollar amount
+    by definition and edgartools omits the unit on cleanly-typed currency facts often
+    enough that refusing a unit-less one would drop good US data."""
+    p = EdgarToolsProvider("Jane Doe jane@example.com")
+    pe = date(2025, 6, 30)
+    facts = _gross_profit_facts("GrossProfit", 184_103_000_000.0, "", pe)
+
+    c = MagicMock()
+    c.get_facts.return_value = facts
+    data, _ = p._fetch_xbrl(c)
+
+    assert data["latest_gross_profit"]["value"] == 184_103_000_000.0
+    assert data["latest_gross_profit"]["period_end"] == pe
+
+
+@pytest.mark.asyncio
+async def test_gross_profit_slot_admits_a_usd_tagged_gross_margin_extension() -> None:
+    """A filer extension that genuinely tags its gross profit in dollars is usable —
+    the strict rule is about the missing declaration, not about the concept name."""
+    p = EdgarToolsProvider("Jane Doe jane@example.com")
+    facts = _gross_profit_facts("GrossMargin", 320_000_000.0, "USD", date(2025, 6, 30))
+
+    c = MagicMock()
+    c.get_facts.return_value = facts
+    data, _ = p._fetch_xbrl(c)
+
+    assert data["latest_gross_profit"]["value"] == 320_000_000.0
+
+
+@pytest.mark.asyncio
+async def test_gross_profit_slot_rejects_a_percentage_valued_gross_margin() -> None:
+    """The shape the concept list could not rule out before: a ``pure`` / percent unit
+    is not USD, so it can never be a gross-profit amount (BUG-037's rule, applied to the
+    one synonym whose name makes that tagging plausible)."""
+    p = EdgarToolsProvider("Jane Doe jane@example.com")
+    facts = _gross_profit_facts("GrossMargin", 0.42, "pure", date(2025, 6, 30))
+
+    c = MagicMock()
+    c.get_facts.return_value = facts
+    data, warnings = p._fetch_xbrl(c)
+
+    assert data["latest_gross_profit"] is None
+    assert any("not USD" in w for w in warnings)
+
+
 @pytest.mark.asyncio
 async def test_fetch_xbrl_abstains_when_only_current_assets_is_tagged() -> None:
     """Degradation preserved: with ``AssetsCurrent`` no longer a fallback, an issuer

@@ -346,6 +346,16 @@ _LATEST_NET_INCOME_CONCEPTS: tuple[str, ...] = (
     "NetIncomeLossAttributableToParent",
 )
 _LATEST_GROSS_PROFIT_CONCEPTS: tuple[str, ...] = ("GrossProfit", "GrossMargin")
+# ``GrossProfit`` is the us-gaap element, a dollar amount BY DEFINITION. ``GrossMargin``
+# is not a us-gaap element at all: it can only ever match a filer EXTENSION, and that
+# name commonly holds a RATIO. Admit it only when the fact states a unit of its own and
+# that unit is USD — a unit-less or pure/percent-valued ``GrossMargin`` abstains (the
+# slot stays None, and the gross-margin caliber falls to its declared provider_scalar /
+# withheld path) instead of publishing 0.42 as $0.42M of gross profit. Slot-specific but
+# declared per CONCEPT, because ``GrossProfit`` keeps the lenient missing-unit default:
+# edgartools omits the unit on cleanly-typed currency facts often enough that refusing
+# them would drop good US data (see ``_is_usd_unit``).
+_GROSS_PROFIT_UNIT_STRICT_CONCEPTS: frozenset[str] = frozenset({"GrossMargin"})
 _LATEST_OPERATING_INCOME_CONCEPTS: tuple[str, ...] = (
     "OperatingIncomeLoss",
     "OperatingIncome",
@@ -453,7 +463,7 @@ _DISCRETE_QUARTER_LABELS: frozenset[str] = frozenset({"Q1", "Q2", "Q3", "Q4"})
 _TTM_RECENCY_DAYS = 200
 
 
-def _is_usd_unit(unit: Any) -> bool:
+def _is_usd_unit(unit: Any, *, require_explicit: bool = False) -> bool:
     """True iff an XBRL fact's reporting unit is plain USD (BUG-037).
 
     edgartools surfaces a fact's currency verbatim in ``FinancialFact.unit`` /
@@ -472,12 +482,18 @@ def _is_usd_unit(unit: Any) -> bool:
     cleanly-typed currency fact; refusing those would needlessly drop good US
     data. Foreign issuers DO carry an explicit non-USD unit, which is the case
     this guard exists to catch.
+
+    ``require_explicit`` refuses that missing/empty-unit default, so only a fact
+    stating USD for ITSELF passes. It is for the one shape where the default is
+    unsafe: a synonym whose NAME can hold a ratio (``GrossMargin``), where a
+    unit-less fact is as likely to be 0.42 percent as $420M. A us-gaap element
+    whose definition IS a dollar amount keeps the lenient default.
     """
     if unit is None:
-        return True
+        return not require_explicit
     text = str(unit).strip().upper()
     if not text:
-        return True
+        return not require_explicit
     # Currency facts may carry a compound numerator/denominator (e.g. a per-share
     # unit "USD/SHARES"); the reporting currency is the leading token. Revenue /
     # net income are plain currency, but split defensively so "USD-per-..." still
@@ -667,7 +683,11 @@ def _concept_facts(facts: Any, concept: str) -> list[Any] | None:
 
 
 def _newest_usd_fact(
-    candidates: list[Any], variant: str, warnings: list[str] | None
+    candidates: list[Any],
+    variant: str,
+    warnings: list[str] | None,
+    *,
+    require_explicit_unit: bool = False,
 ) -> dict[str, Any] | None:
     """Newest-period USD fact among ``candidates`` for one concept variant.
 
@@ -677,6 +697,10 @@ def _newest_usd_fact(
     Non-USD facts (a 20-F filer's native EUR/GBP/…) are skipped with a warning —
     edgartools applies no FX, so surfacing the native magnitude as USD would
     corrupt the snapshot.
+
+    ``require_explicit_unit`` (see ``_is_usd_unit``) also skips a fact that
+    states no unit at all — for the synonyms whose name can hold a ratio, where
+    the missing-unit default to USD would read 0.42 as $0.42.
     """
     best: dict[str, Any] | None = None
     best_key: tuple[date, date] | None = None
@@ -687,13 +711,20 @@ def _newest_usd_fact(
             period_end = period_end.date()
         if numeric is None or not isinstance(period_end, date):
             continue
-        unit = getattr(fact, "unit", "USD")
-        if not _is_usd_unit(unit):
+        unit = getattr(fact, "unit", None)
+        if not _is_usd_unit(unit, require_explicit=require_explicit_unit):
             if warnings is not None:
-                warnings.append(
-                    f"SEC XBRL fact {getattr(fact, 'concept', variant)} reported in "
-                    f"{unit}, not USD; suppressed (no FX in provider)."
-                )
+                concept_name = getattr(fact, "concept", variant)
+                if str(unit or "").strip():
+                    warnings.append(
+                        f"SEC XBRL fact {concept_name} reported in {unit}, not USD; "
+                        f"suppressed (no FX in provider)."
+                    )
+                else:
+                    warnings.append(
+                        f"SEC XBRL fact {concept_name} states no unit and its concept name "
+                        f"can hold a ratio, so its magnitude is not read as USD; suppressed."
+                    )
             continue
         filing_date = getattr(fact, "filing_date", None)
         if isinstance(filing_date, datetime):
@@ -719,6 +750,7 @@ def _select_latest_fact(
     annual: bool,
     prefer_recent: bool = False,
     warnings: list[str] | None = None,
+    strict_unit_concepts: frozenset[str] = frozenset(),
 ) -> dict[str, Any] | None:
     """Recover the matched ``FinancialFact`` for a point-in-time concept.
 
@@ -755,6 +787,13 @@ def _select_latest_fact(
     any downstream comparison. We skip such a variant and record a warning;
     suppression (→ FMP fallback) is the boundary-consistent choice (FX lives in
     ``normalize_peer_to_usd``, not here).
+
+    ``strict_unit_concepts`` names the concepts for which a fact must state USD
+    for ITSELF instead of inheriting the missing-unit default (see
+    ``_is_usd_unit``). It is per-concept, not per-slot: a slot's us-gaap element
+    is a dollar amount by definition while a non-us-gaap synonym in the same slot
+    can be a filer extension holding a ratio, and only the latter needs the
+    declaration.
     """
     get_annual = getattr(facts, "get_annual_fact", None)
     get_fact = getattr(facts, "get_fact", None)
@@ -815,7 +854,12 @@ def _select_latest_fact(
                     candidates = [
                         f for f in candidates if getattr(f, "fiscal_period", None) == "FY"
                     ]
-                result = _newest_usd_fact(candidates, variant, warnings)
+                result = _newest_usd_fact(
+                    candidates,
+                    variant,
+                    warnings,
+                    require_explicit_unit=concept in strict_unit_concepts,
+                )
                 if result is None:
                     continue
                 if not prefer_recent:
@@ -1421,7 +1465,13 @@ _HIST_ICF_CONCEPTS: tuple[str, ...] = (
     "NetCashProvidedByUsedInInvestingActivities",
     "NetCashProvidedByUsedInInvestingActivitiesContinuingOperations",
 )
-_HIST_FCF_CONCEPTS: tuple[str, ...] = (
+# FINANCING-activity concepts, not free cash flow. Named `_HIST_FINANCING_*` and read
+# into a local called ``financing`` deliberately: the slot it fills is the yearly
+# ``financing_cash_flow`` leaf, but the old name said "free cash flow" — a name that
+# invites wiring financing flows into an FCF leaf, which is precisely what they are not.
+# A real FCF is OCF − capex, i.e. `_HIST_OCF_CONCEPTS` less `_HIST_CAPEX_CONCEPTS`
+# (the DCF derives it from those two, never from here).
+_HIST_FINANCING_CONCEPTS: tuple[str, ...] = (
     "NetCashProvidedByUsedInFinancingActivities",
     "NetCashProvidedByUsedInFinancingActivitiesContinuingOperations",
 )
@@ -1569,7 +1619,7 @@ def _build_sec_yearly_financials(facts: dict[str, Any], max_years: int) -> list[
     capex = _companyfacts_annual_series(facts, _HIST_CAPEX_CONCEPTS)
     ocf = _companyfacts_annual_series(facts, _HIST_OCF_CONCEPTS)
     icf = _companyfacts_annual_series(facts, _HIST_ICF_CONCEPTS)
-    fcf = _companyfacts_annual_series(facts, _HIST_FCF_CONCEPTS)
+    financing = _companyfacts_annual_series(facts, _HIST_FINANCING_CONCEPTS)
     sga = _companyfacts_annual_series(facts, _HIST_SGA_CONCEPTS)
     eps = _companyfacts_point_series(facts, _HIST_EPS_CONCEPTS)
 
@@ -1605,7 +1655,7 @@ def _build_sec_yearly_financials(facts: dict[str, Any], max_years: int) -> list[
                 "operating_margin": (o / r if (o is not None and r) else None),
                 "operating_cash_flow": ocf.get(y),
                 "investing_cash_flow": icf.get(y),
-                "financing_cash_flow": fcf.get(y),
+                "financing_cash_flow": financing.get(y),
                 "depreciation_amortization": da.get(y),
                 "capital_expenditure": capex.get(y),
                 # SEC has no single ΔNWC concept; the DCF FCF uses OCF directly when
@@ -2491,6 +2541,7 @@ class EdgarToolsProvider(DataProvider):
                 annual=True,
                 prefer_recent=True,
                 warnings=warnings,
+                strict_unit_concepts=_GROSS_PROFIT_UNIT_STRICT_CONCEPTS,
             ),
             "latest_operating_income": _select_latest_fact(
                 facts,
