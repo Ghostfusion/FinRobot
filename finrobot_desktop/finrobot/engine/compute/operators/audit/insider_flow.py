@@ -115,16 +115,28 @@ def _flow_amount_match(
     """
     best: tuple[bool, int, re.Match[str]] | None = None
     for match in amounts:
-        if 0 <= match.start() - noun.end() <= _WINDOW:
-            gap = text[noun.end() : match.start()]
-        elif 0 <= noun.start() - match.end() <= _WINDOW:
-            gap = text[match.end() : noun.start()]
-        else:
+        gap = _link_gap(noun, match, text)
+        if gap is None:
             continue
         candidate = (bool(_CONNECTOR_RE.search(gap)), -abs(match.start() - noun.start()), match)
         if best is None or candidate[:2] > best[:2]:
             best = candidate
     return best[2] if best is not None else None
+
+
+def _link_gap(noun: re.Match[str], token: re.Match[str], text: str) -> str | None:
+    """The text between a flow noun and an amount token, or None when unlinked.
+
+    Unlinked means further apart than ``_WINDOW`` — no association at all. The gap
+    itself decides whether a token is *joined* to the noun (by a connector) or merely
+    adjacent, so the scoring above and the ownership test in ``_flow_mismatches``
+    read the same string.
+    """
+    if 0 <= token.start() - noun.end() <= _WINDOW:
+        return text[noun.end() : token.start()]
+    if 0 <= noun.start() - token.end() <= _WINDOW:
+        return text[token.end() : noun.start()]
+    return None
 
 
 def _matches(actual: float, expected: float) -> bool:
@@ -251,8 +263,10 @@ def _flow_mismatches(text: str, ownership: object) -> list[FlowMismatch]:
             (match.group("word").lower(), match) for match in _FLOW_RE.finditer(sentence)
         ]
         phrases += [("net flow", match) for match in _NET_FLOW_RE.finditer(sentence)]
-        # Tokens a direction-specific aggregate leg already claimed in this sentence.
-        aggregate_claims: set[tuple[int, int]] = set()
+        # Tokens a noun states CORRECTLY while joined to it by a connector — the
+        # legitimate owners of that token (see the proximity skip below).
+        owned_by_connector: set[tuple[int, int]] = set()
+        candidates: list[tuple[str, float, re.Match[str], float, bool]] = []
         for key, noun in phrases:
             want = expected.get(key)
             if want is None:
@@ -261,9 +275,27 @@ def _flow_mismatches(text: str, ownership: object) -> list[FlowMismatch]:
             if match is None:
                 continue
             actual = _scale(match)
+            gap = _link_gap(noun, match, sentence)
+            joined = gap is not None and bool(_CONNECTOR_RE.search(gap))
             if _matches(actual, want):
+                if joined:
+                    owned_by_connector.add((match.start(), match.end()))
                 continue
+            candidates.append((key, want, match, actual, joined))
+        # Tokens a direction-specific aggregate leg already claimed in this sentence.
+        aggregate_claims: set[tuple[int, int]] = set()
+        for key, want, match, actual, joined in candidates:
             span = (match.start(), match.end())
+            # A token another noun OWNS BY CONNECTOR and states correctly is that noun's
+            # figure; a claim that reached it only by PROXIMITY is an artifact of the
+            # association, not a wrong number, and must not be reported. TROW
+            # 2026-10-15 shipped "…driven entirely by sales, with $0 of open-market
+            # purchases…": "$0" is the PURCHASE leg (computed $0) joined to "purchases"
+            # by "of", while "sales" sat nearer to that $0 than to its own −$1,118,203 —
+            # so the audit reported the report's CORRECT $0 purchase figure as a wrong
+            # sales figure, in a report whose insider numbers were all right.
+            if not joined and span in owned_by_connector:
+                continue
             # One token, one claim: when an aggregate leg names the same figure, its
             # direction-specific reading is the precise one. "Insiders were net sellers:
             # $500M of sales" is ONE sales claim, not a sales claim plus a net-flow

@@ -111,6 +111,33 @@ class TestNoFalsePositives:
         text = "Insiders made purchases of $0 while sales reached $967.6M."
         assert insider_flow_amount_findings([text], _OWNERSHIP) == []
 
+    def test_a_proximity_artifact_is_not_reported(self) -> None:
+        """TROW 2026-10-15: every insider figure in this sentence is CORRECT, yet the
+        audit reported the $0 purchase figure as a wrong SALES figure (field key
+        insider_sell_value). "$0" is joined to "purchases" by "of" — its own leg —
+        while "sales" sat nearer to that $0 than to its own −$1,118,203, so proximity
+        alone made the claim. A token another noun owns by connector and states
+        correctly is that noun's figure, not evidence that this one is wrong."""
+        text = (
+            "Insider signal is negative, not supportive: 90-day net insider flow is "
+            "-$1,118,203, driven entirely by sales, with $0 of open-market purchases and "
+            "the largest single sale at $1,118,203 (Joshua B Nelson, Vice President)."
+        )
+        ownership = {
+            "insider_net_flow": -1118203.0,
+            "insider_buy_value": 0.0,
+            "insider_sell_value": 1118203.0,
+            "insider_window_days": 90,
+            "insider_largest_sale": {
+                "name": "Joshua B Nelson",
+                "position": "Vice President",
+                "value": 1118203.0,
+            },
+        }
+        assert insider_flow_amount_findings([text], ownership) == []
+        # ... and nothing is rewritten either: the prose ships as the model wrote it.
+        assert correct_insider_flow_claims(text, ownership) == (text, [])
+
 
 class TestCorrection:
     """The wrong figure must not ship at all — a caveat still prints it."""
