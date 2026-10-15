@@ -1113,6 +1113,55 @@ def holding_value_basis_warning(rows: list[InstitutionalHolding]) -> str | None:
     )
 
 
+def duplicate_holding_warning(rows: list[InstitutionalHolding]) -> str | None:
+    """Name 13F rows that report ONE holding twice, inflating every sum of them.
+
+    Two rows on one CUSIP at one period end carrying the same share count AND the
+    same value are one position reported twice: two independent managers holding the
+    identical number of shares to the share is not a market state, and both filings
+    bearing one filer-agent prefix is the usual cause — an affiliate filing the same
+    book, or a 13F-NT/HR pair returned under two EDGAR identities. Both rows are
+    published (each is a filing's own figure), but ``institutional_shares_listed`` —
+    and the coverage percentage and any top-5 concentration built on it — counts the
+    position twice. TROW 2026-10-15 (owner review): Charles Schwab Investment
+    Management and Sixth Street Partners Management each reported 7,163,538 shares /
+    $814,422,636 for 2026-06-30, so 3.4pp of the printed 54.9% coverage was one
+    holder counted twice.
+
+    Same shape as ``holding_value_basis_warning`` beside it: it names the rows and
+    never edits the figures. A row pair whose two names match is the same filing
+    returned twice, which is reported the same way.
+    """
+    seen: dict[tuple[str, date, int, float], list[str]] = {}
+    for row in rows:
+        key = (row.cusip, row.period_end, int(row.shares), float(row.value_usd))
+        seen.setdefault(key, []).append(row.holder_name)
+    repeats = [(names, key) for key, names in seen.items() if len(names) > 1]
+    if not repeats:
+        return None
+    total = sum(int(row.shares) for row in rows)
+    duplicated = sum(key[2] for _, key in repeats)
+    scope = (
+        f"{duplicated:,} of the {total:,} listed shares ({duplicated / total:.1%})"
+        if total > 0
+        else f"{duplicated:,} listed shares"
+    )
+    listed = "; ".join(
+        f"{key[2]:,} shares / ${key[3]:,.0f} for {key[1].isoformat()} reported by "
+        f"{' and '.join(names)}"
+        for names, key in repeats[:2]
+    )
+    if len(repeats) > 2:
+        listed += f" (+{len(repeats) - 2} more)"
+    return (
+        f"{len(repeats)} 13F holding(s) are reported TWICE — {scope} are counted once per "
+        f"filer, so the listed-share total, the coverage percentage and any concentration "
+        f"built on them are overstated: {listed}. Identical share count AND identical value "
+        f"for one CUSIP at one period end is one position under two identities (an affiliate "
+        f"filing, or a 13F-NT/HR pair), not two holders."
+    )
+
+
 def build_institutional_holdings(raw_holdings: dict[str, Any]) -> list[InstitutionalHolding]:
     rows: list[InstitutionalHolding] = []
     for row in raw_holdings.get("holders") or []:
@@ -1642,6 +1691,13 @@ def compute_ownership_governance(
     value_basis_warning = holding_value_basis_warning(institutions)
     if value_basis_warning:
         warnings.append(value_basis_warning)
+
+    # ... and rows that are the SAME holding filed twice: those are individually
+    # consistent (so the basis check above passes) yet every sum of them counts the
+    # position once per identity — the listed-share total included.
+    duplicate_warning = duplicate_holding_warning(institutions)
+    if duplicate_warning:
+        warnings.append(duplicate_warning)
 
     return OwnershipGovernanceAnalysis(
         insider_transactions=insiders,

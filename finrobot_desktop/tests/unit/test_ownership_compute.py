@@ -168,6 +168,60 @@ def test_13f_value_basis_check_is_quiet_when_the_rows_agree_or_are_too_few() -> 
         assert not [w for w in analysis.warnings if "internally inconsistent" in w]
 
 
+def test_13f_holding_filed_twice_is_named_and_the_double_count_is_quantified() -> None:
+    """TROW 2026-10-15 (owner review): Charles Schwab Investment Management and
+    Sixth Street Partners Management each reported 7,163,538 shares / $814,422,636
+    for 2026-06-30 — one position under two EDGAR identities. Both rows are
+    internally consistent (so the value-basis check is silent) yet the listed-share
+    total counted the position twice, and 3.4pp of the printed 54.9% coverage was
+    that duplicate."""
+    holders = [
+        _holder("CHARLES SCHWAB INVESTMENT MANAGEMENT INC", 7_163_538, 814_422_636.0),
+        _holder("Sixth Street Partners Management Company, L.P.", 7_163_538, 814_422_636.0),
+        _holder("GOLDMAN SACHS GROUP INC", 8_452_903, 961_010_554.0),
+    ]
+
+    analysis = compute_ownership_governance(
+        insider_data=None,
+        institutional_data={"holders": holders},
+        proxy_data=None,
+    )
+
+    warning = next((w for w in analysis.warnings if "reported TWICE" in w), None)
+    assert warning is not None
+    assert "7,163,538 shares / $814,422,636" in warning
+    assert "CHARLES SCHWAB INVESTMENT MANAGEMENT INC" in warning
+    assert "Sixth Street Partners Management Company, L.P." in warning
+    assert "2026-06-30" in warning
+    # The double count it names is real: both rows are summed.
+    assert analysis.institutional_shares_listed == 2 * 7_163_538 + 8_452_903
+    # Both filings are still published — the note qualifies the aggregate.
+    assert len(analysis.institutional_holdings) == 3
+
+
+def test_13f_duplicate_check_is_quiet_for_distinct_holders() -> None:
+    """Two holders of one CUSIP are the normal case, including two entities of one
+    brand: Vanguard's two 13F filers report DIFFERENT share counts for the same
+    quarter, so there is nothing to report. Equal share counts with a different
+    value are likewise two observations, not one position filed twice."""
+    distinct = [
+        _holder("VANGUARD CAPITAL MANAGEMENT LLC", 13_972_686, 1_588_554_671.0),
+        _holder("VANGUARD PORTFOLIO MANAGEMENT LLC", 10_042_805, 1_141_766_501.0),
+    ]
+    equal_shares_other_value = [
+        _holder("HOLDER A", 1_000_000, 1_000_000 * 108.26),
+        _holder("HOLDER B", 1_000_000, 1_000_000 * 120.0),
+    ]
+
+    for holders in (distinct, equal_shares_other_value):
+        analysis = compute_ownership_governance(
+            insider_data=None,
+            institutional_data={"holders": holders},
+            proxy_data=None,
+        )
+        assert not [w for w in analysis.warnings if "reported TWICE" in w]
+
+
 def test_schedule13_pct_optional_when_unparseable() -> None:
     """Vanguard-style cover pages can defeat the % regex; shares is still real,
     pct stays None rather than a fabricated number."""
