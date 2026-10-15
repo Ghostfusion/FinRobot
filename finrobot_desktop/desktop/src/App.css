@@ -7346,7 +7346,16 @@ body.app-bg .cosmic-stars.cosmic-stars-fast {
 .coverage-card__metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-self: stretch;
+  /* start — NOT stretch. The card's row 3 is `minmax(0, 1fr)`, so this block
+     owns the card's leftover vertical space. Stretching the block ALSO stretched
+     its inner ROWS (grid `align-content` defaults to normal ⇒ stretch), so the
+     2×2 cells grew to divide whatever space was left: on one wall the same cell
+     measured 30px on a card carrying a Tgt gauge and 72px on a card without one
+     (the gauge is ~30px, and TargetGauge renders nothing when no point target
+     was published). Anchoring the block to the row's start keeps every card's
+     band at its content height while the footer stays pinned to the row's
+     bottom — measured: cells 30px on all four probes, footer offset unchanged. */
+  align-self: start;
   column-gap: 18px;
   row-gap: 10px;
   padding: 10px 0;
