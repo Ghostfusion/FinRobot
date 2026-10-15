@@ -648,6 +648,20 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
    count here is a date, not a constant — the clause docstrings say the same thing once, in
    `contract.py`.
 
+   **Generalized 2026-10-15 (same day) — `C10e` now walks the IDENTITY REGISTRY.** The clause no
+   longer carries a hand-written list of four ratios: it reads every declaration in
+   `engine/models/identities.py` (`checked_identities()`), resolves each one's declared artifact
+   paths against the artifact's own leaves, and reports the first residual above
+   `IDENTITY_RESIDUAL_TOLERANCE` (the renamed `RATIO_IDENTITY_TOLERANCE`). Coverage now comes from
+   the declaration rather than from the next bug report — which is how it immediately fired on
+   `market.pe_ratio` 20.4867 against its own `market_cap ÷ income.net_income` = 20.1539 in
+   `art_2026-10-12T15:57:35_EHC`, a ratio the four-entry tuple never looked at. The four ratios it
+   replaced remain covered; `ev_build` / `ev_ebitda` / `ev_revenue` join them and are exact on
+   100% of the 141 stored artifacts (measured — `scripts/sweep_identities.py`), and `market_cap` is
+   declared `clause="exempt"` because a cap-vs-quote residual is a CLOCK difference the extractor
+   already discloses against both instants. Design, sources and the deliberate non-goals:
+   `docs/NUMERIC_DERIVATION_ARCHITECTURE.md`.
+
    **Added 2026-10-15 — `C10e`, the clause that divides a ratio by its own operands.** The family
    had `C10a` (the numerator must exist), `C10b` (both operands from ONE source), `C10c` (the
    balance-sheet identity recorded and closing) and `C10d` (a caliber-divergent accept must be
@@ -656,8 +670,9 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
    its own gross margin, with a provenance trail that was internally clean and a divergence count of
    zero. `C10e` reads only the artifact's own leaves (`income.operating_margin` against
    `income.operating_income ÷ income.revenue`, plus `income.ebitda_margin`, `valuation.ev_ebitda`,
-   `valuation.ev_revenue`) against `RATIO_IDENTITY_TOLERANCE`, so it is source-agnostic and no
-   decision record can talk it out of a finding.
+   `valuation.ev_revenue`) against the tolerance it was born with (`RATIO_IDENTITY_TOLERANCE`,
+   renamed `IDENTITY_RESIDUAL_TOLERANCE` by the generalization above), so it is source-agnostic
+   and no decision record can talk it out of a finding.
 
    **Measured 2026-10-15** over the 140-row store: **22 artifacts / 12 tickers**, span
    10-14T05:39:47 … **10-15T00:50:08**, every one a yfinance run carrying Yahoo's
