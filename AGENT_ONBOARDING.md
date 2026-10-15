@@ -553,6 +553,20 @@ These agreements are binding for agent work in this repository.
   being worked on, fix it as part of the same change rather than reporting it and moving on. Defer only
   when the owner explicitly decides to defer, and record the deferral.
 
+- **Always do an extensive and deep web search before deciding, or when the answer is unknown.**
+  When a decision has more than one defensible option, or the answer is not already established by
+  this repository's own code, tests and docs, search the web FIRST — broadly, across several
+  independent sources — and read the PRIMARY source before deciding: the vendor/API documentation,
+  the specification, the issue tracker, or the pinned dependency's own source at the version this
+  repository locks. Confirm that version, because an API that changed after an old forum answer
+  sends you the wrong way, and cross-check any claim the decision rests on against a second
+  independent source. Record what the search established, with its sources, in the change notes
+  (the commit message, or the doc the change touches) whenever it determined the outcome. "Found
+  nothing" is a result: report it, and label the choice an assumption — never present a guess as
+  researched. A search never overrides evidence this repository already holds: for internal
+  behaviour the code, tests and stored artifacts are ground truth, and a run you measured outranks
+  anything published.
+
 - **Never make code changes unless they are defects.** Keep the change surface limited to defect fixes.
   Do not add unrelated features, refactors, renames, abstractions, drive-by cleanups, or speculative
   improvements. Note unrelated observations instead of changing them.
@@ -572,5 +586,7 @@ These agreements are binding for agent work in this repository.
 - [ ] The single persist boundary and `enforce_artifact_contract` are intact.
 - [ ] No secrets in code, tests, fixtures, docs, commits, or logs; credentials from env only.
 - [ ] Docs / docstrings describing the change are updated in the same change.
+- [ ] Any external fact the change rests on was researched against primary sources, with the sources
+      recorded — or the empty search reported as an assumption.
 - [ ] Tests run and the changed path was actually exercised (smoke run observed).
 - [ ] The change is **committed and pushed**.
