@@ -28,4 +28,9 @@ approximate labels exactly.
 - **Currency**: the reporting or quote currency (USD / CNY / HKD / etc.) for every absolute monetary amount.
 - **Period basis**: TTM / LTM / FY (year) / Q (quarter) for every income-statement or flow figure.
 - **Units**: B (billion) / M (million) / % — never leave a raw number without a unit.
+- **Ratios**: a figure that arrives as a decimal fraction (e.g. `gross_margin: 0.5161354`)
+  MUST be written as a percentage — `51.61%` — never as the raw decimal beside a `%` unit.
+  If you quote the decimal itself, label its unit `ratio` and print no percent sign.
+  The 2026-10-15 TROW report shipped `Gross margin | 0.5161354056902002 | % (≈51.61%)`,
+  a value and a unit that contradict each other in one cell.
 If the source data does not carry these labels, flag the figure as "currency/period unknown" rather than presenting a bare number.
