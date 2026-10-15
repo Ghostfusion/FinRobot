@@ -272,7 +272,10 @@ IDENTITIES: tuple[Identity, ...] = (
         note=(
             "C10e's founding case: CF published operating_margin 0.49325 beside "
             "3,025,000,000 / 7,738,999,808 = 0.39088 — above its own gross margin, and "
-            "invisible to every provenance check because one provider supplied all three."
+            "invisible to every provenance check because one provider supplied all three. "
+            "``income.operating_margin_basis`` names the numerator the published margin "
+            "was divided from (``extractor`` derives it from this block's own leaves, the "
+            "``pe_ratio`` precedent); the provider's own margin is the labelled fallback."
         ),
     ),
     Identity(

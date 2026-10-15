@@ -311,6 +311,131 @@ def test_override_keeps_fmp_when_foreign_currency_xbrl_suppressed() -> None:
     assert out.ttm_divergence_note is None
 
 
+def test_adopted_asc606_subset_revenue_declares_its_caliber() -> None:
+    """A post-ASC-606 filer tags no ``Revenues`` total, so the contract-with-customer
+    subset is the figure the peer row's EV/Revenue divides by — and it is a NARROWER
+    caliber than a peer median built on totals. The row must SAY so rather than leave
+    a reader to infer it from the concept name."""
+    base = CompanyFinancials(
+        ticker="AAPL",
+        revenue=100.0,
+        ebitda=20.0,
+        net_income=10.0,
+        market_cap=100.0,
+        gross_margin=0.6,
+        operating_margin=0.3,
+    )
+
+    out = override_company_with_xbrl(
+        base,
+        {
+            "ttm_revenue": {
+                "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                "value": 110.0,  # +10% vs FMP — inside tolerance, so ADOPTED
+            },
+        },
+    )
+
+    assert out.revenue == 110.0
+    assert out.ttm_divergence_note is not None
+    assert "ASC-606" in out.ttm_divergence_note
+    assert "SUBSET" in out.ttm_divergence_note
+
+
+def test_adopted_total_caliber_revenue_declares_no_subset_note() -> None:
+    """The declaration is about the CALIBER, not the override: a total-caliber SEC
+    revenue needs no sentence, and a caliber note on every row would be noise."""
+    base = CompanyFinancials(
+        ticker="MET",
+        revenue=100.0,
+        ebitda=20.0,
+        net_income=10.0,
+        market_cap=100.0,
+        gross_margin=0.6,
+        operating_margin=0.3,
+    )
+
+    out = override_company_with_xbrl(
+        base, {"ttm_revenue": {"concept": "us-gaap:Revenues", "value": 110.0}}
+    )
+
+    assert out.revenue == 110.0  # adopted
+    assert out.ttm_divergence_note is None
+
+
+def test_rejected_subset_revenue_declares_no_caliber() -> None:
+    """When the subset figure is REJECTED (diverges past tolerance) the row keeps FMP,
+    so its denominator is not the subset — the caliber sentence would then describe a
+    number this row does not use."""
+    base = CompanyFinancials(
+        ticker="AAPL",
+        revenue=253_491_000_000.0,
+        ebitda=60_000_000_000.0,
+        net_income=159_613_000_000.0,
+        market_cap=4e12,
+        gross_margin=0.4,
+        operating_margin=0.3,
+    )
+
+    out = override_company_with_xbrl(
+        base,
+        {
+            "ttm_revenue": {
+                "concept": "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax",
+                "value": 10_918_000_000.0,  # diverges → FMP kept
+            },
+        },
+    )
+
+    assert out.revenue == 253_491_000_000.0  # FMP stands
+    assert out.ttm_divergence_note is not None
+    assert "[待核]" in out.ttm_divergence_note
+    assert "ASC-606" not in out.ttm_divergence_note
+
+
+def test_override_re_derives_the_margin_from_the_adopted_revenue() -> None:
+    """The XBRL adoption moves ``revenue``, so the margin rendered beside it is re-derived
+    from the final figure — otherwise the row would print a margin its own revenue
+    contradicts (the one-authority rule ``extractor.derive_operating_margin`` states)."""
+    base = CompanyFinancials(
+        ticker="AAPL",
+        revenue=100.0,
+        ebitda=20.0,
+        net_income=10.0,
+        market_cap=100.0,
+        gross_margin=0.6,
+        operating_margin=0.3,
+        operating_income=30.0,
+    )
+
+    out = override_company_with_xbrl(
+        base, {"ttm_revenue": {"concept": "us-gaap:Revenues", "value": 110.0}}
+    )
+
+    assert out.revenue == 110.0  # adopted (+10%, inside tolerance)
+    assert out.operating_margin == pytest.approx(30.0 / 110.0)
+
+
+def test_override_leaves_a_peer_without_a_numerator_on_its_own_margin() -> None:
+    """No operating income to divide: the row's own margin survives, unchanged and
+    un-invented (the same fallback the extractor applies)."""
+    base = CompanyFinancials(
+        ticker="MET",
+        revenue=100.0,
+        ebitda=20.0,
+        net_income=10.0,
+        market_cap=100.0,
+        gross_margin=0.6,
+        operating_margin=0.3,
+    )
+
+    out = override_company_with_xbrl(
+        base, {"ttm_revenue": {"concept": "us-gaap:Revenues", "value": 110.0}}
+    )
+
+    assert out.operating_margin == pytest.approx(0.3)
+
+
 def test_xbrl_concept_snapshot_groups_ttm_and_latest_facts() -> None:
     snapshot = xbrl_concept_snapshot(
         {

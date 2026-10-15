@@ -9,7 +9,10 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from finrobot.engine.compute.coordinators.extractor import normalize_peer_to_usd
+from finrobot.engine.compute.coordinators.extractor import (
+    derive_operating_margin,
+    normalize_peer_to_usd,
+)
 from finrobot.engine.compute.operators.multiples import calculate_multiples
 from finrobot.engine.models.financial import CompanyFinancials, FinancialData
 
@@ -33,6 +36,20 @@ def _num(value: Any) -> float | None:
 # ``[待核]`` instead of overriding with a possibly-wrong XBRL value — the exact
 # failure mode that put NVDA's $10.918B into the comps table.
 _TTM_DIVERGENCE_TOLERANCE = 0.35
+
+#: SEC revenue concepts that are an ASC-606 CONTRACT-WITH-CUSTOMER **subset** rather than
+#: a total. A post-ASC-606 filer (AAPL / MSFT / GOOGL) tags no ``Revenues`` total at all,
+#: so this subset is the only revenue its filing carries — the right figure to use, and
+#: still a NARROWER caliber than a peer's total revenue: any non-ASC-606 top line the
+#: issuer reports (interest, insurance premiums, leasing) sits outside this line, so a
+#: multiple whose denominator is this figure is not like-for-like with a total-caliber
+#: peer median. Declared here, at the one place the subset becomes a comps DENOMINATOR
+#: (the XBRL TTM revenue override), so a peer row SAYS which caliber its revenue is
+#: rather than leaving the reader to infer it from a concept name.
+_ASC606_SUBSET_REVENUE_CONCEPTS: tuple[str, ...] = (
+    "RevenueFromContractWithCustomerExcludingAssessedTax",
+    "RevenueFromContractWithCustomerIncludingAssessedTax",
+)
 
 
 def _ttm_relative_divergence(a: float, b: float) -> float:
@@ -72,6 +89,27 @@ def _reconcile_ttm(
         )
         return fmp_value, note
     return xbrl_value, None
+
+
+def _asc606_subset_revenue_note(xbrl_data: dict[str, Any]) -> str | None:
+    """The revenue-caliber declaration when the SEC TTM revenue is the ASC-606 subset.
+
+    ``None`` for a total-caliber concept (``Revenues`` / ``SalesRevenueNet`` / …) and for
+    an absent or malformed field — a missing declaration, never a false one. The concept
+    is matched on its BARE name, so neither a taxonomy prefix (``us-gaap:`` /
+    ``ifrs-full:``) nor a provider suffix can hide it.
+    """
+    ttm_revenue = xbrl_data.get("ttm_revenue")
+    if not isinstance(ttm_revenue, dict):
+        return None
+    concept = str(ttm_revenue.get("concept") or "").rsplit(":", 1)[-1]
+    if concept not in _ASC606_SUBSET_REVENUE_CONCEPTS:
+        return None
+    return (
+        "revenue caliber: the SEC XBRL TTM revenue is the contract-with-customer SUBSET "
+        "(ASC-606), not a total — this issuer tags no total revenue line, so any "
+        "non-ASC-606 top line it reports is outside this denominator"
+    )
 
 
 def _ttm_value(field: Any) -> float | None:
@@ -394,7 +432,22 @@ def override_company_with_xbrl(
         xbrl_net_income, company.net_income, field="net_income"
     )
     updates: dict[str, Any] = {"revenue": new_revenue, "net_income": new_net_income}
-    divergence_note = "; ".join(n for n in (rev_note, ni_note) if n) or None
+    # The override may have moved ``revenue``, so the margin is re-derived from the FINAL
+    # figure (``extractor.derive_operating_margin``, the one place the rule lives): a row
+    # must not print a margin its own revenue contradicts, and this is the last point at
+    # which both are known. The label has no home on a comps row.
+    updates["operating_margin"] = derive_operating_margin(
+        company.operating_income, new_revenue, company.operating_margin
+    )[0]
+    notes = [n for n in (rev_note, ni_note) if n]
+    # A CALIBER declaration, not a divergence: stated only when the XBRL revenue is the
+    # figure that STANDS, because then this row's EV/Revenue divides by it (see
+    # ``_ASC606_SUBSET_REVENUE_CONCEPTS``).
+    if xbrl_revenue is not None and new_revenue == xbrl_revenue:
+        caliber_note = _asc606_subset_revenue_note(xbrl_data)
+        if caliber_note is not None:
+            notes.append(caliber_note)
+    divergence_note = "; ".join(notes) or None
     if divergence_note is not None:
         updates["ttm_divergence_note"] = divergence_note
     company = company.model_copy(update=updates)

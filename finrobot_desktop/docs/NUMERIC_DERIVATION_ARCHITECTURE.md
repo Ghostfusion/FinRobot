@@ -112,7 +112,7 @@ read-only; the same code path the gate uses). Run 2026-10-15 against 141 artifac
 | `ev_ebitda` | 132 | 0 | — | the EV/EBITDA beside it is its own EV, not a net-debt-only twin |
 | `ev_revenue` | 134 | 0 | — | same |
 | `pe_ratio` | 139 | 26 | 8.7% | **all pre-fix**: `market.pe_ratio` predates the cap÷net-income derivation (the 26 carry `pe_basis: null`; every artifact since 2026-10-13T17:3x that declares the basis is exact) |
-| `operating_margin` | 65 | 22 | 39.4% | **all pre-fix or stale-cache**: DVN/TROW/EXE/FOXA/NFLX published the vendor's `info.operatingMargins` scalar (41.1% beside operands giving 24.9%), the CF class; the newest artifact per ticker is clean |
+| `operating_margin` | 65 | 22 | 39.4% | **all pre-fix or stale-cache**: DVN/TROW/EXE/FOXA/NFLX published the vendor's `info.operatingMargins` scalar (41.1% beside operands giving 24.9%), the CF class; the newest artifact per ticker is clean. The PRODUCER was closed on 2026-10-15 (`extractor` derives the ratio from the block's own leaves, §8) — stored rows keep their published margin, so this column only shrinks as artifacts are re-run |
 | `ebitda_margin` | 0 | 0 | — | not published as a leaf — declared, never binds (honest no-op) |
 | `ev_to_equity` | 0 | 0 | — | compute-only: no artifact path, enforced where it is used (§6) |
 | `net_debt` | 0 | 0 | — | nested operand, resolved through its two balance leaves |
@@ -158,8 +158,10 @@ Two things the measurement bought:
   declared-precision band against **48** at the coarse 1%. The 15 extra are sub-1% caliber
   mismatches the flat band excused — a KGC operating margin 0.8179% off its own
   `operating_income / revenue`, INVH 0.2478%, MLI 0.2282% (all three carrying the post-fix
-  `pe_basis` note, so not the pre-fix defect), plus ten pre-fix P/E rows whose provider ratio rode
-  a different denominator. `ev_build`, `ev_ebitda` and `ev_revenue` stayed at ZERO caught at the
+  `pe_basis` note, so not the *pre-fix* scalar defect — but the SAME defect class one order of
+  magnitude down: the provider's margin divides its own TTM frame revenue while the block prints a
+  canonical `revenue` leaf, which the producer side now derives away, §8), plus ten pre-fix P/E rows
+  whose provider ratio rode a different denominator. `ev_build`, `ev_ebitda` and `ev_revenue` stayed at ZERO caught at the
   tighter band — the clock difference the EV build discloses is not mistaken for a contradiction
   (its published $2.2e10 total is asserted accurate to the dollar, so the band is ~1e-10 relative).
 - **Per-year preferred/NCI ARE fetched** for the historical band (2026-10-15): both providers'
@@ -247,3 +249,50 @@ move?" decision — by failing loudly rather than by remembering.
   `pe_basis: null`, i.e. the provider's EPS-denominated ratio). No payload byte changed:
   `scripts/extract_contract_fixtures.py` rewrote the verdicts and the diff is that one clause on
   that one fixture.
+
+## 8. Producer-side closure (2026-10-15) — the identity must hold by construction
+
+The gate can only ever *report* a contradiction; the defect it keeps finding is a producer that
+publishes a ratio and its operands drawn from two different sources. Three producers were closed
+and one name was fixed:
+
+- **The operating margin is derived from the block's own leaves** (`coordinators/extractor` — the
+  `pe_ratio` precedent, one field over). A provider's margin divides its OWN TTM frame's revenue,
+  which is not the `income.revenue` leaf the same snapshot prints: live KGC published
+  `operating_margin` 0.52478004 beside `4,409,000,000 / 8,470,900,224 = 0.52048777` (its frame
+  revenue was 8,401,615,275, 0.8% away), and the audited CF run published 0.49325 beside 0.39088.
+  The ratio is now `operating_income ÷ revenue` from the very fields the income block publishes,
+  and `IncomeStatement.operating_margin_basis` names the numerator's authority. The provider's own
+  value survives only as the LABELLED fallback (a snapshot with no operating income to divide);
+  the label also names the superseded provider value once the two differ by more than
+  `_OPERATING_MARGIN_SUPERSEDE_TOL` = 0.1% — not the P/E's 1%, because a 1% cap vintage is noise on
+  a 20× ratio while a margin's caliber gap is 0.23–0.82% and the printed figure carries one decimal
+  of a percent. The registry's `operating_margin` note now names that field, so the declaration says
+  where the basis lives (`tests/unit/test_extractor_margin_authority.py`). The rule lives in ONE
+  function, `extractor.derive_operating_margin`, because three publishers need it: the artifact's
+  income block (label kept), the comps PEER row (`extract_company_financials`, label discarded — a
+  comps row has no provenance block), and `override_company_with_xbrl`, which re-derives it when the
+  XBRL adoption has moved `revenue`, the last point at which both figures are final. A second
+  implementation of the same ratio is how the two sides drift.
+- **The ASC-606 revenue SUBSET declares its caliber where it becomes a denominator.** A
+  post-ASC-606 filer (AAPL/MSFT/GOOGL) tags no `Revenues` total, so
+  `RevenueFromContractWithCustomer*` is the only revenue its filing carries — correct to use, and
+  still NARROWER than a peer's total: any non-ASC-606 top line (interest, premiums, leasing) sits
+  outside it. `xbrl_aligned_comps._asc606_subset_revenue_note` appends that sentence to the peer
+  row's `ttm_divergence_note` (→ `PeerComps.warnings`) when the ADOPTED XBRL TTM revenue is the
+  subset — and only then, because a rejected subset figure is not the number the row divides by. No
+  arithmetic change; the subset concept stays in the lists (its rank is last, so it is used only
+  when no total exists).
+- **A ratio-capable synonym cannot enter a dollar leaf unit-less.** `GrossMargin` is not a us-gaap
+  element, so it can only match a filer extension — and that name commonly holds a RATIO. It now
+  needs an explicit USD unit (`_GROSS_PROFIT_UNIT_STRICT_CONCEPTS` →
+  `_is_usd_unit(require_explicit=True)`), so a unit-less or `pure`-tagged `GrossMargin` abstains
+  (the slot stays None and the gross-margin caliber falls to its declared provider_scalar/withheld
+  path) instead of publishing 0.42 as $0.42M. The us-gaap element in the same slot (`GrossProfit`)
+  keeps the lenient missing-unit default: the rule is per CONCEPT, because edgartools omits the
+  unit on cleanly-typed currency facts often enough that refusing those would drop good US data.
+- **Naming only.** `_HIST_FCF_CONCEPTS` held *financing*-activity concepts and fed
+  `financing_cash_flow` (the slot was always right, the variable name was not) — renamed to
+  `_HIST_FINANCING_CONCEPTS` / `financing`, so the next reader cannot wire financing flows into a
+  free-cash-flow leaf. A real FCF is OCF − capex, i.e. `_HIST_OCF_CONCEPTS` less
+  `_HIST_CAPEX_CONCEPTS`, which is what the DCF already uses.

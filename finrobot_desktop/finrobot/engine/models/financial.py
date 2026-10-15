@@ -46,6 +46,18 @@ class IncomeStatement(BaseModel):
         le=1.02,
         description="Operating margin as decimal; None when unavailable",
     )
+    # Provenance LABEL for the operating margin's numerator (the ``MarketData.pe_basis``
+    # precedent, one field over). ``extract_financial_data`` derives the margin as THIS
+    # block's ``operating_income / revenue`` and stamps
+    # ``OPERATING_MARGIN_BASIS_INCOME_STATEMENT``, because a provider's own margin
+    # divides its TTM frame's revenue rather than the ``revenue`` leaf printed beside it
+    # (live KGC: 0.52478004 printed beside a 4,409,000,000 / 8,470,900,224 = 0.52048777
+    # block). ``OPERATING_MARGIN_BASIS_PROVIDER`` names the one case where the provider's
+    # value IS what is published (no operating income to divide); None when no margin is
+    # published at all. A LABEL, not a warning: it holds for every margin, so routing it
+    # through ``FinancialData.warnings`` would flip coverage's "partial" flag for every
+    # yfinance row. Optional → read-compatible with cached payloads (BUG-038 precedent).
+    operating_margin_basis: str | None = None
     # Absolute operating income (EBIT) in USD. Carried alongside the margin so the
     # comps target can hand calculate_core_pe a period-consistent EBIT instead of
     # operating_margin × a possibly XBRL-overridden revenue (BUG-017).
@@ -484,7 +496,11 @@ class CompanyFinancials(BaseModel):
     quote_currency: str = "USD"
     # [待核] note set when SEC XBRL TTM diverged materially from the FMP TTM base
     # and we kept FMP rather than overriding (ADR-0008). None when the two agree
-    # or no XBRL was available. Rolled up into PeerComps.warnings for display.
+    # or no XBRL was available. It ALSO carries the revenue CALIBER when the adopted
+    # SEC figure is the ASC-606 contract-with-customer subset rather than a total —
+    # both are "what the reader must know about this row's revenue", and both are
+    # rolled up into PeerComps.warnings for display, so one channel keeps them in
+    # one place (see xbrl_aligned_comps._asc606_subset_revenue_note).
     ttm_divergence_note: str | None = None
     # Multiples that had computable inputs but fell outside the published sanity
     # bounds and were nulled by calculate_multiples (so excluded from medians).

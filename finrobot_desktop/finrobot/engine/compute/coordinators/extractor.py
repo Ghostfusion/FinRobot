@@ -94,6 +94,35 @@ def _count_validator_divergences(warnings: list[str]) -> int:
 # label, so the ratio's denominator is explicit instead of assumed.
 PE_BASIS_NET_INCOME = "market cap ÷ TTM net income (one net-income authority)"
 
+# The label naming the OPERATING MARGIN's numerator authority, in the shape of
+# ``PE_BASIS_NET_INCOME`` above. A provider computes its own operating margin from
+# ITS TTM frame's revenue while the income block prints a ``revenue`` leaf from the
+# canonical snapshot — two revenues under one name, so the published margin is not
+# the quotient of the figures beside it. Live 2026-10-15 (KGC): published 0.52478004
+# beside 4,409,000,000 / 8,470,900,224 = 0.52048777, i.e. the provider divided by a
+# frame revenue of 8,401,615,275 — 0.8% away from the revenue it printed. That is
+# C10e's founding defect (CF: 0.49325 beside 0.39088) at sub-1% magnitude, so it takes
+# the same fix as the P/E: derive the ratio from the leaves the report SHOWS and stamp
+# the basis here, so the identity holds by construction instead of by luck.
+OPERATING_MARGIN_BASIS_INCOME_STATEMENT = (
+    "operating income ÷ revenue (one operating-income authority)"
+)
+
+#: The fallback's label: a snapshot with no operating income to divide still prints the
+#: provider's margin, and says that is what it is.
+OPERATING_MARGIN_BASIS_PROVIDER = (
+    "the provider's own operating margin (no operating income to divide)"
+)
+
+#: Relative gap above which a superseded provider margin is NAMED in that label. The
+#: P/E's analogous threshold is 1% — a cap-vs-close vintage difference on a ratio of
+#: order 20x. A margin's caliber gap is a fraction of that: the live cases this
+#: derivation exists for are 0.23-0.82% (KGC 0.8179%, INVH 0.2478%, MLI 0.2282%), and
+#: the printed figure carries one decimal of a percent, so 0.1% is the smallest gap
+#: that can move a digit the reader sees. Below it the provider's number is the same
+#: reading of a rounder source, and a note would be noise.
+_OPERATING_MARGIN_SUPERSEDE_TOL = 0.001
+
 # Relative gap between a provider's TTM net income and the SEC XBRL TTM net income
 # above which the difference is DISCLOSED (see ``net_income_divergence_warning``).
 # A filing fact is rounded to the filing's own precision and the two windows can
@@ -130,6 +159,54 @@ def _sanitize_margin(
             )
         return None
     return value
+
+
+def derive_operating_margin(
+    operating_income: float | None,
+    revenue: float | None,
+    provider_margin: float | None,
+    *,
+    warnings: list[str] | None = None,
+) -> tuple[float | None, str | None]:
+    """``(published margin, basis label)`` — the ONE place this ratio is decided.
+
+    The margin a report prints must be the quotient of the two figures it prints beside
+    it. A provider's own margin divides ITS TTM frame's revenue, which is not the
+    published ``revenue`` leaf: live 2026-10-15 KGC published ``operating_margin``
+    0.52478004 beside ``4,409,000,000 / 8,470,900,224 = 0.52048777`` (its frame revenue
+    was 8,401,615,275 — 0.8% away), and the audited CF run printed 0.49325 beside
+    0.39088, the contradiction C10e was written for. So derive the ratio from the
+    caller's OWN leaves and return the label naming that numerator.
+
+    The provider's value is used only when there is no numerator to divide — and is then
+    LABELLED as itself (``OPERATING_MARGIN_BASIS_PROVIDER``) rather than passed off as a
+    derivation. A derived ratio that ``_sanitize_margin`` withholds (>100%, i.e. an
+    operating income exceeding its own revenue) publishes nothing AND no label: the
+    provider's margin is not substituted there, because it is the very contradiction this
+    function exists to remove. ``(None, None)`` when neither path yields a value.
+
+    The label is for callers that publish provenance (the artifact's
+    ``IncomeStatement.operating_margin_basis``). A comps peer row has no provenance
+    block and may ignore it — but it must still take the DERIVED value, so the margin it
+    shows can never disagree with the revenue beside it.
+    """
+    if operating_income is None or not revenue:
+        margin = _sanitize_margin(provider_margin, label="operating_margin", warnings=warnings)
+        return margin, OPERATING_MARGIN_BASIS_PROVIDER if margin is not None else None
+    derived = operating_income / revenue
+    margin = _sanitize_margin(derived, label="operating_margin", warnings=warnings)
+    if margin is None:
+        return None, None
+    if (
+        provider_margin is not None
+        and provider_margin != 0.0
+        and abs(derived - provider_margin) / abs(provider_margin) > _OPERATING_MARGIN_SUPERSEDE_TOL
+    ):
+        return margin, (
+            f"{OPERATING_MARGIN_BASIS_INCOME_STATEMENT}; supersedes the provider's "
+            f"{provider_margin:.4f}, which divides a different revenue"
+        )
+    return margin, OPERATING_MARGIN_BASIS_INCOME_STATEMENT
 
 
 def net_income_divergence_warning(
@@ -472,6 +549,16 @@ def extract_financial_data(
     else:
         pe_ratio = fin.pe_ratio * mc_ratio if fin.pe_ratio is not None else None
 
+    # --- Operating margin: the income block's OWN leaves ---
+    # Same reasoning as the P/E above, on the sibling published ratio: the margin the
+    # artifact prints must be the quotient of the two figures it prints beside it. The
+    # rule itself lives in ``derive_operating_margin`` so the comps peer path — which
+    # publishes the same three fields into a row the comps chapter renders — decides it
+    # identically instead of a second time.
+    operating_margin, operating_margin_basis = derive_operating_margin(
+        fin.operating_income, revenue, fin.operating_margin, warnings=warnings
+    )
+
     # --- Quote basis -------------------------------------------------------
     # A provider that served no quote timestamp served a session CLOSE, not a
     # live tick — the canonical contract already records that as the
@@ -547,9 +634,11 @@ def extract_financial_data(
             # provider figure (UL: FMP grossProfit ≥ revenue) shows N/A instead of
             # crashing the IncomeStatement le bound or printing a fabricated 100%.
             gross_margin=_sanitize_margin(gross_margin, label="gross_margin", warnings=warnings),
-            operating_margin=_sanitize_margin(
-                fin.operating_margin, label="operating_margin", warnings=warnings
-            ),
+            # Derived from THIS block's own operating_income ÷ revenue (see the
+            # "Operating margin: the income block's OWN leaves" block above); the
+            # provider's own value is the labelled fallback only.
+            operating_margin=operating_margin,
+            operating_margin_basis=operating_margin_basis,
             operating_income=fin.operating_income,
             depreciation_amortization=fin.depreciation_amortization,
             capital_expenditure=fin.capital_expenditure,
@@ -721,6 +810,14 @@ def extract_company_financials(fin: NormalizedFinancials) -> CompanyFinancials:
         bvps, fin.shares_outstanding, market_cap, fin.current_price
     )
 
+    # The comps chapter renders this margin beside this row's revenue, so it is decided
+    # by the SAME rule the target path uses (``derive_operating_margin``) — the
+    # provider's own margin divides its frame's revenue, not this row's. The label has no
+    # home here (a peer row carries no provenance block) and is discarded.
+    operating_margin, _margin_basis = derive_operating_margin(
+        fin.operating_income, revenue, fin.operating_margin
+    )
+
     return CompanyFinancials(
         ticker=ticker,
         name=fin.company_name,
@@ -745,7 +842,7 @@ def extract_company_financials(fin: NormalizedFinancials) -> CompanyFinancials:
         gross_margin=None
         if is_bank(industry=fin.industry, sector=fin.sector)
         else _sanitize_margin(fin.gross_margin, label="gross_margin"),
-        operating_margin=_sanitize_margin(fin.operating_margin, label="operating_margin"),
+        operating_margin=operating_margin,
         # Period-consistent EBIT for NOPAT core P/E (BUG-017) — preferred over
         # operating_margin × revenue once revenue may be XBRL-reconciled.
         operating_income=fin.operating_income,
