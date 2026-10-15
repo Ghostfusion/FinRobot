@@ -52,10 +52,12 @@ Consumers, none of which re-derive anything:
   `implied_ev_multiple`, `dcf.equity_bridge_value`, `sotp.compute_sotp_breakdown`,
   `historical_valuation._compute_multiple`. Each keeps its signature (so no caller churn) and
   its body becomes `evaluate(<id>, {...})`.
-- **the contract gate** — clause `C10e` walks `checked_identities()`, resolves each identity's
-  declared artifact paths against the artifact's **own leaves**, and reports a residual above
-  `IDENTITY_RESIDUAL_TOLERANCE`. It replaces the hand-written `_RATIO_IDENTITIES` tuple, so a
-  new published quantity is covered the moment it is declared.
+- **the contract gate** — clause `C10e` walks `checked_identities()` (the identities the artifact
+  publishes a total for), resolves each identity's declared artifact paths against the artifact's
+  **own leaves**, and reports a residual above the band its figures' declared precision allows
+  (`identity_tolerance`, falling back to `IDENTITY_RESIDUAL_TOLERANCE` and saying so). It replaces
+  the hand-written `_RATIO_IDENTITIES` tuple, so a new published quantity is covered the moment it
+  is declared.
 - **the drift scrubber** — `LEAF_KINDS` decides whether a prose $-amount is a restatement of a
   published TOTAL (never rewritten) or a per-share figure (may be rewritten).
 - **the claim ledger** — `NumericClaim.kind`, from `LEAF_KINDS`.
@@ -71,9 +73,12 @@ Consumers, none of which re-derive anything:
   the fact's own declared precision (§5.2.3-5.2.4). We adopt the structure, the weights, and the
   binding rule; we are deliberately **stricter** than `binds` (all operands required, not "at
   least one"), because a report that publishes a total beside one of its three components has
-  not stated arithmetic we can contradict. The tolerance is still a relative constant rather
-  than precision-derived — our leaves round per field at display time, and a field-declared
-  digit count is the follow-up that would close that gap.
+  not stated arithmetic we can contradict. We adopt the precision-derived tolerance as well:
+  every leaf declares the precision its value is asserted accurate to beside its KIND
+  (`DEFAULT_DIGITS`, XBRL's `decimals`), and `identities.identity_tolerance()` accumulates half a
+  unit in each contributing last digit through the identity's form, so the same declaration
+  governs a 5.7x multiple and a 0.39 margin. `IDENTITY_RESIDUAL_TOLERANCE` survives as the band
+  NAMED when a leaf declares no precision (§4).
 - **OpenLineage `columnLineage`** (`https://openlineage.io/docs/spec/facets/dataset-facets/column_lineage_facet/`)
   is the same idea at dataset granularity: per output field, `inputFields` with a
   `transformation` type DIRECT/INDIRECT. Our `OperandRole` carries the same distinction —
@@ -142,16 +147,40 @@ Two things the measurement bought:
   number IS — and `identity_digest()` says which arithmetic the cache and the decisions were
   made under. If a consumer ever needs "this number came from that formula with those operands",
   the registry already answers it by id.
-- **Tolerance is a relative constant** (`IDENTITY_RESIDUAL_TOLERANCE = 0.01`), not derived from
-  published precision as XBRL does. Field-declared display precision is the follow-up.
-- **Per-year preferred/NCI are not fetched** for the historical band: the samples apply the
-  RUN's claims (declared `on_missing="zero"`, the assumption `audit.ev_bridge` already flags as
-  unverifiable). What changed is that the samples and the band's current marker now evaluate the
-  SAME identity; a per-year fetch would retire the assumption.
-- **`_LATEST_TOTAL_ASSETS_CONCEPTS` still lists `AssetsCurrent` as a fallback** — current assets
-  read as *total* assets is the same class of caliber error as the identity-total defect, but it
-  fires only for a filer that tags neither `Assets` nor `TotalAssets`. Noted, not fixed
-  (unmeasured, and outside this change's scope).
+- **Tolerance is derived from declared precision** (2026-10-15), not a flat 1% band: each leaf
+  declares the precision its value is asserted accurate to (`DEFAULT_DIGITS` by KIND — whole
+  dollars, the cent for a quote, 4 decimals for a ratio — with `LEAF_DIGITS` for an exception),
+  and `identity_tolerance()` accumulates half a unit in each contributing last digit through the
+  identity's form. A rounding-level difference passes; a SMALLER contradiction than the flat band
+  would have excused is now caught. `IDENTITY_RESIDUAL_TOLERANCE` is only the band a caller NAMES
+  when a leaf declares no precision, and the C10e finding says which of the two it judged against.
+  Measured 2026-10-15 over 142 stored artifacts (609 bound checks): **63 caught** at the
+  declared-precision band against **48** at the coarse 1%. The 15 extra are sub-1% caliber
+  mismatches the flat band excused — a KGC operating margin 0.8179% off its own
+  `operating_income / revenue`, INVH 0.2478%, MLI 0.2282% (all three carrying the post-fix
+  `pe_basis` note, so not the pre-fix defect), plus ten pre-fix P/E rows whose provider ratio rode
+  a different denominator. `ev_build`, `ev_ebitda` and `ev_revenue` stayed at ZERO caught at the
+  tighter band — the clock difference the EV build discloses is not mistaken for a contradiction
+  (its published $2.2e10 total is asserted accurate to the dollar, so the band is ~1e-10 relative).
+- **Per-year preferred/NCI ARE fetched** for the historical band (2026-10-15): both providers'
+  annual-history rows now carry `preferred_stock` / `noncontrolling_interest` per fiscal year (FMP
+  already emitted them off its annual balance-sheet statement; yfinance reads them off the annual
+  frame it already held, with `None` for a row the statement omits), the loader FX-scales them
+  exactly like net debt, and `_compute_multiple` uses the YEAR's claim with the run-level figure as
+  the fallback. The declared `on_missing="zero"` is now a per-year fallback rather than a blanket
+  assumption: what `audit.ev_bridge` flags as unverifiable is one year whose statement omits the
+  row, not every year of the window.
+- **`_LATEST_TOTAL_ASSETS_CONCEPTS` no longer lists `AssetsCurrent` as a fallback** (fixed
+  2026-10-15). Current assets read as *total* assets was the same class of caliber error as the
+  identity-total defect and it fired only for a filer that tags neither `Assets` nor `TotalAssets` —
+  whose equity identity built from it closed anyway (a partial standing in for the total is
+  invisible to the arithmetic). The component is gone from the list, so such a filer now abstains:
+  `latest_total_assets` stays absent, `_equity_identity_note` takes its `None` arm and the missing
+  leaf is the capability warning's business — never a smaller magnitude published as the total. The
+  asset, liabilities and equity lists now carry the same import-time refusal against
+  `engine/models/identities.IDENTITY_TOTAL_CONCEPTS` (`is_identity_total`), so an identity total
+  cannot re-enter a single-side slot. `AssetsCurrent` itself has no vocabulary to guard it — it is a
+  COMPONENT, not an identity total — so the list is the only place that defect can be prevented.
 
 ## 5. Cache semantics (P4) — why a fixed build still shipped a stale number
 
@@ -201,7 +230,20 @@ move?" decision — by failing loudly rather than by remembering.
   floor and the artifact reader all return the SAME number; the implied-multiple round trip
   returns its input; a missing balance leg is not a zero; an identity total cannot be read as a
   component.
+- `tests/unit/test_identity_tolerance.py` — the band itself: a margin rounded to its declared
+  precision passes, a 0.5% contradiction is caught (the coarse 1% band excused it), the audited CF
+  margin still fires with the band NAMED in the evidence, every leaf of every walked identity
+  declares its kind AND its precision (the `valuation.ebitda_operating` gap this test now holds
+  shut), and an identity whose leaf declares no precision falls back and says so.
 - `scripts/sweep_identities.py` — the standing measurement (populations, violations, worst
-  residual per identity). Run it before adding an identity or changing a tolerance.
-- The contract fixtures are unchanged (16/16 byte-identical after the generalization): no
-  stored artifact's verdict moved.
+  residual per identity), judging every identity at BOTH the declared-precision band and the
+  coarse `--tolerance` band so the delta is visible. Run it before adding an identity or changing
+  a tolerance.
+- The contract fixtures moved by DESIGN, in the recorded verdict map only: of the 16, one line
+  changed — `art_2026-10-12T21-39-32_AMZN_1749e7`'s `C10e` verdict flipped `false → true`,
+  because that pre-fix artifact publishes `market.pe_ratio = 20.8793` against its own
+  `market_cap / income.net_income = 20.693` (0.9% apart, against the 0.02% band its declared
+  precision allows — and under the flat 1% band that used to excuse it; it carries
+  `pe_basis: null`, i.e. the provider's EPS-denominated ratio). No payload byte changed:
+  `scripts/extract_contract_fixtures.py` rewrote the verdicts and the diff is that one clause on
+  that one fixture.

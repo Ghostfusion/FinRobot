@@ -213,6 +213,8 @@ finrobot serve                   # run the backend on its own
 
 Most commands accept `--model` to pick the LLM (e.g. `anthropic:claude-sonnet-4-6`) and `--lang en|zh` to set the output language.
 
+Pipeline commands persist to the same artifact store the desktop reads (`~/.finrobot/artifacts.db`), so a CLI report also appears in the app.
+
 Four notebooks in `tutorials/` cover the same ground interactively: equity research, DCF valuation, backtesting, and RAG Q&A.
 
 ## Run in a browser

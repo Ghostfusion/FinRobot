@@ -137,6 +137,12 @@ async def load_yearly_financials(
         debt = _opt_float(data.get("total_debt"))
         cash = _opt_float(data.get("total_cash"))
         net_debt_native = debt - cash if (debt is not None and cash is not None) else None
+        # Per-year EV-bridge claims. Same None ≠ 0 convention and the same
+        # None-preserving FX scaling as net_debt: a year whose statement omits
+        # preferred/NCI stays None (the band's run-level fallback then binds),
+        # never a fabricated 0.
+        preferred_native = _opt_float(data.get("preferred_stock"))
+        nci_native = _opt_float(data.get("noncontrolling_interest"))
         out.append(
             (
                 YearlyFinancials(
@@ -144,6 +150,12 @@ async def load_yearly_financials(
                     ebitda=ebitda_native * fx_rate if ebitda_native is not None else None,
                     free_cash_flow=fcf_native * fx_rate if fcf_native is not None else None,
                     net_debt=net_debt_native * fx_rate if net_debt_native is not None else None,
+                    preferred_stock=(
+                        preferred_native * fx_rate if preferred_native is not None else None
+                    ),
+                    noncontrolling_interest=(
+                        nci_native * fx_rate if nci_native is not None else None
+                    ),
                 ),
                 _pos_or_none(data.get("shares_outstanding")),
             )

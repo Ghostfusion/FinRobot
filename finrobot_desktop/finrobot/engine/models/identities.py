@@ -35,7 +35,8 @@ Design, deliberately boring:
 (``reconcile_tolerances`` / ``valuation_thresholds`` / ``numeric_claim``), so the gate
 can walk this registry without importing ``compute/``, ``data/`` or ``pipelines/``.
 
-Leaf: zero I/O, no imports outside the standard library.
+Leaf: zero I/O. Its only non-stdlib import is the sibling tolerance leaf
+(``reconcile_tolerances``), itself pure data — no compute, no provider, no artifact.
 """
 
 from __future__ import annotations
@@ -46,6 +47,8 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
+
+from finrobot.engine.models.reconcile_tolerances import IDENTITY_RESIDUAL_TOLERANCE
 
 #: What KIND of quantity a number is. The distinction the 2026-10-14 CF audit needed:
 #: a narrative whisperer rewrote "46.8% of the $15,783,943,454 enterprise value" into
@@ -363,6 +366,10 @@ LEAF_KINDS: Mapping[str, QuantityKind] = {
     "valuation.enterprise_value": "total_amount",
     "valuation.ev_ebitda": "multiple",
     "valuation.ev_ebitda_reported": "multiple",
+    # The EBITDA the EV multiples divide by — a dollar amount, and the leaf the
+    # `ev_ebitda` identity reads: undeclared, that identity fell back to the coarse
+    # tolerance while every sibling was judged on its declared precision.
+    "valuation.ebitda_operating": "total_amount",
     "valuation.ev_revenue": "multiple",
     "valuation.book_value_per_share": "per_share",
     # the report's own price level, when it is published into the snapshot.
@@ -402,9 +409,49 @@ def is_identity_total(concept: str) -> bool:
     }
 
 
+#: The precision a published value of this KIND carries — XBRL's ``decimals`` attribute:
+#: the power of ten the fact is asserted accurate AT (0 = whole units, 2 = the cent,
+#: -3 = the thousand). It is what turns a tolerance from a taste for round numbers into
+#: the interval the published figures actually denote: a value rounded to ``d`` decimals
+#: denotes every number within half a unit of its last digit (Calculations 1.1 §5.2.3-5.2.4,
+#: https://www.xbrl.org/Specification/calculation-1.1/REC-2023-02-22/calculation-1.1-REC-2023-02-22.html).
+#:
+#: The default follows the KIND, because the kind already says what the value IS: a
+#: dollar amount reaches us rounded to the dollar (its unit), a quoted price to the cent,
+#: and a ratio this pipeline computes itself is stored at full float precision and only
+#: ever displayed to the digits the report prints (39.09% = 4 decimals of the fraction).
+#: A leaf whose own precision differs from its kind's default gets an entry in
+#: :data:`LEAF_DIGITS` rather than a second kind.
+DEFAULT_DIGITS: Mapping[QuantityKind, int] = {
+    "total_amount": 0,
+    "count": 0,
+    "per_share": 2,
+    "multiple": 2,
+    "ratio": 4,
+    "rate": 2,
+}
+
+#: Leaves whose published precision is NOT their kind's default. Each entry is a claim
+#: about the figure as the provider states it, so it carries its reason.
+LEAF_DIGITS: Mapping[str, int] = {}
+
+
 def leaf_kind(path: str) -> QuantityKind | None:
     """The declared kind of a published leaf, ``None`` when nothing declares it."""
     return LEAF_KINDS.get(path)
+
+
+def leaf_digits(path: str) -> int | None:
+    """The declared published precision of a leaf, ``None`` when nothing declares it.
+
+    ``None`` is not "zero decimals" — it is "this leaf's precision is undeclared", and
+    every consumer of it must fall back to an explicit band rather than pretend the
+    figure is exact.
+    """
+    if path in LEAF_DIGITS:
+        return LEAF_DIGITS[path]
+    kind = leaf_kind(path)
+    return DEFAULT_DIGITS.get(kind) if kind is not None else None
 
 
 def leaves_of_kind(raw: Mapping[str, Any], kind: QuantityKind) -> dict[str, float]:
@@ -433,8 +480,16 @@ def identity(identity_id: str) -> Identity:
 
 
 def checked_identities() -> tuple[Identity, ...]:
-    """The identities the artifact gate enforces, in declaration order."""
-    return tuple(i for i in IDENTITIES if i.clause == "check")
+    """The identities the artifact gate can WALK, in declaration order.
+
+    An identity the artifact publishes no total for (``net_debt``, ``ev_to_equity``) is
+    enforced where it is used — every consumer calls :func:`evaluate` — but the gate
+    cannot resolve it from an artifact's own leaves, so it is not walked here. Declaring
+    it into this list produced a row of the measurement that could only ever read "never
+    binds"; the nesting (``ev_build`` and ``ev_ebitda`` both read ``net_debt``) is what
+    carries it into the gate.
+    """
+    return tuple(i for i in IDENTITIES if i.clause == "check" and i.total_path is not None)
 
 
 # --------------------------------------------------------------------------------------
@@ -550,6 +605,128 @@ def relative_residual(
         return None
     scale = max(abs(published), abs(expected), 1e-9)
     return abs(published - expected) / scale, expected
+
+
+def _half_ulp(digits: int) -> float:
+    """Half a unit in the last declared digit: the interval a rounded value denotes."""
+    return 0.5 * 10.0 ** (-digits)
+
+
+def _summed_uncertainty(
+    identity_id: str, operands: Mapping[str, float | None], depth: int = 0
+) -> float | None:
+    """Absolute uncertainty of Σ weight × operand, from the leaves' declared precision.
+
+    XBRL accumulates the contributing facts' rounding intervals through the calculation:
+    each operand contributes half a unit in its own last declared digit, scaled by
+    |weight| (a subtracted operand is rounded exactly as much as an added one), and a
+    nested identity contributes its own accumulation — ``net_debt`` is two rounded
+    balance leaves, so the EV numerator carries both.
+
+    ``None`` when any operand declares no precision (the caller must then say it used the
+    fallback band), or when a nested identity cannot be resolved from the operands it was
+    handed. A contributor the CALLER passed collapsed (a provider's own net-debt figure)
+    is measured through the same leaf declarations as the derived one: both are dollar
+    amounts of the same kind, and a per-caller precision would be a second thing to keep
+    in sync.
+    """
+    spec = identity(identity_id)
+    paths = dict(leaf_paths(identity_id))
+    total = 0.0
+    for contributor in spec.contributors:
+        if contributor.role == "gate":
+            continue
+        if contributor.role == "identity":
+            nested = (
+                _summed_uncertainty(contributor.key, operands, depth + 1)
+                if depth < _MAX_NESTED_DEPTH and contributor.key in _BY_ID
+                else None
+            )
+            if nested is None:
+                return None
+            total += abs(contributor.weight) * nested
+            continue
+        path = paths.get(contributor.key)
+        digits = leaf_digits(path) if path is not None else None
+        if digits is None:
+            return None
+        total += abs(contributor.weight) * _half_ulp(digits)
+    return total
+
+
+def identity_tolerance(
+    identity_id: str, operands: Mapping[str, float | None], published: float | None
+) -> tuple[float, Literal["declared_precision", "fallback"]]:
+    """``(relative tolerance, where it came from)`` for this identity's residual.
+
+    The band the published figures' own precision allows, rather than a taste for round
+    numbers: a total rounded to the dollar standing beside operands rounded to the dollar
+    is only determinable to the sum of their half-units, and a ratio accumulates its
+    operands' RELATIVE rounding. That is what lets one declaration govern a 5.7x multiple
+    and a 0.39 margin alike (XBRL Calculations 1.1 §5.2.3-5.2.4, the rounded fact value
+    interval).
+
+    Falls back to ``IDENTITY_RESIDUAL_TOLERANCE`` — and NAMES the fallback, because a
+    finding that cites the tolerance it was judged against is the difference between a
+    number and an assertion — whenever a leaf the identity reads declares no precision,
+    or the propagation is undefined (a zero divisor, an absent published value).
+
+    Relative to the SAME scale :func:`relative_residual` uses (the larger magnitude), so
+    the two are directly comparable. Digits are deliberately NOT part of
+    :func:`identity_digest`: they judge the check's sensitivity, not what a stored value
+    means, and a tolerance tweak must not invalidate cached canonicals.
+    """
+    fallback: tuple[float, Literal["declared_precision", "fallback"]] = (
+        IDENTITY_RESIDUAL_TOLERANCE,
+        "fallback",
+    )
+    spec = identity(identity_id)
+    numerator, ok = _sum(identity_id, operands, 0)
+    expected = evaluate(identity_id, operands)
+    if not ok or expected is None or not math.isfinite(expected):
+        return fallback
+    numerator_uncertainty = _summed_uncertainty(identity_id, operands)
+    if numerator_uncertainty is None:
+        return fallback
+
+    # For a SUM the published value IS the total, so its own rounding enters here and
+    # must not be added a second time below (a ratio or product publishes a result the
+    # operands do not already carry).
+    published_counted = False
+    if spec.form == "sum":
+        total_digits = leaf_digits(spec.total_path or "")
+        if total_digits is None or expected == 0:
+            return fallback
+        absolute = numerator_uncertainty + _half_ulp(total_digits)
+        published_counted = True
+    elif spec.form == "ratio":
+        divisor = operands.get(spec.divisor or "")
+        divisor_digits = leaf_digits(spec.divisor_path or "")
+        if divisor is None or divisor == 0 or divisor_digits is None or numerator == 0:
+            return fallback
+        absolute = (numerator_uncertainty / abs(numerator)) * abs(expected) + _half_ulp(
+            divisor_digits
+        ) / abs(divisor) * abs(expected)
+    else:
+        # product: the contributors multiply, so their RELATIVE rounding adds.
+        paths = dict(leaf_paths(identity_id))
+        relative = 0.0
+        for contributor in spec.contributors:
+            value = operands.get(contributor.key)
+            path = paths.get(contributor.key)
+            digits = leaf_digits(path) if path is not None else None
+            if value is None or value == 0 or digits is None:
+                return fallback
+            relative += _half_ulp(digits) / abs(value)
+        absolute = relative * abs(expected)
+
+    if not published_counted and published is not None and published != 0:
+        published_digits = leaf_digits(spec.total_path or "")
+        if published_digits is None:
+            return fallback
+        absolute += _half_ulp(published_digits)
+    scale = max(abs(published or 0.0), abs(expected), 1e-9)
+    return absolute / scale, "declared_precision"
 
 
 def dig(raw: Mapping[str, Any], path: str) -> float | None:

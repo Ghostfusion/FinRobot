@@ -60,13 +60,11 @@ from finrobot.engine.models.identities import (
     Identity,
     artifact_operands,
     checked_identities,
+    identity_tolerance,
     relative_residual,
 )
 from finrobot.engine.models.numeric_claim import Finding
-from finrobot.engine.models.reconcile_tolerances import (
-    IDENTITY_RESIDUAL_TOLERANCE,
-    NARRATIVE_DRIFT_TOLERANCE,
-)
+from finrobot.engine.models.reconcile_tolerances import NARRATIVE_DRIFT_TOLERANCE
 from finrobot.engine.models.valuation_thresholds import (
     MARKET_DIVERGENCE_RATIO_K,
     METHOD_CORROBORATION_SPAN_K,
@@ -1259,6 +1257,13 @@ def _clause_c10e_quantity_contradicts_derivation(artifact: "Artifact") -> Findin
     margins included. Only identities whose declared artifact paths all resolve
     BIND (XBRL Calculations 1.1 §5.1); a value whose operands the artifact does not
     publish is never accused of contradicting them.
+
+    The band is the one the published figures' own DECLARED PRECISION allows
+    (``identities.identity_tolerance``, XBRL's rounded fact value interval) and it
+    falls back to ``IDENTITY_RESIDUAL_TOLERANCE`` for an identity whose leaves
+    declare no precision — whichever was used is named in the finding, so a reader
+    can tell a 0.01% divergence judged against a cent-rounded price from one judged
+    against the coarse band.
     """
     raw = _raw(artifact)
     for spec in checked_identities():
@@ -1270,7 +1275,8 @@ def _clause_c10e_quantity_contradicts_derivation(artifact: "Artifact") -> Findin
         if result is None:
             continue
         residual, expected = result
-        if residual <= IDENTITY_RESIDUAL_TOLERANCE:
+        tolerance, basis = identity_tolerance(spec.id, operands, published)
+        if residual <= tolerance:
             continue
         path = spec.total_path or spec.total
         return Finding(
@@ -1280,12 +1286,20 @@ def _clause_c10e_quantity_contradicts_derivation(artifact: "Artifact") -> Findin
             evidence=(
                 f"{path} = {published:.6g} is published while its declared identity "
                 f"'{spec.id}' ({_identity_formula(spec)}) evaluates to {expected:.6g} "
-                f"from this artifact's own leaves ({residual:.1%} apart) — the published "
+                f"from this artifact's own leaves ({residual:.1%} apart, against the "
+                f"{tolerance:.2%} band {_tolerance_basis(basis)}) — the published "
                 "value contradicts the derivation it declares, so one of its figures "
                 "describes a different period or a different caliber"
             ),
         )
     return None
+
+
+def _tolerance_basis(basis: str) -> str:
+    """How the C10e band was arrived at, in the finding's own words."""
+    if basis == "declared_precision":
+        return "their declared precision allows"
+    return "the fallback tolerance allows (a leaf here declares no precision)"
 
 
 def _identity_formula(spec: Identity) -> str:

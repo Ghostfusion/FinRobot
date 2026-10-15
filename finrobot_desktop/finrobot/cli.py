@@ -21,11 +21,14 @@ if TYPE_CHECKING:
 
 
 # Reminder appended to CLI pipeline output. HTML rendering lives in the
-# server process; CLI runs are stand-alone and don't share state with it.
+# server process. The RUN's data is shared: the CLI carries the same
+# ``ArtifactStore`` the server reads, so a CLI artifact is visible in the app —
+# only the report RENDERING is server-side.
 _HTML_REPORT_NOTE = (
     "\nNote: HTML reports require the server. Run 'finrobot serve', "
     "then trigger the analysis via the /chat API or Desktop app. "
-    "CLI results are not shared with the server (separate processes)."
+    "CLI results are written to the shared artifact store (~/.finrobot/artifacts.db), "
+    "so this report appears in the app; only the HTML rendering is server-side."
 )
 
 
@@ -83,11 +86,22 @@ def _settings_for_model(model: str | None) -> FinRobotSettings:
 
 def _build_deps(model: str | None = None) -> "FinRobotDeps":
     """Build deps only. No agent creation.
-    Used by pipeline commands that create their own sub-agents."""
+
+    Used by pipeline commands that create their own sub-agents.
+
+    The deps carry a live :class:`~finrobot.artifact.store.ArtifactStore` so a CLI
+    run reaches the runner's persist boundary exactly as a server run does:
+    ``Pipeline._execute_steps`` keys off ``deps.artifact_store`` (and the pipeline's
+    own ``artifact_builder``) to save the artifact, the PIT snapshot and the
+    audit-chain row. Without it a CLI run printed its report and recorded nothing.
+    ``coverage_store`` / ``run_semaphore`` stay ``None``: this is a single-invocation
+    process with no Coverage Desk and nothing to contend with.
+    """
     from finrobot.obs import setup_logging
 
     setup_logging(get_settings(use_env=True))
 
+    from finrobot.artifact.store import ArtifactStore
     from finrobot.engine.data.factory import build_data_layer
     from finrobot.engine.deps import FinRobotDeps
     from finrobot.engine.skills.registry import SkillRegistry
@@ -108,7 +122,13 @@ def _build_deps(model: str | None = None) -> "FinRobotDeps":
 
     # Build provider chain via shared factory (FMP primary → yfinance fallback)
     data_layer = build_data_layer(settings)
-    deps = FinRobotDeps(data_layer=data_layer, settings=settings, skill_runtime=registry)
+    artifact_store = ArtifactStore()
+    deps = FinRobotDeps(
+        data_layer=data_layer,
+        settings=settings,
+        skill_runtime=registry,
+        artifact_store=artifact_store,
+    )
 
     return deps
 
@@ -159,6 +179,11 @@ def _run_with_teardown(coro: Coroutine[Any, Any, _T], deps: "FinRobotDeps") -> _
     from a second ``asyncio.run`` re-binds its aiosqlite connection to a fresh
     loop while the worker thread still belongs to the finished one — the orphan
     thread the same bug describes. One loop, one ``asyncio.run``.
+
+    The deps' ``artifact_store`` (when the command built one) is closed here too,
+    on the same loop, after the data layer — the same order ``scripts/*`` tools
+    use. Without it the store's aiosqlite worker thread outlives the run and
+    blocks the interpreter exit the same way the layer did.
     """
 
     from finrobot.engine.data.factory import shutdown_data_layer
@@ -168,6 +193,9 @@ def _run_with_teardown(coro: Coroutine[Any, Any, _T], deps: "FinRobotDeps") -> _
             return await coro
         finally:
             await shutdown_data_layer(deps.data_layer)
+            store = getattr(deps, "artifact_store", None)
+            if store is not None:
+                await store.close()
 
     return asyncio.run(_guarded())
 
@@ -400,9 +428,16 @@ def skill_search(query: str) -> None:
 @click.argument("question")
 @click.option("--model", default=None, help="Override model, e.g. anthropic:claude-sonnet-4-6")
 def run(question: str, model: str | None) -> None:
-    """Ask a quick financial question (Mode A)."""
+    """Ask a quick financial question (Mode A).
+
+    ``agent.run`` (async) rather than ``run_sync``: the deps now carry an
+    ``artifact_store`` too, and the store/layer must be closed on the SAME event
+    loop the workload ran on (``_run_with_teardown``, BUG-082) — a separate
+    ``run_sync`` loop followed by a second ``asyncio.run`` teardown would rebind
+    the aiosqlite connection while its worker thread still belongs to the first.
+    """
     agent, deps = _build_runtime(model)
-    result = agent.run_sync(question, deps=deps)
+    result = _run_with_teardown(agent.run(question, deps=deps), deps)
     click.echo(result.output)
 
 

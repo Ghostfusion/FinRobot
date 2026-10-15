@@ -1,5 +1,6 @@
 """CLI tests using click.testing.CliRunner with TestModel mock."""
 
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,12 +11,41 @@ from click.testing import CliRunner
 from pydantic_ai.models.test import TestModel
 
 import finrobot.cli as cli_module
+from finrobot.artifact.models import (
+    Artifact,
+    ArtifactAssumptions,
+    ArtifactComputeVersion,
+    ArtifactInputs,
+    ArtifactMeta,
+    ArtifactOutputs,
+)
 from finrobot.cli import cli
 from finrobot.engine.data.interface import DataResult
 from finrobot.engine.data.types import DataType
 from finrobot.engine.deps import FinRobotDeps
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures" / "skills"
+
+
+def _persisted_artifact(ticker: str) -> Artifact:
+    """Minimal equity-research artifact for the persist-path tests.
+
+    Mirrors ``tests/audit/test_run_evidence_wiring.py::_artifact``: the persist
+    boundary needs inputs/meta/compute_version to be individually bound, not just
+    outputs, or the builders raise before the row is written.
+    """
+    now = datetime.now(tz=timezone.utc)
+    return Artifact(
+        id=f"art_{now.isoformat()}_{ticker}_equity_research",
+        ticker=ticker,
+        cross_tickers=[],
+        type="equity_research",
+        inputs=ArtifactInputs(data_source="test", data_fetched_at=now, raw_data={}),
+        assumptions=ArtifactAssumptions(parameters={}),
+        compute_version=ArtifactComputeVersion(version="0.1.0", formula_id="test"),
+        outputs=ArtifactOutputs(structured={}, llm_narrative={}, summary_text="Test summary"),
+        meta=ArtifactMeta(created_at=now, source="test"),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -514,6 +544,72 @@ class TestBuildDeps:
         agent, deps = _build_runtime(model="test")
         assert agent is not None
         assert hasattr(deps, "settings")
+
+
+class TestCliPersistence:
+    """A CLI pipeline run must reach the runner's persist boundary.
+
+    Regression: ``finrobot research <TICKER>`` built ``FinRobotDeps`` without an
+    ``artifact_store``, so the run printed a report and recorded nothing — no row
+    in ``~/.finrobot/artifacts.db``, no PIT snapshot, no audit-chain row — while
+    the identical pipeline through ``server.py`` did. The runner's persist step
+    keys off ``deps.artifact_store`` + the pipeline's own ``artifact_builder``;
+    the CLI must carry a live store just like the server.
+    """
+
+    def _isolate_home(self, monkeypatch, tmp_path):
+        from finrobot import paths as paths_module
+
+        home = tmp_path / ".finrobot"
+        monkeypatch.setattr(paths_module, "FINROBOT_HOME", home)
+        monkeypatch.setattr(paths_module, "ARTIFACTS_DB", home / "artifacts.db")
+        monkeypatch.setattr(paths_module, "LOGS_DIR", home / "logs")
+        return home
+
+    @pytest.mark.asyncio
+    async def test_build_deps_carries_a_live_artifact_store(self, tmp_path, monkeypatch):
+        from finrobot.artifact.store import ArtifactStore
+        from finrobot.cli import _build_deps
+
+        home = self._isolate_home(monkeypatch, tmp_path)
+
+        deps = _build_deps(model="test")
+        store = deps.artifact_store
+        assert isinstance(store, ArtifactStore)
+        try:
+            # "live", not a name: the store opens the tmp db and round-trips a row.
+            assert await store.count() == 0
+            artifact_id = await store.save(_persisted_artifact("AAPL"))
+            assert await store.get(artifact_id) is not None
+            assert (home / "artifacts.db").exists()
+        finally:
+            await store.close()
+
+    def test_research_run_writes_an_artifact_row(self, tmp_path, monkeypatch):
+        """The CLI command itself, through real ``_build_deps`` (real store) and a
+        real ``Pipeline`` with an ``artifact_builder``: one row must land on disk."""
+        from finrobot.engine.pipelines.base import Pipeline
+
+        home = self._isolate_home(monkeypatch, tmp_path)
+
+        monkeypatch.setattr(
+            "finrobot.cli._build_pipeline",
+            lambda key, deps: Pipeline(
+                steps=[], artifact_builder=lambda result, ticker, deps: _persisted_artifact(ticker)
+            ),
+        )
+
+        result = CliRunner().invoke(cli, ["research", "AAPL", "--model", "test"])
+        assert result.exit_code == 0, result.output
+
+        db = home / "artifacts.db"
+        assert db.exists()
+        con = sqlite3.connect(db)
+        try:
+            count = con.execute("SELECT count(*) FROM artifacts").fetchone()[0]
+        finally:
+            con.close()
+        assert count == 1
 
 
 class TestSkillCommands:

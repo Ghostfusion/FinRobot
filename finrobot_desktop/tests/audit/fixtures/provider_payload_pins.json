@@ -2,12 +2,12 @@
   "acknowledged": {
     "financials|fmp": "eb49fd4c3c94",
     "financials|tiingo": "600867edd1cf",
-    "financials|yfinance": "ee0797c8a17d",
+    "financials|yfinance": "fe1faa6ff452",
     "forward_estimates|fmp": "8ca3b47eb3c8",
-    "fund_holdings|sec_edgar": "9219164a1087",
+    "fund_holdings|sec_edgar": "69be627442c1",
     "fund_profile|eodhd": "b7f74d24f4d6",
     "fund_profile|moomoo": "f6eb0b5c247f",
-    "fund_profile|yfinance": "92cfcaba9d61",
+    "fund_profile|yfinance": "46dca8e1bfff",
     "peer_candidates|fmp": "290735b49443",
     "price|eodhd": "7ba724fcba76",
     "price|finnhub": "b45efce41095",
@@ -15,8 +15,8 @@
     "price|stockdata": "3202de39266f",
     "price|tiingo": "7c97e7e3ed23",
     "price|twelvedata": "64621d9cb960",
-    "price|yfinance": "d990d162789b",
-    "proxy_statement|sec_edgar": "db38767c2b7a",
+    "price|yfinance": "7a61549f9550",
+    "proxy_statement|sec_edgar": "b1866adab47d",
     "sentiment|adanos": "f33ffb3574ab",
     "sentiment|eodhd": "060d5e6c5ee4"
   },
@@ -35,7 +35,7 @@
     "finrobot/engine/data/providers/alpha_vantage_provider.py": "05b85842de44ec71",
     "finrobot/engine/data/providers/benzinga_provider.py": "4100224d0670324b",
     "finrobot/engine/data/providers/cboe_provider.py": "96651b55eca4f821",
-    "finrobot/engine/data/providers/edgar_provider.py": "eeb49d540043e366",
+    "finrobot/engine/data/providers/edgar_provider.py": "9e4ae99c7e2c8a87",
     "finrobot/engine/data/providers/eodhd_provider.py": "dcb67579b8787957",
     "finrobot/engine/data/providers/federal_reserve_provider.py": "df97ecf89fb60d78",
     "finrobot/engine/data/providers/finnhub_provider.py": "9636ad828111847d",
@@ -51,6 +51,6 @@
     "finrobot/engine/data/providers/stockdata_provider.py": "aba0d052717ab80a",
     "finrobot/engine/data/providers/tiingo_provider.py": "a9642b975f1d3964",
     "finrobot/engine/data/providers/twelvedata_provider.py": "48d07c7def6c9b10",
-    "finrobot/engine/data/providers/yfinance_provider.py": "a337138b35b44aff"
+    "finrobot/engine/data/providers/yfinance_provider.py": "832838464df18872"
   }
 }

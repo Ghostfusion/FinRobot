@@ -52,7 +52,9 @@ NARRATIVE_APPROXIMATION_BAND = 0.10
 # EV/EBITDA and EV/Revenue, the EV build, the trailing P/E, the margins), not just the
 # ratios the clause was born for. XBRL derives this kind of tolerance from the
 # published precision of the facts themselves (Calculations 1.1 §5.2.3-5.2.4, the
-# rounded/truncated fact value interval); our leaves round to a fixed display precision
-# per field, so a single relative band is the honest approximation until a field
-# declares its own digits.
+# rounded/truncated fact value interval) — which is what
+# ``identities.identity_tolerance`` now does for every leaf whose kind declares its
+# precision. This constant is the FALLBACK it names when a leaf declares none: an
+# identity whose figures are undeclared is checked at the coarse band, and the finding
+# says which of the two it used.
 IDENTITY_RESIDUAL_TOLERANCE = 0.01

@@ -863,6 +863,61 @@ async def test_fetch_xbrl_balance_sheet_prefers_latest_period_over_latest_annual
     assert data["latest_shareholders_equity"]["value"] == 84_116_000_000
 
 
+def test_balance_sheet_concept_lists_hold_no_components_or_identity_totals() -> None:
+    """2026-10-15 audit: a balance-sheet concept list may only hold tags that ARE the
+    figure it claims. ``AssetsCurrent`` sat in ``_LATEST_TOTAL_ASSETS_CONCEPTS`` as a
+    fallback: current assets are a COMPONENT of total assets, so an issuer tagging
+    neither ``Assets`` nor ``TotalAssets`` published current assets as total assets —
+    and the equity identity built from it closed anyway (a partial stands in for the
+    identity total silently). Every list is also re-checked against the identity-total
+    vocabulary the import guards use."""
+    from finrobot.engine.models.identities import is_identity_total
+    from finrobot.engine.data.providers.edgar_provider import (
+        _LATEST_SHAREHOLDERS_EQUITY_CONCEPTS,
+        _LATEST_TOTAL_ASSETS_CONCEPTS,
+        _LATEST_TOTAL_LIABILITIES_CONCEPTS,
+    )
+
+    # The component must be gone from the total-assets slot; the genuine US-GAAP
+    # spellings of the same total stay (IFRS variants are tried by prefix).
+    assert "AssetsCurrent" not in _LATEST_TOTAL_ASSETS_CONCEPTS
+    assert _LATEST_TOTAL_ASSETS_CONCEPTS == ("Assets", "TotalAssets")
+
+    # ``is_identity_total`` is the vocabulary the import guards enforce; assert the
+    # invariant those guards would raise on. NOTE it says nothing about
+    # ``AssetsCurrent`` (a component, not an identity total) — that one is only
+    # preventable by the list itself, which is why the assertion above exists.
+    for concepts in (
+        _LATEST_TOTAL_ASSETS_CONCEPTS,
+        _LATEST_TOTAL_LIABILITIES_CONCEPTS,
+        _LATEST_SHAREHOLDERS_EQUITY_CONCEPTS,
+    ):
+        assert [c for c in concepts if is_identity_total(c)] == []
+
+
+@pytest.mark.asyncio
+async def test_fetch_xbrl_abstains_when_only_current_assets_is_tagged() -> None:
+    """Degradation preserved: with ``AssetsCurrent`` no longer a fallback, an issuer
+    that tags ONLY current assets yields no ``latest_total_assets`` at all — the field
+    stays absent (→ the consumer's None arm and the capability warning) instead of
+    publishing a smaller magnitude as the total."""
+    p = EdgarToolsProvider("Jane Doe jane@example.com")
+    q1_pe = date(2026, 3, 31)
+    facts = _FakeLatestFacts(
+        recent={
+            "us-gaap:AssetsCurrent": _FakeFinancialFact(
+                "us-gaap:AssetsCurrent", 41_200_000_000, q1_pe
+            ),
+        }
+    )
+
+    c = MagicMock()
+    c.get_facts.return_value = facts
+    data, _ = p._fetch_xbrl(c)
+
+    assert data["latest_total_assets"] is None
+
+
 def test_select_latest_fact_revenue_prefers_total_on_same_period() -> None:
     """Financial-issuer revenue-subset bug (2026-06-29): MET reports total
     ``Revenues`` (77B) and the ASC-606 contract-revenue subset (2.4B) at the SAME

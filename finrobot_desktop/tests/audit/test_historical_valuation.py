@@ -73,13 +73,21 @@ class TestLeafIsolation:
 
 
 def _yearly(
-    fy: int, *, ebitda: float | None = 30, fcf: float | None = 20, debt: float | None = 0
+    fy: int,
+    *,
+    ebitda: float | None = 30,
+    fcf: float | None = 20,
+    debt: float | None = 0,
+    pref: float | None = None,
+    nci: float | None = None,
 ) -> YearlyFinancials:
     return YearlyFinancials(
         fiscal_date=date(fy, 12, 31),
         ebitda=ebitda,
         free_cash_flow=fcf,
         net_debt=debt,
+        preferred_stock=pref,
+        noncontrolling_interest=nci,
     )
 
 
@@ -282,6 +290,75 @@ class TestEvEbitdaBand:
         )
         assert band.sample_count == 1
         assert any("predate the earliest fiscal year" in w for w in band.warnings)
+
+
+class TestPerYearClaims:
+    """A sample's EV bridge must use the YEAR's own preferred/NCI claim.
+
+    The band used to apply the RUN's ``preferred_stock`` / ``noncontrolling_interest``
+    to EVERY historical sample because ``YearlyFinancials`` carried no per-year
+    claims — so a window spanning a year the issuer actually carried preferred (or an
+    NCI) measured that year against the run's claim instead of the year's own. The
+    per-year figure now wins when present; a year the statement omitted still falls
+    back to the run-level argument (the registry's ``on_missing="zero"``).
+    """
+
+    def test_sample_uses_the_years_own_preferred_not_the_runs(self) -> None:
+        # FY2024 carried $100 preferred; the run-level figure is $999 (e.g. a
+        # different period's carrying amount). The sample must use 100, not 999.
+        yearly = [_yearly(2024, ebitda=10, debt=0, pref=100.0)]
+        prices = [_price(date(2025, 1, 1), 100.0)]
+        band = compute_historical_band(
+            metric="ev_ebitda",
+            yearly=yearly,
+            prices=prices,
+            shares_outstanding=10,
+            preferred_stock=999.0,
+            # The year reports no NCI row → falls back to the run-level 50.
+            noncontrolling_interest=50.0,
+        )
+        # (100*10 + 0 net debt + 100 year preferred + 50 run-level NCI) / 10 = 115
+        assert band.current == 115.0
+        assert band.current != (1000.0 + 999.0 + 50.0) / 10.0  # not the all-run bridge
+
+    def test_year_without_its_own_claim_falls_back_to_the_run_level(self) -> None:
+        # Frames that predate the per-year claims (or omit the row) stay None →
+        # the run-level argument binds exactly as before this change.
+        yearly = [_yearly(2024, ebitda=10, debt=0)]
+        prices = [_price(date(2025, 1, 1), 100.0)]
+        band = compute_historical_band(
+            metric="ev_ebitda",
+            yearly=yearly,
+            prices=prices,
+            shares_outstanding=10,
+            preferred_stock=100.0,
+            noncontrolling_interest=50.0,
+        )
+        # (1000 + 0 + 100 + 50) / 10 = 115
+        assert band.current == 115.0
+
+    def test_each_sample_uses_its_own_years_claim(self) -> None:
+        # FY2024 carried $100 preferred; FY2025 carried an EXPLICIT nil (0.0), not
+        # an omission — the year's 0.0 must be respected (None ≠ 0), never replaced
+        # by the run-level 999.
+        yearly = [
+            _yearly(2024, ebitda=10, debt=0, pref=100.0),
+            _yearly(2025, ebitda=10, debt=0, pref=0.0),
+        ]
+        prices = [
+            _price(date(2025, 1, 1), 100.0),  # FY2024 → (1000 + 100) / 10 = 110
+            _price(date(2026, 1, 1), 100.0),  # FY2025 → (1000 + 0) / 10 = 100
+        ]
+        band = compute_historical_band(
+            metric="ev_ebitda",
+            yearly=yearly,
+            prices=prices,
+            shares_outstanding=10,
+            preferred_stock=999.0,
+        )
+        assert band.timeline == [(date(2025, 1, 1), 110.0), (date(2026, 1, 1), 100.0)]
+        assert band.current == 100.0
+        assert band.median == 105.0
 
 
 class TestPFcfBand:

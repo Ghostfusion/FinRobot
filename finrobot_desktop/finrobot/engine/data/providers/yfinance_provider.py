@@ -317,7 +317,10 @@ def _build_yearly_financials(
     ``balance_sheet`` supplies the debt/cash legs the historical bands build EV
     from; a missing frame (or a missing row in it) leaves those keys None rather
     than inventing a debt-free year (see ``_TOTAL_DEBT_NAMES``), plus the
-    parent-only equity the through-cycle ROE needs (``_TOTAL_EQUITY_NAMES``).
+    parent-only equity the through-cycle ROE needs (``_TOTAL_EQUITY_NAMES``) and the
+    per-year EV-bridge claims the band's per-year ``preferred_stock`` /
+    ``noncontrolling_interest`` need (``_PREFERRED_STOCK_NAMES`` /
+    ``_MINORITY_INTEREST_NAMES``).
 
     Rows are read straight off Yahoo's statement frames; a value that is crossed
     or missing ON THE SOURCE (not in this mapping) is left as reported here and
@@ -353,6 +356,14 @@ def _build_yearly_financials(
     debt_row = _get_row(balance_sheet, _TOTAL_DEBT_NAMES) if has_bs else None
     cash_row = _get_row(balance_sheet, _CASH_NAMES) if has_bs else None
     equity_row = _get_row(balance_sheet, _TOTAL_EQUITY_NAMES) if has_bs else None
+    # EV-bridge claims (numeric-audit family 3), per year off the SAME annual
+    # balance-sheet frame the debt/cash legs come from — symmetric with FMP's
+    # per-year ``preferredStock``/``minorityInterest`` and read from the annual
+    # rows the TTM path reads off its quarterly frame. None ≠ 0: a row the
+    # statement omits (or a missing frame) stays None so the band falls back to
+    # the run-level figure rather than pretending the year's claim was nil.
+    preferred_row = _get_row(balance_sheet, _PREFERRED_STOCK_NAMES) if has_bs else None
+    minority_row = _get_row(balance_sheet, _MINORITY_INTEREST_NAMES) if has_bs else None
 
     yearly: list[dict[str, Any]] = []
     for col in cols:
@@ -386,6 +397,12 @@ def _build_yearly_financials(
                 # here reads as a debt-free year and skews the multiple low.
                 "total_debt": _cell(debt_row, col),
                 "total_cash": _cell(cash_row, col),
+                # Per-year EV-bridge claims (see _PREFERRED_STOCK_NAMES /
+                # _MINORITY_INTEREST_NAMES). None when the frame or the row is
+                # absent (None ≠ 0) — the band then falls back to the run-level
+                # figure instead of a fabricated nil claim.
+                "preferred_stock": _cell(preferred_row, col),
+                "noncontrolling_interest": _cell(minority_row, col),
                 # Parent-only equity (see _TOTAL_EQUITY_NAMES). None when absent,
                 # never a fabricated 0 — a 0 equity year would make the
                 # through-cycle ROE divide by zero / read as "no book value".

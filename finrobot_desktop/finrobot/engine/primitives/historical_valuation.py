@@ -100,6 +100,20 @@ class YearlyFinancials:
     fabricated a debt-free EV for levered issuers); the EV/EBITDA sample for
     that year is skipped."""
 
+    preferred_stock: float | None = None
+    """THIS fiscal year's preferred-stock carrying amount (converted to the quote
+    currency like ``net_debt``). None means the year's statement omitted the row
+    (None ≠ 0 — never fabricate a nil claim); the sample then falls back to the
+    run-level figure, i.e. the registry's ``on_missing="zero"``. Per-year so a
+    window spanning a year the issuer actually carried preferred measures that
+    year against its OWN claim, not the run's."""
+
+    noncontrolling_interest: float | None = None
+    """THIS fiscal year's noncontrolling-interest (minority-interest) carrying
+    amount, converted like ``net_debt``. Same ``None`` semantics as
+    ``preferred_stock`` — the year's own claim when present, else the run-level
+    fallback."""
+
 
 @dataclass(frozen=True)
 class PricePoint:
@@ -338,12 +352,16 @@ def _compute_multiple(
     two different formulas: any issuer carrying preferred or NCI had its own history
     measured net-debt-only while the dot drawn against it included those claims.
 
-    ``preferred_stock`` / ``noncontrolling_interest`` are the RUN's figures, applied to
-    every sample, because the yearly rows do not carry per-year claims. Their
-    ``None`` is the registry's declared ``on_missing="zero"`` — the same assumption
-    ``calculate_ev`` and the DCF bridge make, and the one
-    ``operators/audit/ev_bridge.py`` flags as unverifiable rather than silently true. A
-    per-year claims fetch is the follow-up that would retire the assumption.
+    ``preferred_stock`` / ``noncontrolling_interest`` arguments are the RUN's
+    figures, used only as a FALLBACK for a year whose own statement omitted the
+    row. Each sample prefers ``fy``'s own per-year claim (``fy.preferred_stock`` /
+    ``fy.noncontrolling_interest``) so a window spanning a year the issuer carried
+    preferred or NCI is measured against that year's own claim, not the run's;
+    only when the year is ``None`` does the run-level figure bind — the registry's
+    declared ``on_missing="zero"`` is now the PER-YEAR fallback, not a blanket
+    assumption about every year. The run-level ``None`` remains the same
+    assumption ``calculate_ev`` and the DCF bridge make, and the one
+    ``operators/audit/ev_bridge.py`` flags as unverifiable rather than silently true.
     """
     market_cap = price.close * shares
     if market_cap <= 0:
@@ -351,13 +369,19 @@ def _compute_multiple(
     if metric == "ev_ebitda":
         if fy.ebitda is None or fy.ebitda <= 0 or fy.net_debt is None:
             return None
+        sample_preferred = fy.preferred_stock if fy.preferred_stock is not None else preferred_stock
+        sample_nci = (
+            fy.noncontrolling_interest
+            if fy.noncontrolling_interest is not None
+            else noncontrolling_interest
+        )
         return evaluate(
             "ev_ebitda",
             {
                 "market_cap": market_cap,
                 "net_debt": fy.net_debt,
-                "preferred_stock": preferred_stock,
-                "noncontrolling_interest": noncontrolling_interest,
+                "preferred_stock": sample_preferred,
+                "noncontrolling_interest": sample_nci,
                 "ebitda_operating": fy.ebitda,
             },
         )

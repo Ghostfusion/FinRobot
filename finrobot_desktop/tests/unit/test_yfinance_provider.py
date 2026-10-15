@@ -1022,6 +1022,61 @@ class TestCostOfRevenueAndEquityLegs:
         assert result.data["yearly_data"][0]["total_equity"] is None
 
 
+class TestYearlyEvBridgeClaims:
+    """The annual rows must carry the YEAR's own preferred / NCI carrying claim —
+    the historical band's per-year EV bridge (``historical_loaders`` scales them
+    with the year's other figures). Read off the annual balance-sheet frame, the
+    same frame the debt/cash legs come from, symmetric with FMP's per-year
+    ``preferredStock`` / ``minorityInterest``. None ≠ 0: a row the frame omits
+    stays None so the band falls back to the run-level figure rather than
+    pretending the year's claim was nil.
+    """
+
+    @staticmethod
+    def _income(years: int = 2) -> pd.DataFrame:
+        columns = pd.to_datetime([f"{2024 - i}-09-30" for i in range(years)])
+        return pd.DataFrame(
+            {col: {"Total Revenue": (400 - i * 20) * 1e9} for i, col in enumerate(columns)}
+        )
+
+    @pytest.mark.asyncio
+    async def test_per_year_claims_are_read_from_the_annual_frame(self):
+        columns = pd.to_datetime([f"{2024 - i}-09-30" for i in range(2)])
+        balance = pd.DataFrame(
+            {
+                columns[0]: {"Preferred Stock": 15.0e9, "Minority Interest": 2.0e9},
+                columns[1]: {"Preferred Stock": 16.0e9},  # no NCI row this year
+            }
+        )
+        mock_ticker = _make_mock_ticker(
+            VALID_INFO, income_stmt=self._income(2), balance_sheet=balance
+        )
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker",
+            return_value=mock_ticker,
+        ):
+            result = await YFinanceProvider().fetch("WFC", "financials", years=2)
+
+        yearly = result.data["yearly_data"]
+        assert yearly[0]["preferred_stock"] == 15.0e9
+        assert yearly[0]["noncontrolling_interest"] == 2.0e9
+        assert yearly[1]["preferred_stock"] == 16.0e9
+        assert yearly[1]["noncontrolling_interest"] is None  # omitted row stays None
+
+    @pytest.mark.asyncio
+    async def test_missing_balance_sheet_leaves_claims_none_not_zero(self):
+        mock_ticker = _make_mock_ticker(VALID_INFO, income_stmt=self._income(2))
+        with patch(
+            "finrobot.engine.data.providers.yfinance_provider.yf.Ticker",
+            return_value=mock_ticker,
+        ):
+            result = await YFinanceProvider().fetch("WFC", "financials", years=2)
+
+        yearly = result.data["yearly_data"]
+        assert yearly[0]["preferred_stock"] is None
+        assert yearly[0]["noncontrolling_interest"] is None
+
+
 class TestTtmWindowMetadata:
     """Owner review: the forecast years were labelled from the wrong base — the
     DCF's ``revenue_base`` is the TTM window while the chart labels came from the

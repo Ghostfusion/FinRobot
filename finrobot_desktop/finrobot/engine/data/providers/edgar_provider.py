@@ -352,7 +352,32 @@ _LATEST_OPERATING_INCOME_CONCEPTS: tuple[str, ...] = (
     "IncomeLossFromOperations",
     "OperatingProfit",
 )
-_LATEST_TOTAL_ASSETS_CONCEPTS: tuple[str, ...] = ("Assets", "TotalAssets", "AssetsCurrent")
+# ``AssetsCurrent`` is deliberately NOT a fallback here (audit, 2026-10-15): current
+# assets are a COMPONENT of total assets, so an issuer tagging neither ``Assets`` nor
+# ``TotalAssets`` (only the current-assets line) had its current assets published as
+# ``latest_total_assets`` — a partial standing in for an identity total, wrong by every
+# non-current asset, and nothing downstream could see it: the equity-identity note would
+# read assets − liabilities = a total equity too small by exactly those assets, and every
+# arithmetic check still closes. With the component gone such an issuer abstains:
+# ``latest_total_assets`` stays absent, ``_equity_identity_note`` returns None (its
+# existing ``assets is None`` arm) and the missing leaf is the capability warning's
+# business. NOTE the guard below cannot catch this one: ``AssetsCurrent`` is a component,
+# NOT an ``IDENTITY_TOTAL_CONCEPTS`` member, so the vocabulary has nothing to say about it
+# — this list is the only place the defect can be prevented, hence the audit.
+_LATEST_TOTAL_ASSETS_CONCEPTS: tuple[str, ...] = ("Assets", "TotalAssets")
+
+# The same rule, ENFORCED for the asset slot too (same vocabulary helper, same
+# import-time refusal as ``_INVALID_LIABILITY_CONCEPTS`` below): a tag that IS an identity
+# total must never fill a single side of the balance sheet.
+_INVALID_ASSET_CONCEPTS: tuple[str, ...] = tuple(
+    concept for concept in _LATEST_TOTAL_ASSETS_CONCEPTS if is_identity_total(concept)
+)
+if _INVALID_ASSET_CONCEPTS:  # pragma: no cover - import guard against an edit
+    raise RuntimeError(
+        f"{_INVALID_ASSET_CONCEPTS} are balance-sheet IDENTITY TOTALS, not the assets "
+        "total — selecting one makes latest_total_assets and the liabilities side of the "
+        "same identity indistinguishable"
+    )
 # ``LiabilitiesAndStockholdersEquity`` is deliberately NOT a fallback here: it is
 # the balance-sheet IDENTITY TOTAL (total assets, tagged twice), not a liabilities
 # figure, so selecting it makes ``latest_total_liabilities == latest_total_assets``
@@ -397,6 +422,21 @@ _LATEST_SHAREHOLDERS_EQUITY_CONCEPTS: tuple[str, ...] = (
     "PartnersCapital",
     "MembersEquity",
 )
+
+# Same import-time refusal for the equity slot. ``LiabilitiesAndStockholdersEquity`` is the
+# tag that made this family a defect in the first place; read as shareholders' equity it is
+# total ASSETS, not the parent's residual — ditto
+# ``…IncludingPortionAttributableToNoncontrollingInterest`` (equity, but not the PARENT
+# figure ``latest_shareholders_equity`` promises).
+_INVALID_EQUITY_CONCEPTS: tuple[str, ...] = tuple(
+    concept for concept in _LATEST_SHAREHOLDERS_EQUITY_CONCEPTS if is_identity_total(concept)
+)
+if _INVALID_EQUITY_CONCEPTS:  # pragma: no cover - import guard against an edit
+    raise RuntimeError(
+        f"{_INVALID_EQUITY_CONCEPTS} are balance-sheet IDENTITY TOTALS (they equal Assets "
+        "by definition), not the parent's equity — selecting one publishes total assets as "
+        "latest_shareholders_equity"
+    )
 
 # A legitimate TTM window is exactly four DISCRETE quarters. edgartools labels
 # discrete quarters Q1–Q4 and tags cumulative frames (annual / half-year /

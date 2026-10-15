@@ -652,8 +652,14 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
    longer carries a hand-written list of four ratios: it reads every declaration in
    `engine/models/identities.py` (`checked_identities()`), resolves each one's declared artifact
    paths against the artifact's own leaves, and reports the first residual above
-   `IDENTITY_RESIDUAL_TOLERANCE` (the renamed `RATIO_IDENTITY_TOLERANCE`). Coverage now comes from
-   the declaration rather than from the next bug report — which is how it immediately fired on
+   the band its figures' declared precision allows (`identities.identity_tolerance`), which falls
+   back to `IDENTITY_RESIDUAL_TOLERANCE` (the renamed `RATIO_IDENTITY_TOLERANCE`) for a leaf that
+   declares no precision and NAMES which band it used in the finding. Over 142 stored artifacts
+   that band catches **63 of 609** bound checks against the coarse band's 48: the difference is
+   sub-1% caliber mismatches a flat 1% excused (a KGC operating margin 0.8179% off its own
+   `operating_income ÷ revenue`; INVH 0.2478%; MLI 0.2282%), while `ev_build` / `ev_ebitda` /
+   `ev_revenue` stay at zero at the tighter band. Coverage now comes from the declaration rather
+   than from the next bug report — which is how it immediately fired on
    `market.pe_ratio` 20.4867 against its own `market_cap ÷ income.net_income` = 20.1539 in
    `art_2026-10-12T15:57:35_EHC`, a ratio the four-entry tuple never looked at. The four ratios it
    replaced remain covered; `ev_build` / `ev_ebitda` / `ev_revenue` join them and are exact on
