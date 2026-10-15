@@ -374,7 +374,22 @@ Only steps 2, 7, 8 (plus LLM peer *selection*) involve the LLM; steps 4/5/6 igno
   blend; a `numeric_audit` finding fires when the target's own implied multiple
   leaves that band (EHC: 17.7x implied against the issuer's own p90 of 12.2x,
   which the report had been showing as "fair" without triangulating). A missing
-  band median drops the row — never a fabricated `(p25+p75)/2`.
+  band median drops the row — never a fabricated `(p25+p75)/2`. **One band, one
+  mid:** the METHOD row prices that same band at the same median
+  (`_ev_ebitda_method`, `band_median=`), so the two rows can never print two
+  central values for one distribution — TROW 2026-10-15 printed the midpoint
+  $109.20 beside the cross-check's $105.92 and the narrative, reading the
+  unlabelled value, called it "the five-year median multiple of 6.60x". The
+  arithmetic centre survives only as a fallback for a band that arrives without a
+  median, and both the row's `assumptions` and its re-rating disclosure name which
+  centre they used.
+- **A number the prose may quote rides in the basis the prose reads:** the
+  canonical thesis basis carries the confidence-weighted blend beside the anchor it
+  is NOT (`…; a confidence-weighted blend of all methods would give $X and is NOT
+  the published target`). TROW 2026-10-15's narrative wrote "a two-method weighting
+  would give $164.20" while `weighted_price` was $138.97 — the blend was whitelisted
+  for citation but absent from the string the model was paraphrasing, so there was
+  nothing to stop it reading the anchor twice.
 - **One net-income authority per report:** the trailing P/E is `market_cap ÷
   TTM net income` (the figure the income-statement table prints) and
   `MarketData.pe_basis` names that basis; the provider's `trailingPE` rides a
