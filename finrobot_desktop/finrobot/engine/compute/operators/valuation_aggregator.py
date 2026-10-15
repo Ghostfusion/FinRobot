@@ -520,6 +520,10 @@ def aggregate_valuation(
             preferred_stock=preferred_stock,
             noncontrolling_interest=noncontrolling_interest,
             band_sample_n=historical_ev_ebitda_sample_n,
+            # The SAME band median the cross-check row below capitalises, so one band
+            # yields one mid across the two rows (a missing median degrades to the
+            # p25–p75 centre INSIDE the method, disclosed there).
+            band_median=historical_ev_ebitda_median,
             warnings=warnings,
             current_price=current_price,
         )
@@ -1193,6 +1197,7 @@ def _ev_ebitda_method(
     preferred_stock: float | None = None,
     noncontrolling_interest: float | None = None,
     band_sample_n: int | None = None,
+    band_median: float | None = None,
     warnings: list[str] | None = None,
     current_price: float | None = None,
 ) -> ValuationMethodRange | None:
@@ -1256,7 +1261,53 @@ def _ev_ebitda_method(
         return None
     low = max(0.01, raw_low)
     high = max(low, raw_high)
-    mid = (low + high) / 2
+    # The band's CENTRAL estimate is its MEDIAN multiple — the same quantile the
+    # own-history cross-check beside this row capitalises (``ev_ebitda_band_cross_check``
+    # documents the mapping: ``p25 → low``, ``median → mid``, ``p75 → high``) and the
+    # standard reading of "re-rate to your own historical multiple".
+    #
+    # Taking the arithmetic centre of p25–p75 instead put TWO different mids on ONE
+    # band in ONE report: for TROW 2026-10-15 the 6.11x–7.54x band (median 6.60x)
+    # produced a method mid of $109.20 here — the label was an unqualified "$109.20"
+    # — while the cross-check row beside it printed $105.92, the SAME band capitalised
+    # at its SAME median 6.60x. The narrative, reading the label, then
+    # called $109.20 "the five-year median multiple of 6.60x" (owner review
+    # 2026-10-15): the value was defensible, the claim was not, and no reader could
+    # tell which of the two mids the method priced at.
+    #
+    # Falls back to the arithmetic centre ONLY when the band arrives without a median
+    # (legacy/partial band) — and says which one it used in ``assumptions`` and in the
+    # re-rating disclosure, so the row is never an unlabelled "mid" again.
+    median_multiple: float | None = (
+        band_median if band_median is not None and band_median > 0 else None
+    )
+    raw_mid = (
+        ev_band_equity_per_share(
+            median_multiple,
+            ttm_ebitda,
+            current_net_debt,
+            preferred_stock,
+            noncontrolling_interest,
+            shares,
+        )
+        if median_multiple is not None
+        else None
+    )
+    if median_multiple is None or raw_mid is None:
+        mid = (low + high) / 2
+        anchor_multiple = (p25 + p75) / 2
+        anchor_label = "p25–p75 midpoint"
+        anchor_mid_phrase = "p25–p75 midpoint of that band"
+        anchor_as_published = "p25–p75 midpoint, not the median"
+    else:
+        # Same floor as ``low`` and clamped into the published range: the median sits
+        # inside p25–p75 by construction, so this only guards a caller that hands over
+        # a median from some other band/period.
+        mid = min(high, max(low, raw_mid))
+        anchor_multiple = median_multiple
+        anchor_label = "median"
+        anchor_mid_phrase = "median multiple of that band"
+        anchor_as_published = "the band's median multiple"
     # Method self-description (condition i): frame this row for what it now is — a
     # RE-RATING ANCHOR (own 5y trailing band × current TTM operating EBITDA − net debt),
     # single-caliber (a trailing-year band applied to a trailing-earnings denominator, so
@@ -1310,21 +1361,24 @@ def _ev_ebitda_method(
             ttm_ebitda,
         )
         if current_implied is not None and current_implied > 0:
-            band_mid = (p25 + p75) / 2
-            ratio = band_mid / current_implied
+            # ``anchor_multiple`` (not a locally re-derived centre) so the multiple this
+            # row REVERTS TO is by construction the one its mid prices at — the median
+            # when the band carries one. Re-deriving it here is how one row ends up
+            # grading its gap against a different centre than the target it publishes.
+            ratio = anchor_multiple / current_implied
             rerating_ratio = ratio  # structured twin — the dial GRADES on this
             assumptions = (
                 f"implied re-rating: price-implied EV/TTM-EBITDA {current_implied:.1f}× → "
-                f"own 5y p25–p75 midpoint {band_mid:.1f}× ({ratio:.2f}×)"
+                f"own 5y {anchor_label} {anchor_multiple:.1f}× ({ratio:.2f}×)"
             )
             if abs(ratio - 1.0) > _RERATING_DISCLOSURE_THRESHOLD and warnings is not None:
                 shift = "expand" if ratio > 1.0 else "compress"
                 warnings.append(
                     f"ev_ebitda: reverting the target to its own 5-year historical multiple "
                     f"implies its price-implied EV/TTM-EBITDA must {shift} from "
-                    f"{current_implied:.1f}× to the p25–p75 midpoint of that band "
-                    f"{band_mid:.1f}× ({ratio:.2f}×) — an unproven mean-reversion premise on "
-                    f"the BAND AS PUBLISHED (p25–p75 midpoint, not the median); band, "
+                    f"{current_implied:.1f}× to the {anchor_mid_phrase} "
+                    f"{anchor_multiple:.1f}× ({ratio:.2f}×) — an unproven mean-reversion premise on "
+                    f"the BAND AS PUBLISHED ({anchor_as_published}); band, "
                     f"denominator and bridge are the same trailing caliber, so the gap is not "
                     f"a caliber artifact; "
                     f"{RERATING_WARNING_MARKER}."

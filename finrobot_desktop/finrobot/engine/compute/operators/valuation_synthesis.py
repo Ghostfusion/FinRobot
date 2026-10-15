@@ -1171,12 +1171,25 @@ def resolve_canonical_thesis(vs: object, ticker: str) -> CanonicalThesis:
             f"Methods: {method_breakdown}.{range_txt} {vs.degradation_note or ''}"
         ).strip()
     else:
-        anchor_txt = (
-            f"anchored on {vs.anchor_method} (comparability rule — not a blended "
-            f"midpoint of divergent methods)"
-            if vs.anchor_method
-            else _blend_label(len(vs.methods))
-        )
+        # The blend NUMBER rides with the rule. The narrative prompt reads THIS string,
+        # and told only that the target is "not a blended midpoint" the 2026-10-15 TROW
+        # narrative asserted the opposite of the run's own arithmetic — "a two-method
+        # weighting would give $164.20" (the anchor itself) while
+        # ``valuation_synthesis.weighted_price`` was $138.97. Naming both numbers, and
+        # the relation between them, leaves the prose nothing to infer.
+        if vs.anchor_method:
+            blend_txt = (
+                f"; a confidence-weighted blend of all methods would give "
+                f"${vs.weighted_price:.2f} and is NOT the published target"
+                if vs.weighted_price is not None
+                else ""
+            )
+            anchor_txt = (
+                f"anchored on {vs.anchor_method} (comparability rule — not a blended "
+                f"midpoint of divergent methods{blend_txt})"
+            )
+        else:
+            anchor_txt = _blend_label(len(vs.methods))
         basis = (
             f"Confidence={vs.confidence}; {anchor_txt}: {method_breakdown} → "
             f"${target:.2f}.{range_txt} {vs.degradation_note or ''}"

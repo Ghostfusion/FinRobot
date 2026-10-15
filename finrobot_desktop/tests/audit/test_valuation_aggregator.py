@@ -394,11 +394,20 @@ class TestAggregatorContract:
     def test_ev_ebitda_method_and_cross_check_share_one_bridge(self) -> None:
         """The published EV/EBITDA method and the own-history cross-check row apply
         the SAME p25/p75 band to the SAME TTM EBITDA through the SAME EV→equity
-        bridge, so their per-share bounds must be identical.
+        bridge, so their per-share bounds must be identical — and, since they sit
+        beside each other in one report, so must their MID.
 
         Real inputs from CF 2026-10-14: bridging net debt alone in the method put
         $86.40 beside a cross-check that had already cleared the issuer's $3.17B
         balance-sheet NCI ($65.44) — one report, two answers for one multiple.
+
+        The mid carries the same rule for the same reason (owner review 2026-10-15):
+        the method priced the band at its p25–p75 MIDPOINT while the cross-check priced
+        the identical band at its MEDIAN — TROW printed $109.20 beside $105.92 for the
+        6.11x–7.54x band, and the narrative, reading the method's unlabelled mid, called
+        $109.20 "the five-year median multiple of 6.60x". One band → one mid, the median
+        (``ev_ebitda_band_cross_check``'s own documented mapping: p25 → low,
+        median → mid, p75 → high).
         """
         ebitda, net_debt, nci, shares = (
             3_913_000_000.0,
@@ -428,10 +437,16 @@ class TestAggregatorContract:
         assert row.high == pytest.approx((p75 * ebitda - net_debt - nci) / shares)
         assert check.low == pytest.approx(row.low)
         assert check.high == pytest.approx(row.high)
-        # The method's mid is the midpoint of ITS OWN published band; the band's
-        # median is the cross-check's mid. Different estimators, both disclosed.
-        assert row.mid == pytest.approx((row.low + row.high) / 2)
+        # ONE band → ONE mid: both rows price it at the band's median multiple.
+        assert row.mid == pytest.approx((median * ebitda - net_debt - nci) / shares)
         assert check.mid == pytest.approx((median * ebitda - net_debt - nci) / shares)
+        assert row.mid == pytest.approx(check.mid)
+        # The row still publishes the band's OWN p25/p75 as its range (the median sits
+        # strictly inside it), and names the multiple its mid prices at — a bare
+        # "$109.20" with no estimator is what the narrative mislabelled.
+        assert row.low < row.mid < row.high
+        assert row.assumptions is not None
+        assert "own 5y median 4.2×" in row.assumptions
 
     def test_ev_ebitda_net_debt_lowers_target_by_exactly_net_debt_per_share(self) -> None:
         """A levered firm's per-share target is lower than the debt-free case by
