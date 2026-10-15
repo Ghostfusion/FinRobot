@@ -212,6 +212,104 @@ class TestExtractCatalystsFromNews:
         assert events[0].url == "https://reuters.com/aapl-q1"
 
 
+class TestStockRubricCommentaryIsNotAnEvent:
+    """A piece ABOUT an event must not be counted as a second event.
+
+    Owner review 2026-10-15 (TROW): the feed carried the 2026-09-17 launch
+    ("…DEBUTS BIOTECH, SMALL-CAP, AND MID-CAP EXCHANGE TRADED FUNDS") and, ten days
+    later, an opinion piece about it ("… New Active Biotech and Small-Cap ETFs Might
+    Change The Case For Investing In TROW"). Both were classified ``product``, so
+    both became ``product_launch`` events: the report told the reader there were
+    "three product launches" when there were two, and its narrative dated the launch
+    to the commentary's own day.
+
+    The detector is structural (modal + rubric phrase) rather than a launch-verb
+    gate, because genuine product headlines carry no launch verb — see the frozen
+    basket headlines pinned below.
+    """
+
+    def _category_for(self, headline: str, category: str = "product") -> str:
+        item = NewsItem(
+            title=headline,
+            source="Yahoo Finance",
+            published=datetime(2026, 9, 27, 3, 16, tzinfo=timezone.utc),
+            url="https://finance.yahoo.com/markets/stocks/articles/x",
+            category=category,  # type: ignore[arg-type]
+            sentiment="positive",
+            importance=3,
+            summary="Analyst commentary.",
+        )
+        (event,) = extract_catalysts_from_news([item], min_importance=3)
+        return event.category
+
+    def test_the_trow_commentary_is_not_a_product_launch(self):
+        assert (
+            self._category_for(
+                "T. Rowe Price\u2019s New Active Biotech and Small-Cap ETFs Might Change "
+                "The Case For Investing In TROW"
+            )
+            == "market"
+        )
+
+    def test_the_trow_launch_it_was_about_still_is_one(self):
+        assert (
+            self._category_for(
+                "T. ROWE PRICE DEBUTS BIOTECH, SMALL-CAP, AND MID-CAP EXCHANGE TRADED FUNDS"
+            )
+            == "product_launch"
+        )
+
+    def test_a_demoted_item_is_kept_with_its_sentiment_and_impact(self):
+        """Demoted, never dropped: the event stays in the feed (only its category
+        moves to the taxonomy's non-event bucket), so no information is lost."""
+        item = NewsItem(
+            title="T. Rowe Price's New Active Biotech ETFs Might Change The Case For Investing In TROW",
+            source="Yahoo Finance",
+            published=datetime(2026, 9, 27, 3, 16, tzinfo=timezone.utc),
+            url="https://finance.yahoo.com/markets/stocks/articles/x",
+            category="product",
+            sentiment="positive",
+            importance=4,
+            summary="Analyst commentary.",
+        )
+        (event,) = extract_catalysts_from_news([item], min_importance=3)
+        assert event.category == "market"
+        assert event.sentiment == "positive"
+        assert event.impact_score == 4
+        assert event.headline == item.title
+
+    def test_launch_headlines_without_a_launch_verb_survive(self):
+        """The frozen calibration basket's real product headlines carry no launch
+        verb, which is why the gate is the commentary genre and not a verb."""
+        assert (
+            self._category_for(
+                "Tesla Takes a Page From Ford, GM and Toyota's Playbook With the Model Y L"
+            )
+            == "product_launch"
+        )
+        assert (
+            self._category_for(
+                "Apple Is Reportedly Planning 5 New iPhones -- Including a $2,500 "
+                "Foldable. Here's What It Means for the Stock."
+            )
+            == "product_launch"
+        )
+
+    def test_a_modal_pre_announcement_without_a_rubric_phrase_survives(self):
+        assert self._category_for("Apple Could Announce a New iPhone Next Week") == "product_launch"
+
+    def test_the_demotion_is_not_product_specific(self):
+        """A commentary re-framing an earnings item is not a second earnings event
+        either — the rule reads the headline, not the category."""
+        assert (
+            self._category_for(
+                "TROW's Q3 Results Might Change The Case For Investing In TROW",
+                category="earnings",
+            )
+            == "market"
+        )
+
+
 class TestSourceAuthorityWeighting:
     """BACKLOG A5.2: news-derived catalysts get a flat probability=0.7 weight
     UNLESS the source is objectively primary (SEC) or a plaintiff-solicitation

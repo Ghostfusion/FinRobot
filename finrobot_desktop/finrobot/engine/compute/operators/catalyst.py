@@ -130,6 +130,54 @@ def _is_law_firm_solicitation(headline: str) -> bool:
     )
 
 
+# Retrospective stock-rubric commentary: the "… Might Change The Case For Investing
+# In <TICKER>" / "Here's Why …" genre. Such a piece reports NO new event — it
+# re-frames one that was reported earlier — so it must not become a catalyst event
+# in the category of the event it is opining about.
+#
+# Both halves are required, and that is the whole point of the conjunction: a modal
+# alone ("Apple Could Announce A New iPhone") is how ordinary pre-announcements are
+# written, and a rubric phrase alone ("… a closer look at the new fund") appears in
+# genuine coverage. Together they are the opinion genre.
+_COMMENTARY_MODAL_RE = re.compile(r"\b(?:might|could|may|should|would|will)\b", re.IGNORECASE)
+_COMMENTARY_RUBRIC_RE = re.compile(
+    r"case for investing"
+    r"|what (?:investors|you) (?:need|should) to know"
+    r"|here'?s (?:why|what)"
+    r"|why (?:it|this) matters"
+    r"|is it time to buy"
+    r"|should you (?:buy|sell)"
+    r"|better buy"
+    r"|a closer look"
+    r"|what it means for",
+    re.IGNORECASE,
+)
+
+
+def _is_stock_rubric_commentary(headline: str) -> bool:
+    """True iff `headline` is the retrospective stock-rubric commentary genre.
+
+    Owner review 2026-10-15 (TROW): the feed carried ONE launch — 2026-09-17,
+    "T. ROWE PRICE DEBUTS BIOTECH, SMALL-CAP, AND MID-CAP EXCHANGE TRADED FUNDS" —
+    and, ten days later, an opinion piece ABOUT it: "T. Rowe Price's New Active
+    Biotech and Small-Cap ETFs Might Change The Case For Investing In TROW". The
+    news classifier labelled the second one ``product``, so it became a second
+    ``product_launch`` event: the report told the reader there were "three product
+    launches" when there were two, and its narrative dated the launch to the
+    commentary's own day.
+
+    Structural and source-agnostic, like `_is_law_firm_solicitation` next to it: it
+    reads the headline and nothing else. It deliberately does NOT gate on a launch
+    verb — real product headlines in the frozen calibration basket carry none
+    (Tesla's "Tesla Takes a Page From Ford, GM and Toyota's Playbook With the Model
+    Y L", Apple's "Apple Is Reportedly Planning 5 New iPhones"), so a verb gate would
+    demote genuine launches to hide one commentary.
+    """
+    return bool(_COMMENTARY_MODAL_RE.search(headline)) and bool(
+        _COMMENTARY_RUBRIC_RE.search(headline)
+    )
+
+
 def _source_authority_tier(headline: str, url: str | None) -> str:
     """Classify a news-derived catalyst's source into a net-sentiment weight tier.
 
@@ -239,9 +287,18 @@ def extract_catalysts_from_news(
         if item.importance < min_importance:
             continue
         tier = _source_authority_tier(item.title, item.url)
+        category = classify_catalyst_type(item.category)
+        if _is_stock_rubric_commentary(item.title):
+            # A rubric commentary reports no event of its own; it belongs in the
+            # taxonomy's non-event bucket, not in the category of the event it is
+            # re-framing (``market`` catches analyst/macro/other already). Without
+            # this, ONE launch is counted once per piece written about it — TROW
+            # 2026-10-15 shipped "three product launches" for two. Demoted, never
+            # dropped: the item keeps its sentiment and impact in the feed.
+            category = "market"
         events.append(
             CatalystEvent(
-                category=cast(Any, classify_catalyst_type(item.category)),
+                category=cast(Any, category),
                 headline=item.title,
                 sentiment=item.sentiment,
                 impact_score=item.importance,
