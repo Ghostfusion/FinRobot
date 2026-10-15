@@ -46,6 +46,9 @@ DEFAULT_RISK_FREE_RATE: Final[float] = 0.043  # 10Y Treasury, 2026-01
 # premium and systematically inflated every WACC ~120bp, pushing fair value to
 # 25–55% of market across the mega-caps. Source: pages.stern.nyu.edu Data 2026.
 DEFAULT_EQUITY_RISK_PREMIUM: Final[float] = 0.0423
+#: As-of date printed with the two market-wide RATE inputs above, so a reader can age
+#: the discount rate instead of reading a fixed input as a live quote.
+RATE_INPUTS_AS_OF: Final[str] = "2026-01"
 # Perpetuity growth — a defensible long-run rate BELOW the risk-free ceiling
 # (Damodaran caps terminal growth at the risk-free rate). 3.0% ≈ long-run
 # inflation plus a modest real sliver; the sell-side base case for mega-cap
@@ -1030,8 +1033,26 @@ def seed_dcf_inputs(
         debt_ratio = industry.debt_ratio
         prov["debt_ratio"] = f"{debt_ratio:.1%} ({industry.industry} industry D/(D+E))"
 
-    prov["risk_free_rate"] = f"{risk_free_rate:.1%} (current 10Y US Treasury yield)"
-    prov["equity_risk_premium"] = f"{equity_risk_premium:.1%} (Damodaran implied ERP)"
+    # Say WHICH rate this is, and age it. Both defaults are market-wide constants
+    # refreshed by a code change (see DEFAULT_RISK_FREE_RATE /
+    # DEFAULT_EQUITY_RISK_PREMIUM, Damodaran's 2026-01 update) — the old labels read
+    # "current 10Y US Treasury yield" and "Damodaran implied ERP" with no date, which
+    # is a live-quote claim for a fixed input: the 2026-10-15 TROW reviewer back-solved
+    # the ERP from the printed WACC (~4.2%), could not tell what it was or when it was
+    # set, and flagged the resulting low discount rate as a thesis risk. A caller that
+    # passes its own rate is named as such instead.
+    prov["risk_free_rate"] = (
+        f"{risk_free_rate:.1%} (10Y US Treasury yield — fixed input as of "
+        f"{RATE_INPUTS_AS_OF}, refreshed by a code change, not a live quote)"
+        if risk_free_rate == DEFAULT_RISK_FREE_RATE
+        else f"{risk_free_rate:.1%} (10Y US Treasury yield supplied by the caller)"
+    )
+    prov["equity_risk_premium"] = (
+        f"{equity_risk_premium:.1%} (Damodaran implied ERP — fixed input as of "
+        f"{RATE_INPUTS_AS_OF}, refreshed by a code change, not a live fetch)"
+        if equity_risk_premium == DEFAULT_EQUITY_RISK_PREMIUM
+        else f"{equity_risk_premium:.1%} (market risk premium supplied by the caller)"
+    )
     prov["terminal_growth_rate"] = f"{terminal_growth_rate:.1%} (long-run US nominal GDP growth)"
     prov["terminal_roic"] = (
         f"{DEFAULT_TERMINAL_ROIC:.0%} (Damodaran mature-firm return on new invested "
