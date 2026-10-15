@@ -25,11 +25,48 @@ export function MarkdownLite({ text, className, style }: MarkdownLiteProps) {
 
 type Block =
   | { kind: 'p'; text: string }
-  | { kind: 'h'; level: 1 | 2 | 3; text: string }
+  | { kind: 'h'; level: number; text: string }
   | { kind: 'ul'; items: string[] }
   | { kind: 'ol'; items: string[] }
+  | { kind: 'table'; header: string[]; rows: string[][] }
   | { kind: 'code'; text: string }
   | { kind: 'blank' }
+
+// A GFM table's second line: `|---|:--:|` and friends, and NOTHING else. Requiring
+// the separator row is what keeps a stray `|` (or a `|` inside prose) a paragraph.
+const TABLE_SEPARATOR_RE = /^\s*\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?\s*$/
+
+function isTableSeparator(line: string): boolean {
+  return TABLE_SEPARATOR_RE.test(line)
+}
+
+// Table ink, in the component's own inline-style idiom (it carries no stylesheet,
+// so `.md-content table.md-table` in App.css never applies to it).
+const tableHeadStyle: React.CSSProperties = {
+  textAlign: 'left',
+  padding: '4px 8px',
+  fontWeight: 600,
+  color: 'var(--text-secondary)',
+  borderBottom: '1px solid var(--border)',
+  whiteSpace: 'nowrap',
+}
+
+const tableCellStyle: React.CSSProperties = {
+  padding: '4px 8px',
+  borderBottom: '1px solid var(--border-faint)',
+  color: 'var(--text-primary)',
+  verticalAlign: 'top',
+}
+
+
+function splitTableRow(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((cell) => cell.trim())
+}
 
 function parseBlocks(input: string): Block[] {
   const lines = input.split('\n')
@@ -57,12 +94,26 @@ function parseBlocks(input: string): Block[] {
       continue
     }
 
-    // Heading
-    const heading = line.match(/^(#{1,3})\s+(.*)$/)
+    // Heading — `####`/`#####` are real headings in the report's Data Collection
+    // section and used to fall through to a paragraph, printing "#### Foo" verbatim
+    // (reviewer, 2026-10-15 TROW report).
+    const heading = line.match(/^(#{1,6})\s+(.*)$/)
     if (heading) {
-      const level = heading[1].length as 1 | 2 | 3
-      blocks.push({ kind: 'h', level, text: heading[2] })
+      blocks.push({ kind: 'h', level: heading[1].length, text: heading[2] })
       i += 1
+      continue
+    }
+
+    // GFM pipe table: header row, then a `|---|` separator row, then body rows.
+    if (line.includes('|') && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
+      const header = splitTableRow(line)
+      i += 2
+      const rows: string[][] = []
+      while (i < lines.length && lines[i].includes('|') && lines[i].trim() !== '') {
+        rows.push(splitTableRow(lines[i]))
+        i += 1
+      }
+      blocks.push({ kind: 'table', header, rows })
       continue
     }
 
@@ -95,9 +146,10 @@ function parseBlocks(input: string): Block[] {
       i < lines.length &&
       lines[i].trim() !== '' &&
       !lines[i].startsWith('```') &&
-      !/^#{1,3}\s/.test(lines[i]) &&
+      !/^#{1,6}\s/.test(lines[i]) &&
       !/^\s*[-*+]\s/.test(lines[i]) &&
-      !/^\s*\d+\.\s/.test(lines[i])
+      !/^\s*\d+\.\s/.test(lines[i]) &&
+      !(lines[i].includes('|') && i + 1 < lines.length && isTableSeparator(lines[i + 1]))
     ) {
       buf.push(lines[i])
       i += 1
@@ -147,6 +199,43 @@ function renderBlock(block: Block, key: number): ReactNode {
           ))}
         </ol>
       )
+    case 'table': {
+      // A short row is padded so the grid keeps its columns; a long one is kept
+      // whole (the browser's own column sizing is the authority, not this parser).
+      const width = Math.max(block.header.length, ...block.rows.map((r) => r.length), 0)
+      return (
+        <table
+          key={key}
+          style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            margin: '6px 0',
+            fontSize: '0.78rem',
+          }}
+        >
+          <thead>
+            <tr>
+              {Array.from({ length: width }, (_, c) => (
+                <th key={c} style={tableHeadStyle}>
+                  {renderInline(block.header[c] ?? '')}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {block.rows.map((row, r) => (
+              <tr key={r}>
+                {Array.from({ length: width }, (_, c) => (
+                  <td key={c} style={tableCellStyle}>
+                    {renderInline(row[c] ?? '')}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )
+    }
     case 'code':
       return (
         <pre

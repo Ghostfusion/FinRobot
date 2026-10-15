@@ -50,4 +50,36 @@ describe('MarkdownLite', () => {
     expect(screen.queryByText(/sandbox:\/\//)).not.toBeInTheDocument()
     expect(screen.queryByText(/\]\(/)).not.toBeInTheDocument()
   })
+
+  it('renders a GFM pipe table as a real table', () => {
+    // The report's Data Collection section is markdown tables; before this they
+    // printed as literal `| Metric | Value |` rows (2026-10-15 TROW review).
+    const { container } = render(
+      <MarkdownLite
+        text={
+          '| Metric | Value | Units |\n| --- | ---: | --- |\n| Revenue | 7,592,000,000 | USD |\n| EBITDA | 3,177,000,000 | USD |'
+        }
+      />,
+    )
+    const table = container.querySelector('table')
+    expect(table).not.toBeNull()
+    expect(container.querySelectorAll('thead th')).toHaveLength(3)
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(2)
+    expect(container.textContent).not.toContain('|')
+    expect(screen.getByText('7,592,000,000')).toBeInTheDocument()
+  })
+
+  it('keeps a stray pipe in prose a paragraph', () => {
+    // Only a header row followed by a `|---|` separator is a table.
+    const { container } = render(<MarkdownLite text={'volume | notional grew this year'} />)
+    expect(container.querySelector('table')).toBeNull()
+    expect(container.textContent).toContain('volume | notional')
+  })
+
+  it('renders #### and ##### headings without the hashes', () => {
+    render(<MarkdownLite text={'#### Instrument Identifiers\n\n##### Nested'} />)
+    expect(screen.getByText('Instrument Identifiers')).toBeInTheDocument()
+    expect(screen.getByText('Nested')).toBeInTheDocument()
+    expect(screen.queryByText(/#/)).not.toBeInTheDocument()
+  })
 })

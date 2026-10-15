@@ -48,15 +48,36 @@ export function ChapterFilings({ filings, xbrl }: Props): React.ReactElement {
 
   // Flatten the concept-keyed bag into rows. Each key owns a fact LIST; a legacy
   // or hand-edited artifact can carry anything, so guard instead of asserting.
+  //
+  // A `_`-prefixed key is NOT a concept: `_equity_identity` holds one note object
+  // (the A − L = equity record the backend's contract clause C10c reads), so it has
+  // no value/period_end/units. Rendered as a row it printed `_equity_identity | — |
+  // — | —` (2026-10-15 TROW review) — a blank line that reads as missing data. The
+  // note's sentence belongs under the table; the key must stay in the payload, so
+  // nothing is dropped from the artifact.
   const xbrlRows: { key: string; fact: XbrlFactShape }[] = []
+  const xbrlNotes: string[] = []
   for (const [key, facts] of Object.entries(xbrl ?? {})) {
     if (!Array.isArray(facts)) continue
+    if (key.startsWith('_')) {
+      for (const entry of facts) {
+        const note = (entry as { note?: unknown } | null)?.note
+        if (typeof note === 'string' && note.length > 0) xbrlNotes.push(note)
+      }
+      continue
+    }
     for (const fact of facts) xbrlRows.push({ key, fact })
   }
   xbrlRows.sort((a, b) => a.key.localeCompare(b.key))
 
   const hasTenK = tenK?.has_10k === true
-  if (!hasTenK && tenQs.length === 0 && eightKs.length === 0 && xbrlRows.length === 0) {
+  if (
+    !hasTenK &&
+    tenQs.length === 0 &&
+    eightKs.length === 0 &&
+    xbrlRows.length === 0 &&
+    xbrlNotes.length === 0
+  ) {
     return (
       <Chapter id="filings">
         <div style={gapCallout}>
@@ -228,6 +249,22 @@ export function ChapterFilings({ filings, xbrl }: Props): React.ReactElement {
               locale,
             )}
           </MissingNote>
+        )}
+        {xbrlNotes.length > 0 && (
+          <>
+            {xbrlNotes.map((note, i) => (
+              <p key={i} style={footNote}>
+                {note}
+              </p>
+            ))}
+            <p style={footNote}>
+              {tr(
+                '以上为本次快照记录的恒等式注释（资产 − 负债 = 权益），非 US-GAAP 科目，故不列入上表。',
+                'The notes above are the snapshot’s own identity records (assets − liabilities = equity), not us-gaap concepts — which is why they are not rows of the table.',
+                locale,
+              )}
+            </p>
+          </>
         )}
       </SubChapter>
     </Chapter>

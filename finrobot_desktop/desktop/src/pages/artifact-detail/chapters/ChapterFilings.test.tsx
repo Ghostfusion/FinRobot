@@ -105,6 +105,31 @@ describe('XBRL fact warnings', () => {
     ).toBeInTheDocument()
   })
 
+  it('renders the equity-identity record as a note, never as a blank fact row', () => {
+    // 2026-10-15 TROW review: `_equity_identity` is an array holding a NOTE object,
+    // so it passed the Array.isArray guard and printed as a blank concept row.
+    // The note is the A − L = equity record the backend's C10c clause reads,
+    // so it stays in the payload and moves under the table.
+    renderChapter(null, {
+      'us-gaap:Assets': [
+        {
+          concept: 'us-gaap:Assets',
+          value: 15_357_200_000,
+          period_end: '2026-06-30',
+          units: 'USD',
+        },
+      ],
+      _equity_identity: [
+        {
+          concept: '_equity_identity',
+          note: 'Assets 15,357,200,000 − Liabilities 3,184,400,000 = total equity 12,172,800,000',
+        },
+      ],
+    } as unknown as XbrlFactsSnapshotShape)
+    expect(screen.getByText(/Assets 15,357,200,000/)).toBeTruthy()
+    expect(screen.queryByText('_equity_identity')).toBeNull()
+  })
+
   it('renders no warning note for a current fact', () => {
     renderChapter(null, {
       'us-gaap:Assets': [

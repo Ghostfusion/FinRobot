@@ -8066,6 +8066,18 @@ body.app-bg .cosmic-stars.cosmic-stars-fast {
     gap: 0 !important;
   }
 
+  /* Recharts measures its container in SCREEN pixels and paints an <svg> at that
+     width. Print re-lays the column out at the paper width but runs no
+     ResizeObserver callback, so a chart kept its on-screen pixel width and the
+     card's overflow:hidden cut it at the right margin — the 2026-10-15 TROW review
+     saw charts "clipped at the right edge" on pages 9, 10 and 12. Every surface
+     carries a viewBox, so capping it to the column scales the chart down instead
+     of cropping it; where Recharts did re-measure, the cap is a no-op. */
+  .recharts-surface {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
   /* Keep a row / self-contained card whole across a page break. NOT applied to
      <section>: chapters are taller than a page, browsers ignore the hint there
      and it can push a whole blank page. */

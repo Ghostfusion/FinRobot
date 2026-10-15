@@ -305,13 +305,19 @@ export default function FootballField({
             gap: 10,
           }}
         >
-          {/* Method labels */}
+          {/* Method labels. The column is a FIXED 110px and a sublabel is provenance
+              prose — the cross-check's `basis` runs to a few hundred characters — so
+              without clipping it ran straight through the plot and the value column
+              (2026-10-15 TROW review: "the football-field labels overlap"). The full
+              text is still on the row's `title` tooltip, so nothing is lost. */}
           <div
             style={{
               display: 'flex',
               flexDirection: 'column',
               paddingTop: TOP_PAD,
               gap: ROW_HEIGHT - 18,
+              minWidth: 0,
+              overflow: 'hidden',
             }}
           >
             {rows.map((r) => {
@@ -319,8 +325,9 @@ export default function FootballField({
               return (
                 <div
                   key={r.method}
-                  // Cross-checks expose their basis/note prose as a hover tooltip.
-                  title={isCross ? (r.note ?? r.basis ?? undefined) : undefined}
+                  // Cross-checks expose their basis/note prose as a hover tooltip; every
+                  // row exposes its own sublabel, which the column clips to fit.
+                  title={isCross ? (r.note ?? r.basis ?? undefined) : (r.sublabel ?? undefined)}
                   style={{
                     height: 18,
                     display: 'flex',
@@ -330,6 +337,8 @@ export default function FootballField({
                     fontSize: 11.5,
                     color: isCross ? 'var(--text-muted)' : 'var(--text-primary)',
                     letterSpacing: '0.04em',
+                    minWidth: 0,
+                    overflow: 'hidden',
                   }}
                 >
                   <span style={{ textTransform: 'uppercase' }}>
@@ -360,6 +369,10 @@ export default function FootballField({
                         textTransform: 'none',
                         letterSpacing: '0.02em',
                         whiteSpace: 'nowrap',
+                        display: 'block',
+                        maxWidth: '100%',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
                       }}
                     >
                       {r.sublabel}
