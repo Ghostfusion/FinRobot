@@ -97,6 +97,60 @@ describe('ChapterCompanyOverview — sourced snapshot strip', () => {
     expect(screen.getByText('AAPL designs and sells consumer electronics.')).toBeInTheDocument()
   })
 
+  it('states the DECLARED WACC β basis when the artifact carries one', () => {
+    // 'raw' — β≤1 kept unadjusted: the note states the fact, not the rule.
+    render(
+      <ChapterCompanyOverview
+        thesis={thesis({ company_overview: null })}
+        rawData={RAW_DATA}
+        historicalMetrics={HISTORICAL}
+        quoteCurrency="USD"
+        dataSource="fmp"
+        fetchedAt={null}
+        dcfBetaBasis="raw"
+        segmentOverview={null}
+        reportingCurrency="USD"
+      />,
+    )
+    expect(screen.getByText(/this same raw 5Y value/)).toBeInTheDocument()
+    expect(screen.queryByText(/applies only when β>1/)).toBeNull()
+
+    // 'blume' — the β>1 adjustment was applied; still names the threshold.
+    render(
+      <ChapterCompanyOverview
+        thesis={thesis({ company_overview: null })}
+        rawData={RAW_DATA}
+        historicalMetrics={HISTORICAL}
+        quoteCurrency="USD"
+        dataSource="fmp"
+        fetchedAt={null}
+        dcfBetaBasis="blume"
+        segmentOverview={null}
+        reportingCurrency="USD"
+      />,
+    )
+    expect(screen.getByText(/DCF\/WACC β is Blume-adjusted/)).toHaveTextContent('β>1')
+  })
+
+  it('treats an unrecognised basis as absent (legacy rule, never a false caliber)', () => {
+    render(
+      <ChapterCompanyOverview
+        thesis={thesis({ company_overview: null })}
+        rawData={RAW_DATA}
+        historicalMetrics={HISTORICAL}
+        quoteCurrency="USD"
+        dataSource="fmp"
+        fetchedAt={null}
+        // A value outside the declared vocabulary (e.g. a future/typo'd enum) must
+        // read as UNDECLARED, not be echoed onto the tile.
+        dcfBetaBasis={'industry' as never}
+        segmentOverview={null}
+        reportingCurrency="USD"
+      />,
+    )
+    expect(screen.getByText(/applies only when β>1 \(β≤1 is used as-is\)/)).toBeInTheDocument()
+  })
+
   it('telemetry row wraps/shrinks instead of clipping (auto-fit grid, no overflow:hidden)', () => {
     // jsdom can't measure a rendered clip; this pins the structural
     // preconditions of the fix (the pixel result stays a browser claim).

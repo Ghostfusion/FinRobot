@@ -33,6 +33,7 @@ from pydantic import TypeAdapter
 from finrobot.artifact.contract import CONTRACT_CLAUSES
 from finrobot.artifact.field_registry import REGISTRY, FieldCaliber
 from finrobot.engine.models.measurement import Measure, Proxy, Withheld, use_proxy
+from finrobot.engine.models.identities import leaf_kind
 from finrobot.engine.models.numeric_claim import Finding, NumericClaim
 
 if TYPE_CHECKING:
@@ -242,6 +243,10 @@ def _claim(artifact: Artifact, field_key: str, findings: list[Finding]) -> Numer
     return NumericClaim(
         field_key=field_key,
         value=value,
+        # The DECLARED kind of this field (identities.LEAF_KINDS), not an inference from
+        # its magnitude: 46.8% of a $15.8B enterprise value is a total, and a consumer
+        # that cannot tell that from a share price will restate one as the other.
+        kind=leaf_kind(field_key),
         currency=_currency(artifact, decision, caliber),
         period=_period(artifact, caliber),
         source=source,

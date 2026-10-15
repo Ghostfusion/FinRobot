@@ -298,3 +298,41 @@ export function lookupTerm(term: string, locale: Locale): TermDef | null {
   if (!suffix) return null
   return TERMS[suffix][locale]
 }
+
+// ── Beta caliber ─────────────────────────────────────────────────────────
+// The Company-Overview β tile shows the provider's raw 5Y regression β, while
+// the DCF/WACC β it is read against may have been Blume-adjusted. The backend
+// DECLARES which: `financial_modeling.inputs.assumption_provenance.beta_basis`
+// ∈ "raw" | "blume" (absent on legacy artifacts). The tile's caliber note lives here, beside the β glossary
+// it cross-references, so its two cases (Blume applied / used raw) and the
+// legacy rule fallback can never drift apart.
+
+/** Declared basis of the β the DCF/WACC used: ``blume`` — the raw regression β
+ *  was Blume-adjusted (the β>1 case); ``raw`` — it was used at its raw value
+ *  (β≤1, or an industry-proxy substitution, where no Blume adjustment applies).
+ *  Absent on legacy artifacts, which carry no declaration. */
+export type BetaBasis = 'raw' | 'blume'
+
+/** The β tile's caliber note. When the artifact DECLARES ``beta_basis`` the note
+ *  states the fact (the DCF/WACC used this β raw, or used its Blume-adjusted
+ *  counterpart); when it does not — a legacy artifact — the note falls back to
+ *  the conditional rule, so the tile never prints a caliber the artifact did not
+ *  declare. Either way the note states the β>1 threshold, so a reader cannot
+ *  apply Blume to a β≤1 name and expect the WACC's number. */
+export function betaCaliberNote(basis: BetaBasis | null | undefined, locale: Locale): string {
+  if (basis === 'raw') {
+    return locale === 'en'
+      ? 'Provider 5y β, unadjusted — the DCF/WACC β is this same raw 5Y value: no Blume adjustment applies (the β>1 rule was not triggered).'
+      : '行情商 5 年 β（未调整）—— DCF/WACC 用的就是这个原始 5 年 β：无需 Blume 调整（β>1 的规则未触发）。'
+  }
+  if (basis === 'blume') {
+    return locale === 'en'
+      ? 'Provider 5y β, unadjusted — the DCF/WACC β is Blume-adjusted (β>1: 2/3·β + 1/3·1.0 toward 1.0).'
+      : '行情商 5 年 β（未调整）—— DCF/WACC 用的是 Blume 调整后的 β（β>1：2/3·β + 1/3·1.0 向 1.0 收敛）。'
+  }
+  // Legacy artifact: no declared basis. State the rule instead of a fact — the
+  // DCF's Blume adjustment is ASYMMETRIC (β>1 only), so a β≤1 name is used raw.
+  return locale === 'en'
+    ? "Provider 5y β, unadjusted — the DCF's Blume-adjusted β applies only when β>1 (β≤1 is used as-is)"
+    : '行情商 5 年 β（未调整）—— DCF 的 Blume 调整 β 仅在 β>1 时适用（β≤1 直接用原值）'
+}

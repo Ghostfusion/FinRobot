@@ -38,13 +38,21 @@ NARRATIVE_DRIFT_TOLERANCE = 0.01
 # — a visible break, not a smooth continuum.
 NARRATIVE_APPROXIMATION_BAND = 0.10
 
-# Relative tolerance for "a published ratio IS its own operands divided" (contract
-# clause C10e). Structural rather than statistical: both sides are read from the
-# SAME published leaves of one artifact, so a correct ratio is exact to float
-# representation and 1% only absorbs a provider's own rounding of the ratio. The
-# check exists for the CF 2026-10-14 shape — ``operating_margin`` 0.49325 published
-# beside ``operating_income`` 3,025,000,000 / ``revenue`` 7,738,999,808 = 0.39088
-# (21% out, and above that same block's 42.49% gross margin, which is impossible)
-# — where every provenance check was silent because one provider supplied all
-# three figures.
-RATIO_IDENTITY_TOLERANCE = 0.01
+# Relative tolerance for "a published quantity IS its own declared derivation"
+# (contract clause C10e, which walks ``engine/models/identities``). Structural rather
+# than statistical: both sides are read from the SAME published leaves of one
+# artifact, so a correct value is exact to float representation and 1% only absorbs a
+# provider's own rounding. The check exists for the CF 2026-10-14 shape —
+# ``operating_margin`` 0.49325 published beside ``operating_income`` 3,025,000,000 /
+# ``revenue`` 7,738,999,808 = 0.39088 (21% out, and above that same block's 42.49%
+# gross margin, which is impossible) — where every provenance check was silent
+# because one provider supplied all three figures.
+#
+# Named for what it now guards: the registry covers every declared identity (ratios,
+# EV/EBITDA and EV/Revenue, the EV build, the trailing P/E, the margins), not just the
+# ratios the clause was born for. XBRL derives this kind of tolerance from the
+# published precision of the facts themselves (Calculations 1.1 §5.2.3-5.2.4, the
+# rounded/truncated fact value interval); our leaves round to a fixed display precision
+# per field, so a single relative band is the honest approximation until a field
+# declares its own digits.
+IDENTITY_RESIDUAL_TOLERANCE = 0.01

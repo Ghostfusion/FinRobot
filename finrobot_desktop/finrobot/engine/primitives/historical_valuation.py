@@ -26,6 +26,8 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Literal
 
+from finrobot.engine.models.identities import evaluate
+
 HistoricalMetricName = Literal["ev_ebitda", "p_fcf"]
 """Two metrics supported in v5 (spec §6.6)."""
 
@@ -137,6 +139,8 @@ def compute_historical_band(
     prices: list[PricePoint],
     shares_outstanding: float,
     current_override: float | None = None,
+    preferred_stock: float | None = None,
+    noncontrolling_interest: float | None = None,
 ) -> HistoricalBand:
     """Build the band + timeline + quantiles for a single metric.
 
@@ -180,7 +184,9 @@ def compute_historical_band(
         if fy is None:
             skipped_no_financial += 1
             continue
-        multiple = _compute_multiple(metric, point, fy, shares_outstanding)
+        multiple = _compute_multiple(
+            metric, point, fy, shares_outstanding, preferred_stock, noncontrolling_interest
+        )
         # math.isfinite: a single NaN close (halted session / bad provider row)
         # passes both `is None` and `<= 0` (NaN comparisons are False) and
         # poisons every quantile of the band — same family as the peer-median
@@ -320,14 +326,41 @@ def _compute_multiple(
     price: PricePoint,
     fy: YearlyFinancials,
     shares: float,
+    preferred_stock: float | None = None,
+    noncontrolling_interest: float | None = None,
 ) -> float | None:
+    """One sample: the multiple at ``price`` on ``fy``'s figures.
+
+    The EV/EBITDA leg is ``identities.evaluate("ev_ebitda")`` — the declaration the
+    band's own ``current_override`` comes from (``multiples.current_ev_ebitda``) and
+    the one the comps chapter prints. It used to be written out here as
+    ``(market_cap + net_debt) / ebitda``, so the samples and the "current" marker were
+    two different formulas: any issuer carrying preferred or NCI had its own history
+    measured net-debt-only while the dot drawn against it included those claims.
+
+    ``preferred_stock`` / ``noncontrolling_interest`` are the RUN's figures, applied to
+    every sample, because the yearly rows do not carry per-year claims. Their
+    ``None`` is the registry's declared ``on_missing="zero"`` — the same assumption
+    ``calculate_ev`` and the DCF bridge make, and the one
+    ``operators/audit/ev_bridge.py`` flags as unverifiable rather than silently true. A
+    per-year claims fetch is the follow-up that would retire the assumption.
+    """
     market_cap = price.close * shares
     if market_cap <= 0:
         return None
     if metric == "ev_ebitda":
         if fy.ebitda is None or fy.ebitda <= 0 or fy.net_debt is None:
             return None
-        return (market_cap + fy.net_debt) / fy.ebitda
+        return evaluate(
+            "ev_ebitda",
+            {
+                "market_cap": market_cap,
+                "net_debt": fy.net_debt,
+                "preferred_stock": preferred_stock,
+                "noncontrolling_interest": noncontrolling_interest,
+                "ebitda_operating": fy.ebitda,
+            },
+        )
     # metric == "p_fcf" — the Literal alias has no other variants.
     if fy.free_cash_flow is None or fy.free_cash_flow <= 0:
         return None

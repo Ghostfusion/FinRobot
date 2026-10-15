@@ -107,6 +107,13 @@ export interface DcfShape {
     growth_unreachable: boolean
     growth_ceiling?: number | null
     ceiling_price?: number | null
+    // DECLARED by the compute layer (`dcf._premium_driver`): which side of the
+    // equation the premium over the model's value is a bet on. Absent on legacy
+    // artifacts, where the premium sentence falls back to the local
+    // `implied_growth < 0` test. A renderer must never infer this from the SIZE of
+    // the premium — that is what printed "a bet on the implied growth" beside a
+    // NEGATIVE implied growth.
+    premium_driver?: 'growth' | 'discount_rate' | null
   } | null
   inputs?: {
     revenue_base?: number

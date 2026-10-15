@@ -24,6 +24,8 @@
 
 import type { ReactNode } from 'react'
 import { SourcedNumber, type NumberSource } from '../../../components/SourcedNumber'
+import { betaCaliberNote, type BetaBasis } from '../../../components/termDictionary'
+import { useI18n } from '../../../i18n'
 
 // ── Read model ────────────────────────────────────────────────────────────────
 
@@ -49,9 +51,15 @@ export interface SnapshotMetric {
    *  trailing CAGR the foot labels, a provider 5y beta the note dates). */
   period?: string
   /** A short lower-case caveat under the foot: what the figure IS and its
-   *  caliber (e.g. the beta's provider-5y/unadjusted basis + the DCF's
-   *  Blume-adjusted counterpart). Localised by the chapter. */
+   *  caliber. Localised by the chapter (or, for a beta metric, derived here from
+   *  the declared `basis` — see below). */
   note?: string
+  /** β metric only: the DECLARED basis of the β the DCF/WACC USED, read by the
+   *  chapter from `financial_modeling.inputs.assumption_provenance.beta_basis`
+   *  (`"raw" | "blume"`). When present, the tile's caliber note states that fact;
+   *  absent on legacy artifacts, where the note falls back to the conditional β>1
+   *  rule. Ignored for non-beta metrics. */
+  basis?: BetaBasis | null
   source?: NumberSource
 }
 
@@ -430,7 +438,12 @@ function TelemetryTile({
   metric: SnapshotMetric
   idx: number
 }): React.ReactElement {
+  const { locale } = useI18n()
   const isBeta = metric.kind === 'beta'
+  // The tile's caliber note: an explicit `note` if the caller set one, else — for
+  // a β metric carrying a DECLARED basis — the note derived from it. A legacy
+  // artifact (no `basis`) gets the conditional β>1 rule, exactly as before.
+  const note = metric.note ?? (isBeta ? betaCaliberNote(metric.basis ?? null, locale) : null)
   const figure = (
     <div style={tileVal} data-testid="snapshot-tile-figure">
       <SourcedNumber value={metric.value} source={metric.source} />
@@ -487,7 +500,7 @@ function TelemetryTile({
         </div>
       )}
 
-      {metric.note && <div style={tileNote}>{metric.note}</div>}
+      {note && <div style={tileNote}>{note}</div>}
       <div style={tileFoot}>{TILE_FOOT(metric)}</div>
     </article>
   )

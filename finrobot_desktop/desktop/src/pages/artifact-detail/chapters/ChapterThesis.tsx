@@ -262,6 +262,7 @@ export function ChapterThesis({
           <h3 style={heading}>{tr('市场隐含', 'Market-Implied', locale)}</h3>
           <ReverseDcfHeadline
             marketImplied={marketImplied}
+            premiumDriver={marketImplied.premium_driver ?? null}
             dcfMethod={methods.find((m) => m.name === 'dcf') ?? null}
             currentPrice={currentPrice}
             quoteCurrency={quoteCurrency}

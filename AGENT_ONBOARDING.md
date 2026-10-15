@@ -324,8 +324,10 @@ Only steps 2, 7, 8 (plus LLM peer *selection*) involve the LLM; steps 4/5/6 igno
 
 - **The DCF equity bridge deducts every enterprise claim, not just net debt:**
   `equity_bridge_value(ev, inputs) = EV − net_debt − preferred_stock −
-  noncontrolling_interest`, the ONE helper the base case, the sensitivity grid,
-  the reverse-WACC kernel and the Monte Carlo kernel all route through. EHC's
+  noncontrolling_interest`, the helper the base case, the sensitivity grid,
+  the reverse-WACC kernel and the Monte Carlo kernel all route through — and, since
+  2026-10-15, a thin call into the declared `ev_to_equity` identity rather than an
+  implementation of its own (see the next bullet). EHC's
   balance carried $863.4M of noncontrolling interest (assets 7.458B −
   liabilities 3.996B − equity 2.598B), the market EV included it, and the DCF
   silently did not (equity 22.29B → 21.42B, ~4% of the target) — while the only
@@ -333,6 +335,23 @@ Only steps 2, 7, 8 (plus LLM peer *selection*) involve the LLM; steps 4/5/6 igno
   `DCFResult.equity_bridge` publishes the components so the report renders the
   deductions instead of deriving net debt as EV − equity (which would swallow
   the NCI into the net-debt bar).
+- **One identity, one evaluator — arithmetic is DECLARED, never repeated:**
+  `engine/models/identities.py` holds one `Identity` per published relationship (EV build, EV →
+  equity, EV/EBITDA, EV/Revenue, trailing P/E, the margins, net debt, market cap) with its
+  weighted contributors, operand ROLES (a `total` of another identity may not be read as a
+  component; `gate` operands only decide comparability), the artifact leaf paths each operand
+  comes from, and the form. `identities.evaluate()` is the only implementation — `calculate_ev`,
+  `current_ev_ebitda`, `ev_band_equity_per_share`, `implied_ev_multiple`,
+  `dcf.equity_bridge_value`, the SOTP equity floor and the historical band's samples all call
+  it, and contract clause `C10e` walks the same declarations against the artifact's own leaves.
+  Before the registry the EV bridge existed in five functions and one of them (SOTP) simply
+  omitted preferred/NCI, so an option-premium name published an equity floor that ignored a
+  senior claim while every provenance check passed. Do not re-write one of these formulas: add
+  or extend the declaration. `LEAF_KINDS` declares what KIND each published leaf is
+  (per_share / total_amount / ratio / multiple / rate / count) and is what stops the drift
+  scrubber restating a total as a share price; `IDENTITY_TOTAL_CONCEPTS` names the tags that
+  are an identity's own total (us-gaap's `LiabilitiesAndStockholdersEquity` equals Assets by
+  definition — reading it as a liabilities leaf published NCI of −$5.748B).
 - **Perpetual growth is paid for out of NOPAT:** terminal FCF = `NOPAT × (1 −
   g/ROIC)` with a disclosed `DCFInputs.terminal_roic` (default 15%), and
   `DCFResult.{terminal_reinvestment_rate, terminal_nopat, terminal_ev_ebitda}`
@@ -439,7 +458,8 @@ a bare `uv sync` removes installed extras; `run_semaphore=None` means "no conten
 | **Accuracy calibration** | `engine/aggregations/calibration.py` | `routes/dashboard.py` | event-count floor — no rate below it; lift vs the overall base rate | `tests/unit/test_calibration.py` |
 | **A run's identity / lineage** | `run_store.py` (`input_fingerprint`, `verify_lineage`) | `routes/runs.py` re-run path (409 on mismatch) | a legacy NULL is `unavailable`, never `match` | `tests/unit/test_run_fingerprint.py` |
 | A **data provider** | `engine/data/providers/*`, `factory.py` | chain order, health breaker, cache slots | `DataProvider` ABC, provenance, canonical normalization | provider tests + `tests/audit/test_no_direct_yfinance_imports.py` |
-| A **cached payload's semantics** (a provider's emitted fields, or the canonical shape) | `engine/data/cache.py` (`_RAW_SLOT_VERSION`) + `normalize/contracts.py` (`CANONICAL_CONTRACT_VERSION`) | every consumer reading that slot inside its TTL — a 24h FINANCIALS row outlives a same-day fix, and the canonical slot is read BEFORE the raw one | bump the affected DataType's slot version (plus the contract version when the normalized shape moves), explain it in the comment block above the constant, then re-pin | `tests/audit/test_provider_cache_payload_pins.py` fails on any provider edit until the decision is recorded; refresh with `python scripts/pin_provider_payloads.py` |
+| A **cached payload's semantics** (a provider's emitted fields, or the canonical shape) | `engine/data/semantics.py` (declared field semantics + the moved `RAW_SLOT_VERSION` history) + `engine/data/cache.py` (key construction) + `normalize/contracts.py` (`CANONICAL_CONTRACT_VERSION`) | every consumer reading that slot inside its TTL — a 24h FINANCIALS row outlives a same-day fix, and the canonical slot is read BEFORE the raw one | the slot tag is DERIVED (`v<rev>-<semantics_digest>`), where the digest covers the declared field semantics AND the provider module's own source — so any provider edit changes the key and old rows miss; the canonical key also carries `identities.identity_digest()`, so a change to the declared arithmetic invalidates it too | `tests/audit/test_provider_cache_payload_pins.py` fails on any provider edit until the acknowledged digest is recorded; refresh with `python scripts/pin_provider_payloads.py` |
+| A **published arithmetic identity** (an EV bridge, a ratio, EV/EBITDA, the trailing P/E, a leaf's KIND) | `engine/models/identities.py` | every compute operator, contract clause C10e, the drift scrubber, the claim ledger, the cache key | one declaration per identity and `evaluate()` is its only implementation — never re-write a formula at a call site; declare operand roles (`component`/`total`/`gate`/`identity`) and `on_missing`; a clock/caliber difference (market cap vs quote) is declared `clause="exempt"` with the reason, not silently checked | `tests/unit/test_identity_agreement.py` (all consumers agree for a pref/NCI issuer); `python scripts/sweep_identities.py` measures the population and violations over every stored artifact |
 | A **config setting / secret** | `config.py`, `secret_store.py` | server hydration, settings route | env red-line; secrets never serialized | `tests/unit/test_auth_capability.py`, settings route tests |
 | A **REST endpoint** | `routes/*.py`, `server.py` | frontend fetch client | router prefixes; SSE contract; auth middleware | `tests/routes/*` |
 | A **UI chapter/page** | `desktop/src/pages/artifact-detail/ReportChapters.tsx`, `src/stores/` | React only | client-side chapter composition; Zustand vs TanStack split | `*.test.tsx` + `npm test` |

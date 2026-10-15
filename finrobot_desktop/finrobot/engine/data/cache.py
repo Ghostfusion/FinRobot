@@ -11,7 +11,12 @@ from pydantic import BaseModel, ValidationError
 
 from finrobot.engine.data.interface import DataResult
 from finrobot.engine.data.normalize.contracts import CANONICAL_CONTRACT_VERSION
+from finrobot.engine.data.semantics import (
+    RAW_SLOT_VERSION as _RAW_SLOT_VERSION,
+    semantics_digest,
+)
 from finrobot.engine.data.types import DataType
+from finrobot.engine.models.identities import identity_digest
 from finrobot.paths import configure_connection
 
 logger = logging.getLogger(__name__)
@@ -52,13 +57,28 @@ def canonical_key(data_type: str | DataType, provider: str | None = None) -> str
     """Cache slot for a normalized (canonical) payload.
 
     Isolated from the raw provider slot (same table, different ``data_type``
-    key) so raw and canonical entries for one ticker never collide, and
-    version-tagged so a ``CANONICAL_CONTRACT_VERSION`` bump auto-invalidates
-    stale canonical entries with no migration (ADR-0006 decision C1). Defined
-    here, once — callers must never hand-assemble the suffix.
+    key) so raw and canonical entries for one ticker never collide, and tagged
+    so stale canonical entries auto-invalidate with no migration (ADR-0006
+    decision C1). Defined here, once — callers must never hand-assemble the
+    suffix.
+
+    The tag is ``v<CANONICAL_CONTRACT_VERSION>-<semantics-digest>-<identity-digest>``:
+
+    * ``CANONICAL_CONTRACT_VERSION`` — the human revision of the normalized
+      contract (a bump says the shape changed).
+    * ``semantics.semantics_digest(data_type)`` — a digest of the declared field
+      semantics of the type AND the SHA-256 of every producing provider module's
+      source, so a provider edit that changes what a field MEANS moves the slot
+      without anyone remembering to bump a hand-maintained number. Provider-
+      independent (aggregated across the type's producers) so the ``provider``
+      suffix stays the ONLY provider-varying part and
+      ``get_canonical_latest``'s prefix scan keeps working.
+    * ``identities.identity_digest()`` — the declared arithmetic the normalized
+      payload's published values are read against, so a value can never be served
+      to a reader that assumes a different EV/DCF/margin identity.
 
     ``provider`` folds the WINNING provider's identity into the slot
-    (``…:canonical:v6:provider=<name>``) so a silent provider swap — FMP
+    (``…:canonical:<tag>:provider=<name>``) so a silent provider swap — FMP
     rate-limited → yfinance fallback wins that run — can no longer overwrite a
     DIFFERENT-caliber snapshot (period_basis / ttm_quarter_ends /
     reporting_currency) under one shared ``…/<ticker>`` slot, nor serve it to a
@@ -69,100 +89,39 @@ def canonical_key(data_type: str | DataType, provider: str | None = None) -> str
     state still hits its own slot and never thrashes. ``None`` → the bare,
     unqualified slot (back-compat for callers that don't track provider).
     """
-    base = f"{_normalize_data_type(data_type)}:canonical:v{CANONICAL_CONTRACT_VERSION}"
+    base = (
+        f"{_normalize_data_type(data_type)}"
+        f":canonical:v{CANONICAL_CONTRACT_VERSION}"
+        f"-{semantics_digest(data_type)}"
+        f"-{identity_digest()}"
+    )
     return f"{base}:provider={provider}" if provider else base
 
 
-# Raw provider-slot format versions. Bump when a provider's cached RAW payload
-# SHAPE changes incompatibly, so old entries are ignored (treated as a miss)
-# and refetched, instead of feeding a stale format into the compute layer.
-# Without this a long-TTL type silently serves the old shape until expiry.
-#   proxy_statement v2 — 2026-06-02: the DEF 14A text slice was re-anchored on
-#   the real Summary Compensation Table; pre-v2 slices miss the SCT + pay-ratio
-#   for large issuers, so the comp parser can't recover from them (7-day TTL).
-#   peer_candidates v2 — 2026-06-05: candidate profiles were added so the
-#   deterministic peer screen can reject value-chain partners (foundry /
-#   equipment) before comps math consumes them.
-#   price v2 — 2026-06-07: canonical PRICE now relies on the validated
-#   fetch_price() path. Old raw PRICE rows may have been written by bare fetch()
-#   without cross-source quote validation, so they must not seed the canonical
-#   slot.
-#   sentiment v2 — 2026-06-10: source_alignment switched from free English
-#   phrases ('Wide divergence' …) to stable enum tokens; the route schema now
-#   validates against the AlignmentToken Literal, so pre-token rows must miss.
-#   forward_estimates v2 — 2026-06-11: FMP v3→stable migration renamed every
-#   estimate figure (estimatedRevenueAvg → revenueAvg, estimatedEpsAvg →
-#   epsAvg, …); the operator reads stable names only, so legacy-named cached
-#   rows would parse as "no estimates" until TTL expiry.
-#   financials v2 — 2026-06-14: the FMP financials payload now carries
-#   book_value_per_share ((totalStockholdersEquity − preferred) ÷ shares); legacy
-#   rows omit it, so a cyclical's comps_pb (book-value primary multiple) can never
-#   revive from a cached row — old rows must miss + refetch. Pairs with the
-#   CANONICAL_CONTRACT_VERSION v7 bump, which invalidates the normalized slot that
-#   is read ahead of this raw slot.
-#   financials v3 — 2026-06-22: the FMP financials payload now carries
-#   dividend_per_share / payout_ratio / dividend_yield (/ratios-ttm) and
-#   return_on_equity (/key-metrics-ttm). Legacy rows omit them, so the DDM seed
-#   can never recover a dividend on an FMP-primary ticker (raises "no dividend").
-#   Pairs with the CANONICAL_CONTRACT_VERSION v8 bump.
-#   price v3 — 2026-07-01: full PRICE provider payloads now carry quote_currency.
-#   Legacy PRICE rows omit it and would normalize to UNKNOWN (or, pre-v9, USD),
-#   so they must miss and refetch instead of feeding mixed-currency comparisons.
-#   financials v4 — 2026-07-06: the TTM aggregation window is now cadence-aware
-#   (semi-annual filers sum 2 six-month rows, not 4). Legacy raw rows cached the
-#   doubled sum-of-4 aggregate (UL revenue ~127B vs a ~50B year), so they must miss
-#   and re-aggregate. Pairs with the CANONICAL_CONTRACT_VERSION v10 bump (the
-#   normalized slot, read ahead of this raw slot).
-#   peer_candidates v3 — 2026-07-07: the payload now carries a top-level ``active``
-#   map (isActivelyTrading per candidate) so the peer screen can drop a delisted /
-#   renamed listing (VMware VMW, old Block SQ). Legacy v2 rows have no ``active`` key,
-#   so every candidate reads as UNKNOWN and a dead ticker keeps shipping until the 1h
-#   TTL — they must miss + refetch to pick up the liveness signal. PEER_CANDIDATES is
-#   a RAW-only type (never fetched via fetch_canonical, see layer._CANONICAL_TYPES), so
-#   this is the ONLY layer to bump — CANONICAL_CONTRACT_VERSION must NOT move.
-#   financials v5 — 2026-10-12: the yfinance financials payload now carries
-#   preferred_stock / noncontrolling_interest, read off its balance-sheet DataFrame
-#   (the statement module's ``Preferred Stock`` / ``Minority Interest`` rows), and the
-#   Tiingo caliber no longer maps its INCOME-STATEMENT ``nonControllingInterests`` flow
-#   onto that balance-sheet field. Legacy yfinance rows omit both, so a run served from
-#   one reports the EV bridge as unverifiable (or, on Tiingo, folds a year of NCI
-#   earnings into EV as if it were an equity claim). Pairs with the
-#   CANONICAL_CONTRACT_VERSION v11 bump (the normalized slot, read ahead of this raw
-#   slot).
-#   financials v6 — 2026-10-14: the yfinance financials payload now DERIVES
-#   gross_margin / operating_margin from its own TTM statement frame and never
-#   publishes Yahoo's ``info.operatingMargins`` / ``info.grossMargins`` scalar in
-#   place of a frame row (the margins gain a ``*_margin_basis`` tag; operating
-#   margin is WITHHELD rather than scalar-filled when the frame carries no
-#   Operating Income row). A pre-v6 row can carry a margin whose numerator and
-#   denominator contradict the same block's own revenue + operating_income, and
-#   because the canonical slot is read BEFORE this raw slot with a 24h TTL, a run
-#   inside that window publishes the contradiction (CF 2026-10-14: operating
-#   margin 0.49325 beside OI 3,025 / revenue 7,739 = 39.1% — and above the same
-#   block's 42.5% gross margin, which is impossible). Pairs with the
-#   CANONICAL_CONTRACT_VERSION v13 bump. Observed: CF's canonical cached
-#   2026-10-14T06:19Z (pre-fix) still served the pre-fix margin hours after the fix
-#   landed, and the report shipped the contradiction.
-_RAW_SLOT_VERSION: dict[str, int] = {
-    DataType.PRICE.value: 3,
-    DataType.PROXY_STATEMENT.value: 2,
-    DataType.PEER_CANDIDATES.value: 3,
-    DataType.SENTIMENT.value: 2,
-    DataType.FORWARD_ESTIMATES.value: 2,
-    DataType.FINANCIALS.value: 6,
-}
+# Raw provider-slot format versions (``_RAW_SLOT_VERSION``) and their incident-log
+# comment block now live in ``engine/data/semantics.py`` — the declaration module
+# that also digests them — and are re-exported here for existing references. The
+# raw slot tag combines that human revision with ``semantics_digest``, so a
+# provider source edit that changes a field's meaning invalidates the row even
+# when nobody bumps the number (see ``raw_slot_key``).
 
 
 def raw_slot_key(data_type: str | DataType) -> str:
-    """Cache slot for RAW provider data, version-tagged per ``_RAW_SLOT_VERSION``.
+    """Cache slot for RAW provider data, tagged ``v<rev>-<semantics-digest>``.
 
-    Unversioned types return their bare normalized key (back-compat); a bumped
-    type returns ``<type>:vN`` so old entries become unreachable. TTL lookup
+    Unversioned types return their bare normalized key (back-compat); a declared
+    type returns ``<type>:v<rev>-<semantics_digest(base)>``. The human revision
+    (``semantics_rev`` / ``_RAW_SLOT_VERSION``) stays readable, while the digest
+    folds the declared field semantics AND the SHA-256 of every producing
+    provider module's source — so an edit that changes what a field MEANS
+    invalidates the row automatically, without a remembered bump. TTL lookup
     still uses the BASE data_type, so freshness budgets are unaffected.
     """
     base = _normalize_data_type(data_type)
     version = _RAW_SLOT_VERSION.get(base)
-    return f"{base}:v{version}" if version else base
+    if not version:
+        return base
+    return f"{base}:v{version}-{semantics_digest(base)}"
 
 
 _TTL_SECONDS: dict[str, int] = {
@@ -464,7 +423,7 @@ class DataCache:
         slot may be empty (a fallback provider wrote its own slot), so a strict
         provider-keyed read would go cold and the desk would blank a row it has a
         perfectly good (if stale, differently-calibered) last-known snapshot for.
-        This scans every ``…:canonical:v<N>:provider=*`` slot (plus the bare slot)
+        This scans every ``…:canonical:<tag>:provider=*`` slot (plus the bare slot)
         for the ticker and returns the most-recently cached one, tagged with its
         provider so the caller surfaces the honest caliber. It NEVER lets a
         fallback slot masquerade as the primary's: the freshness clock and the

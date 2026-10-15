@@ -1,6 +1,8 @@
 import math
 from statistics import median, mean
+
 from finrobot.engine.models.financial import CompanyFinancials, FinancialData, PeerComps
+from finrobot.engine.models.identities import evaluate
 
 
 # Sanity bounds for peer multiples — a garbage filter, not a "meaningfulness"
@@ -132,8 +134,25 @@ def calculate_ev(
     0.56% of EV, SAP 0.28%). ``preferred``/``noncontrolling_interest`` default to
     0.0 so a caller without those components (or a pref=NCI=0 issuer) gets the
     net-debt special case unchanged.
+
+    The arithmetic is NOT written here: it is ``identities.evaluate("ev_build")``,
+    the same declaration ``current_ev_ebitda``, ``implied_ev_multiple``, the DCF's
+    equity bridge and the SOTP floor read. Before the registry, this sum existed in
+    five functions and the CF report shipped two answers for one multiple.
     """
-    return market_cap + total_debt - cash + preferred + noncontrolling_interest
+    ev = evaluate(
+        "ev_build",
+        {
+            "market_cap": market_cap,
+            "total_debt": total_debt,
+            "total_cash": cash,
+            "preferred_stock": preferred,
+            "noncontrolling_interest": noncontrolling_interest,
+        },
+    )
+    if ev is None:  # unreachable: every operand of this signature is a required float
+        raise ValueError("calculate_ev: the declared EV bridge returned None")
+    return ev
 
 
 def current_ev_ebitda(financial_data: FinancialData, net_debt: float) -> float | None:
@@ -174,14 +193,24 @@ def current_ev_ebitda(financial_data: FinancialData, net_debt: float) -> float |
         return None
     # EV-bridge completeness: preferred + NCI belong in EV (see calculate_ev). They
     # are read off the balance sheet the caller already passes; a None component
-    # ("not carried") contributes 0 — the pref=NCI=0 case reduces to mc + net_debt.
-    preferred = 0.0
-    nci = 0.0
-    if balance is not None:
-        preferred = getattr(balance, "preferred_stock", None) or 0.0
-        nci = getattr(balance, "noncontrolling_interest", None) or 0.0
+    # ("not carried") is the declared ``on_missing="zero"`` of the registry's
+    # ``ev_ebitda`` identity — the pref=NCI=0 case reduces to mc + net_debt.
+    # The ratio itself is ``identities.evaluate("ev_ebitda")``: a consumer that
+    # rebuilds it from market cap and net debt alone is wrong by construction rather
+    # than differently opinionated (the CF 4.9x-beside-5.7x defect).
+    preferred = getattr(balance, "preferred_stock", None) if balance is not None else None
+    nci = getattr(balance, "noncontrolling_interest", None) if balance is not None else None
     return _sanity(
-        (market_cap + net_debt + preferred + nci) / ebitda,
+        evaluate(
+            "ev_ebitda",
+            {
+                "market_cap": market_cap,
+                "net_debt": net_debt,
+                "preferred_stock": preferred,
+                "noncontrolling_interest": nci,
+                "ebitda_operating": ebitda,
+            },
+        ),
         PEER_EV_EBITDA_SANITY_MIN,
         PEER_EV_EBITDA_SANITY_MAX,
     )
@@ -209,13 +238,28 @@ def ev_band_equity_per_share(
     pref=NCI=0 issuer) — exactly as ``calculate_ev``/``current_ev_ebitda`` do.
     None when a required input is missing, non-positive, or non-finite — the
     caller then drops the cross-check rather than publishing a fabricated value.
+
+    The bridge is ``identities.evaluate("ev_to_equity")``, which is also what the
+    DCF's base case, its sensitivity grid, the reverse kernels, the vectorized
+    Monte Carlo and the SOTP floor deduct. ``sotp.py`` used to subtract net debt
+    only, so an option-premium name carrying preferred or NCI published an equity
+    floor — and an implied option premium — that ignored a senior claim.
     """
     if multiple is None or ttm_ebitda is None or net_debt is None:
         return None
     if shares_outstanding is None or ttm_ebitda <= 0 or shares_outstanding <= 0:
         return None
-    ev = multiple * ttm_ebitda
-    equity = ev - net_debt - (preferred_stock or 0.0) - (noncontrolling_interest or 0.0)
+    equity = evaluate(
+        "ev_to_equity",
+        {
+            "enterprise_value": multiple * ttm_ebitda,
+            "net_debt": net_debt,
+            "preferred_stock": preferred_stock,
+            "noncontrolling_interest": noncontrolling_interest,
+        },
+    )
+    if equity is None:
+        return None
     per_share = equity / shares_outstanding
     return per_share if math.isfinite(per_share) else None
 
@@ -243,10 +287,17 @@ def implied_ev_multiple(
         return None
     if ttm_ebitda <= 0 or shares_outstanding <= 0:
         return None
-    market_cap = price * shares_outstanding
-    ev = market_cap + net_debt + (preferred_stock or 0.0) + (noncontrolling_interest or 0.0)
-    multiple = ev / ttm_ebitda
-    return multiple if math.isfinite(multiple) else None
+    multiple = evaluate(
+        "ev_ebitda",
+        {
+            "market_cap": price * shares_outstanding,
+            "net_debt": net_debt,
+            "preferred_stock": preferred_stock,
+            "noncontrolling_interest": noncontrolling_interest,
+            "ebitda_operating": ttm_ebitda,
+        },
+    )
+    return multiple if multiple is not None and math.isfinite(multiple) else None
 
 
 def compute_ttm_fcf(

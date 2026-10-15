@@ -34,13 +34,17 @@ const CF_DCF_METHOD = {
   confidence: 0.85,
 } as ValuationMethodShape
 
-function renderHeadline(implied: NonNullable<DcfShape['market_implied']>): void {
+function renderHeadline(
+  implied: NonNullable<DcfShape['market_implied']>,
+  premiumDriver?: 'growth' | 'discount_rate' | null,
+): void {
   render(
     <ReverseDcfHeadline
       marketImplied={implied}
       dcfMethod={CF_DCF_METHOD}
       currentPrice={119.46}
       quoteCurrency="USD"
+      premiumDriver={premiumDriver}
     />,
   )
 }
@@ -62,6 +66,39 @@ describe('ReverseDcfHeadline — the premium sentence names its driver', () => {
 
     expect(screen.getByText('Priced for growth')).toBeInTheDocument()
     expect(screen.getByText(/a bet on the implied growth, not a value entry/)).toBeInTheDocument()
+  })
+
+  it('honours a DECLARED discount-rate driver even when the implied growth is positive', () => {
+    renderHeadline(marketImplied({ implied_growth: 0.02 }), 'discount_rate')
+
+    expect(screen.getByText('Priced on the discount rate')).toBeInTheDocument()
+    const sentence = screen.getByText(/the price is 1\.6× the model's central cash-flow value/)
+    expect(sentence).toHaveTextContent('discount rate, not on growth')
+    // The declared driver is the authority: the positive implied growth must not
+    // flip the sentence back to a growth bet.
+    expect(screen.queryByText('Priced for growth')).toBeNull()
+  })
+
+  it('honours a DECLARED growth driver even when the implied growth is negative', () => {
+    renderHeadline(marketImplied({ implied_growth: -0.0975830078125 }), 'growth')
+
+    expect(screen.getByText('Priced for growth')).toBeInTheDocument()
+    expect(screen.getByText(/a bet on the implied growth, not a value entry/)).toBeInTheDocument()
+    expect(screen.queryByText('Priced on the discount rate')).toBeNull()
+  })
+
+  it('falls back to the legacy implied-growth sign when no driver is declared', () => {
+    // No premiumDriver prop at all = a legacy artifact that predates the field.
+    renderHeadline(marketImplied({ implied_growth: -0.0975830078125 }))
+    expect(screen.getByText('Priced on the discount rate')).toBeInTheDocument()
+  })
+
+  it('treats an unknown declared driver as absent (legacy fallback)', () => {
+    renderHeadline(
+      marketImplied({ implied_growth: -0.0975830078125 }),
+      'bogus' as unknown as 'growth',
+    )
+    expect(screen.getByText('Priced on the discount rate')).toBeInTheDocument()
   })
 
   it('still reads a discount as below cash-flow value', () => {

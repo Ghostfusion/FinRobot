@@ -45,6 +45,18 @@ import {
   ChapterDisclaimer,
 } from './chapters'
 
+/** The declared WACC-β basis, or null when the artifact declares none/unrecognised.
+ *
+ *  Read from the DCF's own provenance, NOT from `raw_data.market`: the Blume
+ *  adjustment is applied (or not) during financial_modeling, after data_collection
+ *  froze the snapshot, so a market-block field could never carry it. Anything other
+ *  than the two known values reads as undeclared — the β tile then states the β>1
+ *  rule instead of a caliber the artifact never declared. */
+function declaredBetaBasis(provenance: Record<string, string> | undefined): 'raw' | 'blume' | null {
+  const declared = provenance?.['beta_basis']
+  return declared === 'raw' || declared === 'blume' ? declared : null
+}
+
 /** The equity_research 15-chapter body (the report this file was written for).
  *  NOT exported: ReportChapters below routes by artifact type — see the note on
  *  the fund branch about why the branch lives ABOVE the chapters rather than
@@ -203,6 +215,11 @@ function EquityReportChapters({
         quoteCurrency={d.quoteCurrency}
         dataSource={d.inputs.data_source ?? null}
         fetchedAt={d.inputs.data_fetched_at ?? null}
+        // The β basis the DCF/WACC actually used. It is decided in the
+        // financial-modeling step (Blume mean-reverts HIGH betas only), so it lives
+        // in the DCF's own provenance, not in `raw_data.market` — which was frozen
+        // at data_collection, before the decision existed.
+        dcfBetaBasis={declaredBetaBasis(d.dcf?.inputs?.assumption_provenance)}
         // BACKLOG A4 (2026-07-09): segment revenue mix table. Segment metrics
         // are REPORTING currency (mirrors SOTPBreakdownPanel in ChapterValuation).
         segmentOverview={d.segmentOverview}

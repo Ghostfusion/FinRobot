@@ -56,10 +56,16 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Literal
 
 from finrobot.artifact.summary_extractor import extract_entry_price, extract_target_price
+from finrobot.engine.models.identities import (
+    Identity,
+    artifact_operands,
+    checked_identities,
+    relative_residual,
+)
 from finrobot.engine.models.numeric_claim import Finding
 from finrobot.engine.models.reconcile_tolerances import (
+    IDENTITY_RESIDUAL_TOLERANCE,
     NARRATIVE_DRIFT_TOLERANCE,
-    RATIO_IDENTITY_TOLERANCE,
 )
 from finrobot.engine.models.valuation_thresholds import (
     MARKET_DIVERGENCE_RATIO_K,
@@ -607,17 +613,13 @@ _OPERAND_PAIRS: tuple[tuple[str, str, str], ...] = (
     ("net_income", "operating_income", "net_income_vs_operating_income"),
 )
 
-#: (ratio path, numerator path, denominator path) — the published ratios whose VALUE
-#: is defined by two other leaves of the same artifact, so the artifact itself says
-#: whether the three figures describe one period and one caliber. C10a checks the
-#: operands exist, C10b that they came from one provider, C10d that a
-#: caliber-divergent pair is disclosed; none of them divides the two.
-_RATIO_IDENTITIES: tuple[tuple[str, str, str], ...] = (
-    ("income.operating_margin", "income.operating_income", "income.revenue"),
-    ("income.ebitda_margin", "income.ebitda", "income.revenue"),
-    ("valuation.ev_ebitda", "valuation.enterprise_value", "valuation.ebitda_operating"),
-    ("valuation.ev_revenue", "valuation.enterprise_value", "income.revenue"),
-)
+# The published identities C10e checks do NOT live here: they are declared once in
+# ``engine/models/identities`` (id, kind, form, weighted contributors, divisor, and the
+# artifact paths each operand comes from), and this clause walks them. The tuple that
+# used to sit here listed four ratios by hand — which is how the family ended up with a
+# clause per discovered bug: C10a presence, C10b one provider, C10c identity, C10d
+# caliber, and only then C10e arithmetic. A declaration the gate READS cannot be
+# forgotten by the next author the way a hand-written list can.
 
 #: The three us-gaap tags the ``Assets − Liabilities = equity`` identity needs.
 #: The snapshot keeps them as independent leaves, which is exactly why the
@@ -665,20 +667,6 @@ def _num(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, int | float):
         return None
     return float(value)
-
-
-def _dig(raw: dict[str, Any], path: str) -> float | None:
-    """A float at a dotted path inside the raw snapshot, None when absent.
-
-    Used by the ratio-identity clause, which compares leaves from DIFFERENT blocks
-    (``valuation.enterprise_value`` against ``income.revenue``) — a ratio's two
-    sides are not always siblings."""
-    node: Any = raw
-    for part in path.split("."):
-        if not isinstance(node, dict):
-            return None
-        node = node.get(part)
-    return _num(node)
 
 
 def _decisions(raw: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1245,8 +1233,8 @@ def _clause_c10d_caliber_divergent_accepted(artifact: "Artifact") -> Finding | N
     )
 
 
-def _clause_c10e_ratio_contradicts_operands(artifact: "Artifact") -> Finding | None:
-    """S — §4.3(a), arithmetic half: a published ratio must BE its own operands.
+def _clause_c10e_quantity_contradicts_derivation(artifact: "Artifact") -> Finding | None:
+    """S — §4.3(a), arithmetic half: a published value must BE its declared derivation.
 
     C10a checks the operands are present, C10b that they came from one provider,
     C10c the balance-sheet identity, C10d that a caliber-divergent pair is
@@ -1261,32 +1249,59 @@ def _clause_c10e_ratio_contradicts_operands(artifact: "Artifact") -> Finding | N
 
     Source-agnostic by construction: it reads only the artifact's own published
     leaves, so it fires whoever supplied them and whatever the decision record
-    says. Annotation only (`S`) — the ratio publishes as the provider stated it and
-    the reader is told it does not divide out.
+    says. Annotation only (`S`) — the value publishes as the provider stated it and
+    the reader is told it does not derive.
+
+    It walks the DECLARED identities (``engine/models/identities``) rather than a
+    list written here, so a new published quantity is covered the moment it is
+    declared, and each identity is checked against the same declaration every
+    producer evaluates — the trailing P/E, both EV multiples, the EV build and the
+    margins included. Only identities whose declared artifact paths all resolve
+    BIND (XBRL Calculations 1.1 §5.1); a value whose operands the artifact does not
+    publish is never accused of contradicting them.
     """
     raw = _raw(artifact)
-    for ratio_path, numerator_path, denominator_path in _RATIO_IDENTITIES:
-        published = _dig(raw, ratio_path)
-        numerator = _dig(raw, numerator_path)
-        denominator = _dig(raw, denominator_path)
-        if published is None or numerator is None or denominator is None or denominator == 0:
+    for spec in checked_identities():
+        resolved = artifact_operands(spec.id, raw)
+        if resolved is None:
             continue
-        expected = numerator / denominator
-        if abs(published - expected) <= abs(expected) * RATIO_IDENTITY_TOLERANCE:
+        operands, published = resolved
+        result = relative_residual(spec.id, operands, published)
+        if result is None:
             continue
+        residual, expected = result
+        if residual <= IDENTITY_RESIDUAL_TOLERANCE:
+            continue
+        path = spec.total_path or spec.total
         return Finding(
-            field_key=ratio_path,
-            check="contract_c10e_ratio_contradicts_operands",
+            field_key=path,
+            check="contract_c10e_quantity_contradicts_its_derivation",
             severity="review",
             evidence=(
-                f"{ratio_path} = {published:.5f} is published while its own operands "
-                f"{numerator_path} / {denominator_path} = {numerator:,.0f} / "
-                f"{denominator:,.0f} = {expected:.5f} — the ratio contradicts the block "
-                "it sits in, so one of the three figures describes a different period "
-                "or a different caliber than the other two"
+                f"{path} = {published:.6g} is published while its declared identity "
+                f"'{spec.id}' ({_identity_formula(spec)}) evaluates to {expected:.6g} "
+                f"from this artifact's own leaves ({residual:.1%} apart) — the published "
+                "value contradicts the derivation it declares, so one of its figures "
+                "describes a different period or a different caliber"
             ),
         )
     return None
+
+
+def _identity_formula(spec: Identity) -> str:
+    """One identity rendered as a reader-facing formula, e.g. ``a + b − c / d``.
+
+    For the finding text only — the arithmetic itself is never written here (that is
+    ``identities.evaluate``).
+    """
+    terms: list[str] = []
+    for contributor in spec.contributors:
+        if contributor.role == "gate":
+            continue
+        sign = "− " if contributor.weight < 0 else "+ "
+        terms.append(contributor.key if not terms else f"{sign}{contributor.key}")
+    formula = " ".join(terms)
+    return f"{formula} / {spec.divisor}" if spec.divisor else formula
 
 
 def _clause_c12a_stale_8k_index(artifact: "Artifact") -> Finding | None:
@@ -1676,9 +1691,9 @@ CONTRACT_CLAUSES: list[ContractClause] = [
     ContractClause(
         id="C10e",
         severity="S",
-        check=_clause_c10e_ratio_contradicts_operands,
-        title="Ratio contradicts its operands",
-        doc="a published ratio must equal its own operands divided, else it describes another period.",
+        check=_clause_c10e_quantity_contradicts_derivation,
+        title="Published quantity contradicts its declared derivation",
+        doc="every declared identity must evaluate to the value the artifact publishes for it.",
     ),
     ContractClause(
         id="C11",

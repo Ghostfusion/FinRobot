@@ -984,6 +984,14 @@ def seed_dcf_inputs(
             beta_note = "raw regression β (structural low-β defensive — not inflated)"
         prov["beta"] = f"{beta_chosen:.2f} ({beta_source} {raw_beta:.2f}, {beta_note})"
 
+    # The DECLARED basis of the β the WACC actually used, so a consumer states the
+    # fact instead of inferring a caliber from a value: "blume" only where the
+    # adjustment was applied (the same β>1 threshold as ``adjust_beta_blume``), "raw"
+    # otherwise. The β tile used to say "DCF uses a Blume-adjusted β" with no
+    # threshold, so a reader applied Blume to CF's 0.527 (→ 0.69) while the WACC had
+    # used the raw value — the note is only true of β>1 names.
+    prov["beta_basis"] = "blume" if (used_provider_beta and raw_beta > 1.0) else "raw"
+
     # Cost of debt: try interest_expense / total_debt; fall back to 5%.
     total_debt = financials.balance.total_debt
     interest_exp = financials.income.interest_expense

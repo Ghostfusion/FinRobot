@@ -33,6 +33,7 @@ from finrobot.engine.models.financial import (
     SOTPBreakdown,
     SOTPScenarioBand,
 )
+from finrobot.engine.models.identities import evaluate
 
 
 def value_segment(
@@ -61,6 +62,8 @@ def compute_sotp_breakdown(
     net_debt: float,
     shares_outstanding: float,
     current_price: float,
+    preferred_stock: float | None = None,
+    noncontrolling_interest: float | None = None,
     option_ev_if_success: float | None = None,
     option_anchor_source: str | None = None,
     scenario_band: SOTPScenarioBand | None = None,
@@ -73,7 +76,14 @@ def compute_sotp_breakdown(
       modelable_segments: cash-flow-modelable legs (Automotive / Energy …) with
         ``implied_ev`` already computed via :func:`value_segment`.
       net_debt: subtracted to bridge EV floor → equity floor (negative = net cash,
-        added back).
+        added back). ``preferred_stock`` / ``noncontrolling_interest`` are deducted
+        by the same declared bridge (``identities.evaluate("ev_to_equity")``) —
+        before the registry this function subtracted net debt ALONE, so an
+        option-premium name carrying preferred or NCI published an equity floor,
+        a price floor and an implied option premium that ignored a claim senior to
+        common. None means "the provider did not report it", which the bridge's
+        declared ``on_missing="zero"`` treats as 0 — the assumption
+        ``operators/audit/ev_bridge.py`` flags as unverifiable.
       shares_outstanding / current_price: live market inputs for the residual.
       option_ev_if_success: OPTIONAL external sell-side SOTP success-state ceiling.
         When given (with a source string), the market-implied success probability
@@ -93,7 +103,17 @@ def compute_sotp_breakdown(
     warn = list(warnings or [])
 
     ev_floor = sum(s.implied_ev for s in modelable_segments)
-    equity_floor = ev_floor - net_debt
+    equity_floor = evaluate(
+        "ev_to_equity",
+        {
+            "enterprise_value": ev_floor,
+            "net_debt": net_debt,
+            "preferred_stock": preferred_stock,
+            "noncontrolling_interest": noncontrolling_interest,
+        },
+    )
+    if equity_floor is None:  # unreachable: net_debt is a required float here
+        raise ValueError("compute_sotp_breakdown: the declared equity bridge returned None")
     price_floor = equity_floor / shares_outstanding
     market_equity = current_price * shares_outstanding
     implied_option_ev = market_equity - equity_floor

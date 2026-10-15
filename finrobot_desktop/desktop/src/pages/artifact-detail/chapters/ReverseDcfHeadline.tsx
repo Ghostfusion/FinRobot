@@ -23,6 +23,10 @@ import { useI18n } from '../../../i18n'
 import { formatCurrency } from '../../../utils/format'
 import type { DcfShape, ValuationMethodShape } from './types'
 
+/** The declared driver of a price premium above the model's central cash-flow
+ *  value: the growth path ("growth") or the discount rate ("discount_rate"). */
+export type PremiumDriver = 'growth' | 'discount_rate'
+
 interface ReverseDcfHeadlineProps {
   marketImplied: NonNullable<DcfShape['market_implied']>
   /** The dcf method range from valuation_synthesis.methods (name==='dcf'). When
@@ -32,6 +36,12 @@ interface ReverseDcfHeadlineProps {
   /** valuation_synthesis.current_price — the live pricing anchor (cyan-eligible). */
   currentPrice: number | null
   quoteCurrency: string
+  /** DECLARED premium driver, from
+   * `structured_context.valuation_synthesis.reverse_dcf.premium_driver`.
+   * Optional because legacy artifacts predate the field; when absent (or not one
+   * of the two known drivers) the premium sentence falls back to the local
+   * `implied_growth < 0` test — see `premiumIsRateBet` below. */
+  premiumDriver?: PremiumDriver | null
 }
 
 export function ReverseDcfHeadline({
@@ -39,6 +49,7 @@ export function ReverseDcfHeadline({
   dcfMethod,
   currentPrice,
   quoteCurrency,
+  premiumDriver,
 }: ReverseDcfHeadlineProps): React.ReactElement | null {
   const { t, locale } = useI18n()
   const cur = (n: number): string => formatCurrency(n, quoteCurrency, locale, 2)
@@ -78,15 +89,27 @@ export function ReverseDcfHeadline({
 
   const impliedCardValue = unreachable ? (ceilingGrowthPct ?? '—') : (growthPct ?? '—')
 
-  // The premium's DRIVER, not just its size. In the reachable regime the panel
-  // already prints the market's own implied growth; when that is NEGATIVE the
-  // market is pricing a DECLINE, so a price above the model's central cash-flow
-  // value cannot be "a bet on the implied growth" — in that direction the gap is
-  // carried by the discount rate. CF 2026-10-14 shipped the contradiction in one
-  // block: "the market is pricing in ~-9.8%/yr" beside "that premium is a bet on
-  // the implied growth", while the thesis (correctly) attributed the gap to the
-  // 4.83%-vs-6.01% discount rate.
-  const premiumIsRateBet = !unreachable && mi.implied_growth != null && mi.implied_growth < 0
+  // The premium's DRIVER, not just its size. The backend DECLARES it
+  // (reverse_dcf.premium_driver); when present, that is the authority. Legacy
+  // artifacts omit the field, so we keep the local `implied_growth < 0` test:
+  // the panel already prints the market's own implied growth, and when that is
+  // NEGATIVE the market is pricing a DECLINE — a price above the model's central
+  // cash-flow value then cannot be "a bet on the implied growth" (the gap is
+  // carried by the discount rate). CF 2026-10-14 shipped the contradiction in
+  // one block: "the market is pricing in ~-9.8%/yr" beside "that premium is a
+  // bet on the implied growth", while the thesis (correctly) attributed the gap
+  // to the 4.83%-vs-6.01% discount rate. An unknown declared value is treated as
+  // absent — the sentence never silently changes meaning on a malformed field.
+  const declaredDriver: PremiumDriver | null =
+    premiumDriver === 'growth' || premiumDriver === 'discount_rate' ? premiumDriver : null
+  // growthPct is non-null exactly in the reachable regime with an implied growth
+  // to quote, which the rate-bet sentence interpolates.
+  const premiumIsRateBet =
+    !unreachable &&
+    growthPct != null &&
+    (declaredDriver != null
+      ? declaredDriver === 'discount_rate'
+      : (mi.implied_growth ?? 0) < 0)
 
   return (
     <section

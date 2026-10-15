@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from finrobot.engine.models.financial import (
     DCFInputs,
@@ -7,6 +7,7 @@ from finrobot.engine.models.financial import (
     MarketImpliedCheck,
     MarketImpliedNature,
 )
+from finrobot.engine.models.identities import evaluate
 from finrobot.engine.models.valuation_thresholds import MIN_GORDON_SPREAD
 from finrobot.engine.compute.operators.wacc import calculate_wacc
 
@@ -53,15 +54,34 @@ def equity_bridge_value(enterprise_value: float, inputs: DCFInputs) -> float:
     in the multiples EV (``multiple.calculate_ev``), so the DCF must deduct them
     too — a net-debt-only subtraction overstates equity value for any issuer
     carrying them (EHC carries $0.86B NCI, ~4% of per-share value). Single
-    authority so the base case, the sensitivity grid, the reverse kernels and the
-    vectorized Monte Carlo can never drift apart on the bridge.
+    authority WITHIN the DCF so the base case, the sensitivity grid, the reverse
+    kernels and the vectorized Monte Carlo can never drift apart on the bridge — for
+    the codebase as a whole, see the registry note below.
+
+    That authority is now the REGISTRY, not this function:
+    ``identities.evaluate("ev_to_equity")`` is the same declaration
+    ``multiples.ev_band_equity_per_share``, ``multiples.implied_ev_multiple`` and
+    the SOTP floor read. This docstring used to say "single authority" while a
+    second copy of the subtraction lived in ``multiples`` with preferred/NCI and
+    a third in ``sotp`` without them — which is how one report shipped two
+    answers for one multiple.
 
     Accepts and returns scalars; also applied to a NumPy array of enterprise
-    values by the vectorized Monte Carlo kernel (elementwise arithmetic).
+    values by the vectorized Monte Carlo kernel (elementwise arithmetic — the
+    registry's evaluator is plain arithmetic for exactly this reason).
     """
-    return (
-        enterprise_value - inputs.net_debt - inputs.preferred_stock - inputs.noncontrolling_interest
+    equity = evaluate(
+        "ev_to_equity",
+        {
+            "enterprise_value": enterprise_value,
+            "net_debt": inputs.net_debt,
+            "preferred_stock": inputs.preferred_stock,
+            "noncontrolling_interest": inputs.noncontrolling_interest,
+        },
     )
+    if equity is None:  # unreachable: DCFInputs carries all four as required floats
+        raise ValueError("equity_bridge_value: the declared equity bridge returned None")
+    return equity
 
 
 def calculate_dcf(
@@ -513,7 +533,25 @@ def market_implied_check(
         growth_unreachable=unreachable,
         growth_ceiling=hi_growth if unreachable else None,
         ceiling_price=ceiling_price if unreachable else None,
+        premium_driver=_premium_driver(implied_growth, unreachable=unreachable),
     )
+
+
+def _premium_driver(
+    implied_growth: float | None, *, unreachable: bool
+) -> Literal["growth", "discount_rate"]:
+    """What the price's premium over the model's own value is a bet on.
+
+    The one place this policy is stated, so the cover's sentence and any future
+    consumer cannot disagree about it. ``growth`` requires the market's own implied
+    growth to be non-negative AND solvable: a negative implied growth means the market
+    is pricing a decline, and an unsolved/unreachable one means no growth in the
+    bracket reaches the price — in both cases the premium is carried by the discount
+    rate (or by optionality no cash-flow model captures), not by growth.
+    """
+    if unreachable or implied_growth is None or implied_growth < 0:
+        return "discount_rate"
+    return "growth"
 
 
 # An "option-value" verdict (no growth in the bracket explains the price) is

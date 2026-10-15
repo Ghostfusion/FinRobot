@@ -11,15 +11,24 @@ the drifting token to the canonical value — no second LLM call.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
+from typing import Any
 
 from finrobot.engine.compute.operators.valuation_synthesis import CanonicalThesis
 from finrobot.engine.compute.operators.audit.insider_flow import insider_flow_amount_findings
 from finrobot.engine.models.financial import (
+    BalanceSheet,
+    FinancialData,
+    IncomeStatement,
+    MarketData,
     ThesisResult,
     ValuationMethod,
+    ValuationMetrics,
     ValuationSynthesis,
 )
+from finrobot.engine.models.identities import leaves_of_kind
 from finrobot.engine.pipelines.equity_research import (
+    _published_leaf_snapshot,
     _reconcile_narrative_targets,
     apply_canonical_override,
 )
@@ -585,3 +594,188 @@ def test_a_smuggled_point_target_is_still_erased_alongside_data_figures() -> Non
     overview = out.valuation_overview or ""
     assert "$742.11" not in overview
     assert "[target withheld]" in overview
+
+
+# --------------------------------------------------------------------------------------
+# Declared leaf kinds (identities.LEAF_KINDS) — the CF 2026-10-14 audit
+# --------------------------------------------------------------------------------------
+
+
+def _snapshot_raw(
+    *,
+    enterprise_value: float | None = 15_783_943_454.0,
+    total_debt: float = 3_100_000_000.0,
+    total_cash: float = 1_900_000_000.0,
+    market_cap: float = 21_000_000_000.0,
+    shares_outstanding: float = 175_000_000.0,
+    current_price: float = 119.46,
+) -> dict[str, Any]:
+    """The run's own ``FinancialData`` snapshot in the artifact ``raw_data`` shape.
+
+    Built through the production reader (``_published_leaf_snapshot`` →
+    ``FinancialData.model_dump(mode="json")``) so the test asserts the shape the
+    scrubber actually receives: the paths ``identities.LEAF_KINDS`` keys.
+    """
+    fd = FinancialData(
+        ticker="CF",
+        company_name="CF Industries Holdings, Inc.",
+        timestamp=datetime(2026, 10, 14, tzinfo=timezone.utc),
+        income=IncomeStatement(revenue=6_133_000_000.0),
+        balance=BalanceSheet(total_debt=total_debt, total_cash=total_cash),
+        market=MarketData(
+            market_cap=market_cap,
+            shares_outstanding=shares_outstanding,
+            current_price=current_price,
+        ),
+        valuation=ValuationMetrics(enterprise_value=enterprise_value, ev_ebitda=7.2),
+    )
+    raw = _published_leaf_snapshot({"data_collection": fd})
+    assert raw is not None  # a real FinancialData snapshot always dumps
+    return raw
+
+
+def test_published_total_leaf_is_left_exactly_as_written() -> None:
+    """CF 2026-10-14: prose restating the run's OWN published total is not drift.
+
+    The audited report printed "46.8% of the $80.69 enterprise value" because the
+    scrubber recognised an amount only by MAGNITUDE, so the prose's own
+    $15,783,943,454 enterprise value was rewritten to the canonical per-share target
+    while the same artifact's risk bullets still printed the real EV — a TOTAL
+    restated as a PER-SHARE figure. ``valuation.enterprise_value`` is declared a
+    ``total_amount`` leaf, so the amount is recognised as a restatement of that
+    published number and the sentence survives byte for byte.
+    """
+    raw = _snapshot_raw()
+    # The shape claim the whole change rests on: the snapshot's own path IS the
+    # declared leaf path, read through identities.LEAF_KINDS.
+    assert leaves_of_kind(raw, "total_amount")["valuation.enterprise_value"] == 15_783_943_454.0
+    overview = (
+        "The DCF lands at $75.85, with 46.8% of the $15,783,943,454 enterprise value "
+        "arriving in the terminal period."
+    )
+    thesis = _thesis(price_target=80.69, valuation_overview=overview)
+
+    out, drift = _reconcile_narrative_targets(
+        thesis,
+        canonical_target=80.69,
+        allowed_mids=[75.85, 86.40],
+        current_price=119.46,
+        published_raw=raw,
+    )
+
+    assert drift is False
+    assert out.valuation_overview == overview
+    assert "$15,783,943,454" in (out.valuation_overview or "")
+
+
+def test_published_total_leaf_survives_the_override_call_site() -> None:
+    """The same sentence survives the real entry point: ``apply_canonical_override``
+    fed the run's snapshot via ``_published_leaf_snapshot(structured_context)`` (the
+    ``data_collection`` key ``_execute_thesis`` reads)."""
+    raw = _snapshot_raw()
+    overview = (
+        "46.8% of the $15,783,943,454 enterprise value arrives in the terminal period, "
+        "so the DCF's $75.85 is terminal-heavy."
+    )
+    thesis = _thesis(price_target=80.69, valuation_overview=overview)
+    vs = ValuationSynthesis(
+        methods=[
+            ValuationMethod(
+                name="dcf", low=75.85, mid=75.85, high=75.85, confidence=0.5, source="DCF"
+            ),
+            ValuationMethod(
+                name="comps", low=86.40, mid=86.40, high=86.40, confidence=0.5, source="comps"
+            ),
+        ],
+        current_price=119.46,
+        confidence="medium",
+        weighted_price=80.69,
+        upside_downside=-0.32,
+        valuation_withheld=False,
+    )
+    canonical = CanonicalThesis(
+        verdict="HOLD",
+        target=80.69,
+        basis="Blend of 2 methods: DCF $75.85, comps $86.40 → $80.69.",
+        upside=-0.32,
+        valuation_withheld=False,
+        confidence="medium",
+    )
+
+    out = apply_canonical_override(thesis, canonical, vs, published_raw=raw)
+
+    assert out.valuation_overview == overview
+    assert "$15,783,943,454" in (out.valuation_overview or "")
+
+
+def test_per_share_drift_is_still_rewritten_with_leaves_declared() -> None:
+    """Declaring the leaves must not blunt the guard: a drifting per-share claim
+    matches no published non-per-share leaf and no allowed mid, so it is still
+    neutralized to the canonical target."""
+    raw = _snapshot_raw()
+    thesis = _thesis(
+        price_target=80.69,
+        valuation_overview="Fair value of $280 on trough multiples.",
+    )
+
+    out, drift = _reconcile_narrative_targets(
+        thesis,
+        canonical_target=80.69,
+        allowed_mids=[75.85],
+        current_price=119.46,
+        published_raw=raw,
+    )
+
+    assert drift is True
+    assert out.valuation_overview == "Fair value of $80.69 on trough multiples."
+
+
+def test_undeclared_amount_still_falls_back_to_the_magnitude_rule() -> None:
+    """The magnitude heuristic is the FALLBACK for an amount no declaration covers.
+
+    $20,000 / $4,500 match no declared leaf of this snapshot, so the old rule still
+    applies — orders of magnitude above every per-share reference — and the totals
+    survive even with a full declaration on hand.
+    """
+    raw = _snapshot_raw(enterprise_value=None, current_price=1.05)
+    narrative = "Total debt of $20,000 and $4,500 of cash leave the equity thin."
+    thesis = _thesis(price_target=1.2, narrative=narrative)
+
+    out, drift = _reconcile_narrative_targets(
+        thesis,
+        canonical_target=1.2,
+        allowed_mids=[],
+        current_price=1.05,
+        published_raw=raw,
+    )
+
+    assert drift is False
+    assert out.narrative == narrative
+
+
+def test_declared_total_survives_the_withheld_scrub_without_the_heuristic() -> None:
+    """The strictly load-bearing case for the kind lookup.
+
+    On the withheld path with no synthesis there is no canonical target and no market
+    price, so the magnitude heuristic has nothing to compare against (its
+    $1,000,000 floor is all that is left) — a published total BELOW that floor used to
+    be erased to "[target withheld]", contradicting the risk bullets that only the
+    reconcile's scan covers. The run declares it a ``total_amount`` leaf, so the amount
+    is recognised as its own published number and kept.
+    """
+    raw = _snapshot_raw(
+        enterprise_value=None,
+        total_debt=850_000.0,
+        total_cash=120_000.0,
+        market_cap=900_000.0,
+        shares_outstanding=1_000_000.0,
+        current_price=1.05,
+    )
+    narrative = "Total debt of $850,000 against $120,000 of cash leaves little room."
+    thesis = _thesis(price_target=None, narrative=narrative)
+
+    out = apply_canonical_override(thesis, _thc_withheld_canonical(), vs=None, published_raw=raw)
+
+    assert "[target withheld]" not in (out.narrative or "")
+    assert "$850,000" in (out.narrative or "")
+    assert "$120,000" in (out.narrative or "")

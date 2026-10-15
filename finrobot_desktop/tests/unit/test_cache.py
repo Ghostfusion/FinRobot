@@ -268,8 +268,14 @@ class TestCanonicalSlot:
     same (data_type, ticker)."""
 
     def test_canonical_key_embeds_base_type_and_version(self):
+        from finrobot.engine.data.semantics import semantics_digest
+        from finrobot.engine.models.identities import identity_digest
+
         key = canonical_key("financials")
-        assert key == f"financials:canonical:v{CANONICAL_CONTRACT_VERSION}"
+        assert key == (
+            f"financials:canonical:v{CANONICAL_CONTRACT_VERSION}"
+            f"-{semantics_digest('financials')}-{identity_digest()}"
+        )
         # Alias normalization still applies (FILINGS → FILINGS_10K).
         assert canonical_key("filings").startswith("filings_10k:canonical:v")
 
@@ -369,14 +375,19 @@ class TestRawSlotVersion:
 
     def test_shape_changed_raw_slots_are_versioned_others_bare(self):
         from finrobot.engine.data.cache import raw_slot_key
+        from finrobot.engine.data.semantics import semantics_digest
         from finrobot.engine.data.types import DataType
 
-        assert raw_slot_key(DataType.PROXY_STATEMENT) == "proxy_statement:v2"
+        assert raw_slot_key(DataType.PROXY_STATEMENT) == (
+            f"proxy_statement:v2-{semantics_digest('proxy_statement')}"
+        )
         # PEER_CANDIDATES bumped to v3 (2026-07-07): the payload now carries a top-level
         # ``active`` (isActivelyTrading) map so the peer screen can drop a delisted /
         # renamed listing (VMW, old SQ); pre-bump rows lack it and must miss + refetch.
         # (v2, 2026-06-05, added candidate profiles for the value-chain role gate.)
-        assert raw_slot_key(DataType.PEER_CANDIDATES) == "peer_candidates:v3"
+        assert raw_slot_key(DataType.PEER_CANDIDATES) == (
+            f"peer_candidates:v3-{semantics_digest('peer_candidates')}"
+        )
         # FINANCIALS bumped to v6 (2026-10-14): the yfinance payload now DERIVES both
         # margins from the TTM statement frame it publishes beside them (and withholds
         # a margin whose frame row is absent) instead of answering with Yahoo's
@@ -385,7 +396,10 @@ class TestRawSlotVersion:
         # slot with a 24h TTL. (v5, 2026-10-12, EV-bridge claims preferred_stock /
         # noncontrolling_interest; v4, 2026-07-06, cadence-aware TTM window; v3,
         # 2026-06-22, DDM seed inputs; v2, 2026-06-14, book_value_per_share.)
-        assert raw_slot_key(DataType.FINANCIALS) == "financials:v6"
+        # The tag also carries ``semantics_digest`` so a meaning change self-invalidates.
+        assert raw_slot_key(DataType.FINANCIALS) == (
+            f"financials:v6-{semantics_digest('financials')}"
+        )
         # INSIDER_TRADES has no shape change → bare slot (the "others bare" case).
         assert raw_slot_key(DataType.INSIDER_TRADES) == "insider_trades"
 
@@ -436,3 +450,60 @@ class TestWriteErrorsAreNonFatal:
         monkeypatch.setattr(conn, "execute", boom)
         # Background housekeeping must not crash; it reports 0 deleted and retries.
         assert await cache.evict_expired() == 0
+
+
+class TestSemanticsSelfInvalidation:
+    """The slot tag carries ``semantics_digest`` so a meaning change self-invalidates.
+
+    The 2026-10-14 CF incident: the yfinance margins were fixed in code but the
+    hand-maintained version tag was not bumped, so a 24h canonical row kept serving
+    the pre-fix payload. The digest folds the declared FIELD SEMANTICS with the
+    SHA-256 of the producing provider module's source, so either moving the
+    declaration or moving a provider source byte moves the slot — no remembered
+    bump required."""
+
+    def test_slot_is_stable_when_nothing_changes(self):
+        before = raw_slot_key("financials")
+        assert raw_slot_key("financials") == before
+        assert canonical_key("financials") == canonical_key("financials")
+
+    def test_declared_semantics_change_moves_the_raw_slot(self, monkeypatch):
+        import finrobot.engine.data.semantics as sem
+
+        base = "financials"
+        before = raw_slot_key(base)
+        assert before.startswith(f"{base}:v{sem.RAW_SLOT_VERSION[base]}-")
+
+        tweaked = sem.FIELD_SEMANTICS[base] + (
+            sem.FieldSemantics("a_newly_declared_field", "USD", "ttm_flow", "derived"),
+        )
+        monkeypatch.setitem(sem.FIELD_SEMANTICS, base, tweaked)
+
+        assert (
+            raw_slot_key(base)
+            == f"{base}:v{sem.RAW_SLOT_VERSION[base]}-{sem.semantics_digest(base)}"
+        )
+        assert raw_slot_key(base) != before
+
+    def test_provider_source_digest_change_moves_the_raw_slot(self, monkeypatch):
+        import finrobot.engine.data.semantics as sem
+
+        base = "financials"  # producers include fmp
+        before = raw_slot_key(base)
+        monkeypatch.setitem(sem._SOURCE_DIGESTS, sem.PROVIDER_MODULE["fmp"], "deadbeefdeadbeef")
+        assert raw_slot_key(base) != before
+
+    def test_canonical_slot_tracks_identity_and_semantics(self, monkeypatch):
+        import dataclasses
+
+        import finrobot.engine.data.semantics as sem
+        from finrobot.engine.models import identities
+
+        before = canonical_key("financials")
+        assert sem.semantics_digest("financials") in before
+
+        # identity_digest() reads the live IDENTITIES registry; adding one moves it,
+        # so the canonical slot that a value is read against changes with the arithmetic.
+        extra = dataclasses.replace(identities.IDENTITIES[0], id="a_new_identity")
+        monkeypatch.setattr(identities, "IDENTITIES", identities.IDENTITIES + (extra,))
+        assert canonical_key("financials") != before

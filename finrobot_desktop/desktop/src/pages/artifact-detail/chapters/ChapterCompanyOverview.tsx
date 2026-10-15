@@ -68,6 +68,7 @@ function buildSnapshot(
   quoteCurrency: string,
   locale: Locale,
   source?: NumberSource,
+  dcfBetaBasis?: 'raw' | 'blume' | null,
 ): { identity: SnapshotIdentity; metrics: SnapshotMetric[] } {
   // ── Identity (plain strings, no provenance popover) ───────────────────────
   const identity: SnapshotIdentity = {}
@@ -140,11 +141,13 @@ function buildSnapshot(
       // CF 2026-10-14: the tile's β 0.53 IS the WACC β, and a blanket "DCF uses a
       // Blume-adjusted β" invited exactly the misreading that the model had used
       // 0.69). The note must name BOTH the caliber and the threshold.
-      note: tr(
-        '行情商 5 年 β（未调整）—— DCF 的 Blume 调整 β 仅在 β>1 时适用（β≤1 直接用原值）',
-        "Provider 5y β, unadjusted — the DCF's Blume-adjusted β applies only when β>1 (β≤1 is used as-is)",
-        locale,
-      ),
+      //
+      // The note itself is derived by CompanySnapshot from the DECLARED basis
+      // (`dcfBetaBasis`, "raw" | "blume"; see betaCaliberNote). Only a declared
+      // value is forwarded — anything else, including a legacy artifact that
+      // carries no declaration, is null, so the tile falls back to the conditional
+      // β>1 rule rather than asserting a caliber the artifact never declared.
+      basis: dcfBetaBasis === 'raw' || dcfBetaBasis === 'blume' ? dcfBetaBasis : null,
       source,
     })
   }
@@ -307,6 +310,7 @@ export function ChapterCompanyOverview({
   quoteCurrency,
   dataSource,
   fetchedAt,
+  dcfBetaBasis,
   segmentOverview,
   reportingCurrency,
 }: {
@@ -317,6 +321,13 @@ export function ChapterCompanyOverview({
   quoteCurrency: string
   dataSource: string | null
   fetchedAt: string | null
+  /** The DECLARED basis of the β the DCF/WACC actually used, from
+   *  `financial_modeling.inputs.assumption_provenance.beta_basis` ("raw" | "blume").
+   *  It cannot ride `raw_data.market`: the β basis is decided in the
+   *  financial-modeling step, AFTER data_collection froze the snapshot. Only a
+   *  declared value is forwarded; a legacy artifact carries none, and the tile then
+   *  states the β>1 rule instead of a caliber the artifact never declared. */
+  dcfBetaBasis?: 'raw' | 'blume' | null
   // BACKLOG A4 (2026-07-09): display-only segment revenue mix. null when the
   // SOTP option-value gate fired instead (that ticker's segments render in
   // ChapterValuation's SOTPBreakdownPanel) or SEC XBRL had no cleanly-anchorable
@@ -347,6 +358,7 @@ export function ChapterCompanyOverview({
     quoteCurrency,
     locale,
     numberSource,
+    dcfBetaBasis,
   )
 
   return (

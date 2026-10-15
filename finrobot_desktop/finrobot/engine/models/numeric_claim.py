@@ -21,6 +21,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from finrobot.engine.models.identities import QuantityKind
+
 Severity = Literal["info", "review", "blocked_field"]
 FieldStatus = Literal["pass", "review", "blocked_field"]
 # Report-level data-quality status (design doc §7, two-axis status). PUBLISHABLE:
@@ -78,6 +80,18 @@ class NumericClaim(BaseModel):
 
     field_key: str
     value: float | None = None
+    kind: QuantityKind | None = Field(
+        default=None,
+        description=(
+            "WHAT KIND of quantity this is — per_share / total_amount / ratio / multiple "
+            "/ rate / count — from ``engine/models/identities.LEAF_KINDS`` (the same "
+            "declaration the drift scrubber consults). None when nothing declares the "
+            "field, which is a fact about the field rather than a default: the amount "
+            "then cannot be told apart from a per-share figure by type, and only the "
+            "scrubber's magnitude fallback stands between this ledger and a total "
+            "restated as a share price."
+        ),
+    )
     currency: str | None = None
     period: str | None = None  # TTM / NTM / FY
     source: str | None = None

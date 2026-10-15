@@ -193,6 +193,7 @@ export function ChapterCover({
       {showReverseDcf && marketImplied && (
         <ReverseDcfHeadline
           marketImplied={marketImplied}
+          premiumDriver={marketImplied.premium_driver ?? null}
           dcfMethod={dcfMethod}
           currentPrice={currentPrice}
           quoteCurrency={quoteCurrency}

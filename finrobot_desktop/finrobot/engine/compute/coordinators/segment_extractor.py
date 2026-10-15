@@ -119,6 +119,8 @@ async def build_sotp_breakdown(
     net_debt: float,
     shares_outstanding: float,
     current_price: float,
+    preferred_stock: float | None = None,
+    noncontrolling_interest: float | None = None,
     option_ev_if_success: float | None = None,
     option_anchor_source: str | None = None,
 ) -> SOTPBreakdown | None:
@@ -219,6 +221,8 @@ async def build_sotp_breakdown(
         net_debt=net_debt,
         shares_outstanding=shares_outstanding,
         current_price=current_price,
+        preferred_stock=preferred_stock,
+        noncontrolling_interest=noncontrolling_interest,
         option_ev_if_success=option_ev_if_success,
         option_anchor_source=option_anchor_source,
         scenario_band=None,

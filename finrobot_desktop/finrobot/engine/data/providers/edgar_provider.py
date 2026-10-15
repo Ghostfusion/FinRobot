@@ -83,6 +83,7 @@ from finrobot.engine.data.interface import (
     RateLimitedProviderError,
 )
 from finrobot.engine.data.types import DataType
+from finrobot.engine.models.identities import is_identity_total
 from finrobot.warning_text import safe_error_text
 
 logger = logging.getLogger(__name__)
@@ -373,6 +374,22 @@ _LATEST_TOTAL_LIABILITIES_CONCEPTS: tuple[str, ...] = (
     "Liabilities",
     "TotalLiabilities",
 )
+
+# The rule above, ENFORCED rather than trusted (CF audit, 2026-10-14): a concept that is
+# an identity TOTAL can never be read as a component of one. The vocabulary lives in
+# ``engine/models/identities`` beside the identities themselves, so a future provider arm
+# adding a fallback tag is stopped at import instead of by a reader noticing that total
+# equity came out as 0.
+_INVALID_LIABILITY_CONCEPTS: tuple[str, ...] = tuple(
+    concept for concept in _LATEST_TOTAL_LIABILITIES_CONCEPTS if is_identity_total(concept)
+)
+if _INVALID_LIABILITY_CONCEPTS:  # pragma: no cover - import guard against an edit
+    raise RuntimeError(
+        f"{_INVALID_LIABILITY_CONCEPTS} are balance-sheet IDENTITY TOTALS (they equal "
+        "Assets by definition), not liabilities figures — selecting one makes "
+        "latest_total_liabilities equal latest_total_assets and publishes a total equity "
+        "of 0"
+    )
 _LATEST_SHAREHOLDERS_EQUITY_CONCEPTS: tuple[str, ...] = (
     "StockholdersEquity",
     "ShareholdersEquity",

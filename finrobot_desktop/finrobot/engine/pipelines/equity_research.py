@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any, Final, Literal
 
@@ -31,6 +32,7 @@ from finrobot.engine.compute.operators.audit import (
     audit_narrative_numeric_grounding,
     compute_momentum_context,
 )
+from finrobot.engine.models.identities import QuantityKind, leaves_of_kind
 from finrobot.engine.models.reconcile_tolerances import NARRATIVE_DRIFT_TOLERANCE
 from finrobot.engine.compute.operators.catalyst import (
     SEC_8K_SOURCE_MARKER,
@@ -1043,6 +1045,10 @@ async def _execute_financial_modeling(
                     net_debt=dcf_inputs.net_debt,
                     shares_outstanding=dcf_inputs.shares_outstanding,
                     current_price=current_price,
+                    # The equity floor docks the same senior claims the DCF and the
+                    # multiple band do (identities.evaluate("ev_to_equity")).
+                    preferred_stock=dcf_inputs.preferred_stock,
+                    noncontrolling_interest=dcf_inputs.noncontrolling_interest,
                 )
             except (
                 ProviderError,
@@ -1482,16 +1488,31 @@ _DOLLAR_RE = re.compile(
 # (engine/models/reconcile_tolerances) so the output contract's C3 (basis
 # conclusion == headline) and this reconcile speak the same "same number" rule.
 
-# A prose $-amount this many times larger than EVERY per-share reference the guard
-# holds is not a drifted restatement of a per-share number — it is a total (an
-# enterprise value, a market cap, a revenue line). See
-# _reconcile_narrative_targets._is_total_not_per_share.
+# Leaf kinds whose published value a prose amount is a RESTATEMENT of, not drift.
+# The run's own snapshot declares them (``identities.LEAF_KINDS``), so "is this
+# amount a published total?" is a lookup — never a guess. ``per_share`` is
+# deliberately NOT here: matching a published per-share leaf still leaves the amount
+# on the ordinary target/allowed-mid path below. ``rate`` is deliberately NOT here
+# either: a beta or a %-return is not a dollar figure, so a prose $-amount that
+# happens to match one keeps the old path.
+_PUBLISHED_NON_PER_SHARE_KINDS: Final[tuple[QuantityKind, ...]] = (
+    "total_amount",
+    "ratio",
+    "multiple",
+    "count",
+)
+
+# FALLBACK ONLY (see _reconcile_narrative_targets): a prose $-amount this many times
+# larger than EVERY per-share reference the guard holds is not a drifted restatement
+# of a per-share number — it is a total (an enterprise value, a market cap, a revenue
+# line). Used only for an amount that matches NO declared leaf at all; when the run
+# declares the leaf, ``_PUBLISHED_NON_PER_SHARE_KINDS`` decides instead.
 _PER_SHARE_MAGNITUDE_HEADROOM = 10.0
 
-# Absolute floor for the same rule: no listed equity these reports cover trades at a
-# seven-figure share price, so an un-suffixed $1,000,000+ amount is a total. Closes the
-# case the relative test alone cannot see — a fabricated point target on a cheap stock
-# (>10× a $50 tape is still only $500).
+# Absolute floor for the same fallback rule: no listed equity these reports cover
+# trades at a seven-figure share price, so an un-suffixed $1,000,000+ amount is a
+# total. Closes the case the relative test alone cannot see — a fabricated point
+# target on a cheap stock (>10× a $50 tape is still only $500).
 _TOTAL_AMOUNT_FLOOR = 1_000_000.0
 
 
@@ -1500,6 +1521,7 @@ def _reconcile_narrative_targets(
     canonical_target: float | None,
     allowed_mids: list[float],
     current_price: float | None = None,
+    published_raw: Mapping[str, Any] | None = None,
 ) -> tuple[ThesisResult, bool]:
     """Code-only guard: neutralize prose $-amounts that contradict the canonical target.
 
@@ -1512,8 +1534,9 @@ def _reconcile_narrative_targets(
         replaced with a ``[target withheld]`` marker. This stops the LLM from
         printing "fair value ≈ $X" in prose when the structured target is null.
         Amounts that cannot be a per-share price at all — a zero amount, a
-        magnitude-suffixed total, a minus-prefixed figure, and any un-suffixed total
-        orders of magnitude above every per-share reference — are left alone.
+        magnitude-suffixed total, a minus-prefixed figure, a declared published leaf,
+        and any un-suffixed total orders of magnitude above every per-share
+        reference — are left alone.
 
     After the deterministic override forces ``price_target`` to the canonical
     weighted value, the headline-bearing free-text fields from the *same* LLM
@@ -1525,6 +1548,26 @@ def _reconcile_narrative_targets(
     canonical "$Y" in place (least-invasive neutralization — the sentence
     structure is preserved). No second LLM call is made.
 
+    Recognition order (what makes an amount "not drift"):
+
+    1. ``published_raw`` — the run's OWN snapshot (``FinancialData.model_dump(
+       mode="json")``, exactly the artifact ``raw_data`` shape ``identities.LEAF_KINDS``
+       keys) — declares what each published leaf IS. An amount matching a declared
+       ``total_amount`` / ``ratio`` / ``multiple`` / ``count`` leaf within
+       ``NARRATIVE_DRIFT_TOLERANCE`` is a RESTATEMENT of that published number and is
+       left EXACTLY as written. This is the CF 2026-10-14 fix: the prose's own
+       "46.8% of the $15,783,943,454 enterprise value" was rewritten to the canonical
+       "$80.69" — a TOTAL printed as a PER-SHARE target — while the same artifact's
+       risk bullets still printed the real EV. A match on a declared ``per_share``
+       leaf (or any other declared leaf) certifies only that the amount is a number
+       the run itself publishes: it is not a total, so the magnitude fallback below
+       cannot rescue it, and the amount stays on the ordinary target / allowed-mid path.
+    2. An amount matching NO declared leaf at all falls back to the magnitude
+       heuristic (``_is_total_not_per_share``): with nothing declaring what it is, a
+       figure that dwarfs every per-share reference is still recognised as a total.
+       That heuristic is the honest remainder of this change — it covers the leaves the
+       registry does not declare, and nothing else.
+
     ``current_price`` is a legitimately-citable reference (the narrative now
     states the real market price; whitelisting it stops this guard from
     rewriting "市场价 $425" → the target "$306.59" — which would re-create the
@@ -1532,6 +1575,29 @@ def _reconcile_narrative_targets(
 
     Returns the (possibly model_copied) thesis and whether any drift was found.
     """
+    # The run's own published leaves, by kind (``identities.LEAF_KINDS`` — the one
+    # declaration of what each published number IS). ``declared_leaves`` holds every
+    # declared kind this snapshot publishes (the magnitude fallback's gate: an amount
+    # matching ANY of them is not an undeclared figure); ``non_per_share_leaves`` is
+    # the subset whose match means "restating a published total / ratio / multiple /
+    # count", which must survive untouched.
+    declared_leaves: dict[str, float] = {}
+    non_per_share_leaves: dict[str, float] = {}
+    if published_raw is not None:
+        declared_leaves.update(leaves_of_kind(published_raw, "per_share"))
+        declared_leaves.update(leaves_of_kind(published_raw, "rate"))
+        for kind in _PUBLISHED_NON_PER_SHARE_KINDS:
+            kind_leaves = leaves_of_kind(published_raw, kind)
+            non_per_share_leaves.update(kind_leaves)
+            declared_leaves.update(kind_leaves)
+
+    def _matches_published(leaves: dict[str, float], value: float) -> bool:
+        """Whether ``value`` restates one of ``leaves`` within the drift tolerance."""
+        return any(
+            abs(value - published) <= abs(published) * NARRATIVE_DRIFT_TOLERANCE
+            for published in leaves.values()
+        )
+
     # Point published → rewrite drift to the canonical "$Y". Point withheld
     # (canonical_target is None) → there is nothing to rewrite TO, so erase the
     # smuggled amount to an explicit withheld marker.
@@ -1558,6 +1624,12 @@ def _reconcile_narrative_targets(
 
     def _is_total_not_per_share(value: float) -> bool:
         """True when ``value`` cannot be a per-share price at all.
+
+        FALLBACK — the caller applies this only to an amount matching NO declared leaf
+        (``declared_leaves``), i.e. one ``identities.LEAF_KINDS`` does not cover. An
+        amount the run declares as a published total/ratio/multiple/count never reaches
+        here: the kind lookup recognises it outright (and, for CF 2026-10-14, would
+        have done so where this guess let the comma-form total through).
 
         This guard exists to catch a prose restatement of a PER-SHARE number (the
         target, the price, a method mid) — the only thing a drifting model can
@@ -1613,8 +1685,18 @@ def _reconcile_narrative_targets(
             # withheld] of open-market purchases").
             if value == 0:
                 return match.group(0)
-            # A TOTAL is categorically not a per-share target (see the helper).
-            if _is_total_not_per_share(value):
+            # The run's OWN published leaves decide first, by DECLARATION: an amount
+            # matching a declared total / ratio / multiple / count leaf is that
+            # published number being restated, not a drifted per-share target.
+            # (CF 2026-10-14: the prose's own $15,783,943,454 enterprise value was
+            # rewritten to the $80.69 target — a TOTAL printed as a PER-SHARE figure.)
+            if _matches_published(non_per_share_leaves, value):
+                return match.group(0)
+            # Magnitude heuristic — FALLBACK, for an amount matching NO declared leaf
+            # at all. Matching a declared per_share leaf likewise certifies the amount
+            # is a number the run publishes (and so not a total), leaving it on the
+            # ordinary target / allowed-mid path below.
+            if not _matches_published(declared_leaves, value) and _is_total_not_per_share(value):
                 return match.group(0)
             if _is_allowed(value):
                 return match.group(0)
@@ -1699,11 +1781,28 @@ def _published_citable_amounts(structured_context: dict[str, object]) -> list[fl
     return amounts
 
 
+def _published_leaf_snapshot(structured_context: dict[str, object]) -> dict[str, Any] | None:
+    """The run's own ``FinancialData`` snapshot in the artifact's ``raw_data`` shape.
+
+    ``identities.LEAF_KINDS`` is keyed by ARTIFACT path (``valuation.enterprise_value``,
+    ``market.current_price`` …), and ``FinancialData.model_dump(mode="json")`` is exactly
+    the mapping the artifact publishes as ``raw_data`` — so the leaves the narrative
+    scrubber must recognise are read from the same object, in the same shape, as the
+    declaration it consults. A missing/foreign snapshot yields ``None`` (never a guess):
+    the scrubber then recognises only what magnitude lets it, as before kinds existed.
+    """
+    fd = structured_context.get("data_collection")
+    if not isinstance(fd, FinancialData):
+        return None
+    return fd.model_dump(mode="json")
+
+
 def apply_canonical_override(
     thesis: ThesisResult,
     canonical: CanonicalThesis,
     vs: object,
     published_amounts: list[float] | None = None,
+    published_raw: Mapping[str, Any] | None = None,
 ) -> ThesisResult:
     """Force the LLM's headline fields onto the canonical (deterministic) values.
 
@@ -1713,7 +1812,11 @@ def apply_canonical_override(
     prompt-fidelity evals, and (on the publish path) neutralize drifting $-amounts
     in the free-text narrative against the canonical target. Pure: no I/O, no LLM.
     ``vs`` is the "valuation_synthesis" structured-context value (per-method mids
-    + market price feed the narrative reconciliation).
+    + market price feed the narrative reconciliation). ``published_raw`` is the run's
+    ``FinancialData`` snapshot (``_published_leaf_snapshot``): it lets the reconcile
+    read each published leaf's DECLARED kind (``identities.LEAF_KINDS``) instead of
+    guessing from magnitude, so a prose restatement of a published total is not
+    rewritten to the canonical per-share target.
     """
     canonical_basis = canonical.basis
     canonical_target = canonical.target
@@ -1779,7 +1882,11 @@ def apply_canonical_override(
         # prose ~$280"). Scan the headline-bearing fields and neutralize any
         # drifting $-amount to the canonical value (code only, no second LLM call).
         thesis, _ = _reconcile_narrative_targets(
-            thesis, canonical_target, allowed_mids, current_price=market_price
+            thesis,
+            canonical_target,
+            allowed_mids,
+            current_price=market_price,
+            published_raw=published_raw,
         )
     else:
         # POINT withheld (valuation_withheld) OR no usable synthesis at all. Either
@@ -1815,9 +1922,14 @@ def apply_canonical_override(
         # smuggle a $-amount into prose when the structured target is null. With
         # no canonical target to rewrite TO, _reconcile_narrative_targets (called
         # with canonical_target=None) strips any prose $-amount that is not a
-        # whitelisted per-method mid or the market price to a [withheld] marker.
+        # whitelisted per-method mid, a declared published leaf or the market price
+        # to a [withheld] marker.
         thesis, _ = _reconcile_narrative_targets(
-            thesis, None, allowed_mids, current_price=market_price
+            thesis,
+            None,
+            allowed_mids,
+            current_price=market_price,
+            published_raw=published_raw,
         )
     return thesis
 
@@ -1947,7 +2059,11 @@ async def _execute_thesis(
     # logs any drift, neutralizes drifting $-amounts in the narrative). Same
     # inputs always produce the same numbers — see apply_canonical_override.
     thesis = apply_canonical_override(
-        thesis, canonical, vs, published_amounts=_published_citable_amounts(structured_context)
+        thesis,
+        canonical,
+        vs,
+        published_amounts=_published_citable_amounts(structured_context),
+        published_raw=_published_leaf_snapshot(structured_context),
     )
 
     # Deterministic bear-case backstop: when the revenue base is government

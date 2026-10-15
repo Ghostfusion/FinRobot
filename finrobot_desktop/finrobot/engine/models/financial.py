@@ -765,6 +765,19 @@ class MarketImpliedCheck(BaseModel):
     """Implied price at ``growth_ceiling`` — the highest the DCF can reach. Lets
     the UI/narrative quantify how far the market sits beyond any plausible
     growth (TSLA: $65 ceiling vs $418 market)."""
+    premium_driver: Literal["growth", "discount_rate"] | None = None
+    """WHICH side of the equation the premium over the model's own value is a bet
+    on, DECLARED rather than inferred by the renderer.
+
+    The cover's premium sentence used to branch on the SIZE of the premium and then
+    assert "a bet on the implied growth" — including beside a NEGATIVE implied
+    growth, where the market is pricing a decline and the premium is a discount-rate
+    bet. A component that reads a number to decide what a sentence MEANS is one
+    magnitude edit away from a false claim, so the compute layer states it:
+    ``growth`` when the price is explained by non-negative implied growth,
+    ``discount_rate`` when it is not (unreachable, unsolved, or negative implied
+    growth). None only on legacy payloads — the renderer keeps its own fallback for
+    those."""
 
 
 class MarketImpliedNature(BaseModel):
