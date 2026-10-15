@@ -1888,6 +1888,17 @@ def apply_canonical_override(
     # so prose citing them is citation, not a smuggled fabricated point.
     if isinstance(vs, ValuationSynthesis):
         allowed_mids += [b for b in (vs.target_low, vs.target_high) if b is not None]
+        # The confidence-weighted BLEND — the other per-share number the canonical
+        # basis names, beside the anchor it is not. A narrative that states it is
+        # restating a published leaf; without it here the scrubber rewrote it to the
+        # canonical target and turned a TRUE sentence into a false one: TROW
+        # 2026-10-15's narrative wrote the blend correctly, the run log shows
+        # "narrative target drift: prose $138.97 vs canonical $164.20 — neutralizing"
+        # twice, and the artifact shipped "a two-method weighting would give $164.20"
+        # — the anchor, asserted of the blend, in a report whose owner then read it as
+        # a plain arithmetic error (review 2026-10-15, item 2).
+        if vs.weighted_price is not None:
+            allowed_mids.append(vs.weighted_price)
     # Published DATA figures (the insider-flow aggregates the same artifact prints in
     # its risk bullets) are citations, not smuggled point targets — the scrubber must
     # not censor them. See _published_citable_amounts.

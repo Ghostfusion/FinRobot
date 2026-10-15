@@ -293,6 +293,75 @@ def test_per_method_band_bounds_are_whitelisted_not_drift() -> None:
     assert "$181.66" in out.price_target_basis
 
 
+def test_published_blend_is_whitelisted_not_drift() -> None:
+    """The confidence-weighted blend is a published per-share number, not drift.
+
+    Owner review 2026-10-15 (TROW): the narrative stated the blend correctly, this
+    scrubber rewrote it to the canonical target, and the artifact shipped "a
+    two-method weighting would give $164.20" — the DCF anchor asserted OF the blend —
+    while ``valuation_synthesis.weighted_price`` was $138.97. The canonical basis now
+    names the blend beside the anchor it is not, so the scrubber must leave it alone.
+    """
+    basis = (
+        "Confidence=medium; anchored on dcf (comparability rule — not a blended midpoint of "
+        "divergent methods; a confidence-weighted blend of all methods would give $138.97 and "
+        "is NOT the published target): DCF $164.20 (own range $131.36–$197.04, wt 0.85), "
+        "EV/EBITDA $105.92 (own range $98.56–$119.84, wt 0.72) → $164.20."
+    )
+    thesis = _thesis(
+        price_target=164.20,
+        price_target_basis=basis,
+        valuation_overview=(
+            "The published target is the DCF anchor $164.20; a confidence-weighted blend of "
+            "the two methods would give $138.97 and is not used."
+        ),
+    )
+    vs = ValuationSynthesis(
+        methods=[
+            ValuationMethod(
+                name="dcf",
+                low=131.36,
+                mid=164.20,
+                high=197.04,
+                confidence=0.85,
+                source="implied_price ± 20%",
+            ),
+            ValuationMethod(
+                name="ev_ebitda",
+                low=98.56,
+                mid=105.92,
+                high=119.84,
+                confidence=0.72,
+                source="self_5y_p25_p75 × ttm_ebitda − net_debt − preferred − NCI",
+            ),
+        ],
+        current_price=101.37,
+        confidence="medium",
+        weighted_price=138.97,
+        upside_downside=0.6198,
+        target_low=105.92,
+        target_high=164.20,
+        anchor_method="dcf",
+    )
+    canonical = CanonicalThesis(
+        verdict="BUY",
+        target=164.20,
+        basis=basis,
+        upside=0.6198,
+        valuation_withheld=False,
+        confidence="medium",
+    )
+
+    out = apply_canonical_override(thesis, canonical, vs)
+
+    # The blend survives in the prose AND in the basis — one report, two numbers,
+    # each labelled for what it is.
+    assert out.valuation_overview is not None
+    assert "$138.97" in out.valuation_overview
+    assert out.price_target_basis == basis
+    assert "$138.97" in out.price_target_basis
+
+
 def test_drift_scanned_across_tagline_and_takeaways() -> None:
     thesis = _thesis(
         tagline="AAPL · fair value ~$280, room to run",
