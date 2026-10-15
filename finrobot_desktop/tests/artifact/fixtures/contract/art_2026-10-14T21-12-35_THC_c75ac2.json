@@ -1,6 +1,6 @@
 {
   "artifact_id": "art_2026-10-14T21:12:35_THC_equity_research_c75ac2",
-  "extracted_at": "2026-10-14",
+  "extracted_at": "2026-10-15",
   "inputs_raw_data": {
     "balance": {
       "noncontrolling_interest": 4042000000.0,
@@ -313,7 +313,7 @@
       "ev_revenue": 1.6958078405290473
     }
   },
-  "notes": "the newest stored artifact — the post-fix reference for C10c/C13b, and the reference for C11 NOT firing (root and synthesis both emit the flag)",
+  "notes": "the newest stored artifact — the post-fix reference for C10c/C13b, and the reference for C11 NOT firing (root and synthesis both emit the flag); and the pre-fix operating margin C10e catches",
   "outputs_structured": {
     "catalyst_analysis": {
       "category_breakdown": {
@@ -1124,7 +1124,8 @@
     }
   },
   "pinned_for": [
-    "C10d"
+    "C10d",
+    "C10e"
   ],
   "source": "~/.finrobot/artifacts.db",
   "ticker": "THC",
@@ -1135,6 +1136,7 @@
     "C10b": false,
     "C10c": false,
     "C10d": true,
+    "C10e": true,
     "C11": false,
     "C12a": true,
     "C12b": false,

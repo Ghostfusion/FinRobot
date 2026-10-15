@@ -1,6 +1,6 @@
 {
   "artifact_id": "art_2026-10-14T00:16:20_NFLX_equity_research_f7a3ac",
-  "extracted_at": "2026-10-14",
+  "extracted_at": "2026-10-15",
   "inputs_raw_data": {
     "balance": {
       "noncontrolling_interest": null,
@@ -901,6 +901,7 @@
     "C10b": false,
     "C10c": true,
     "C10d": false,
+    "C10e": false,
     "C11": false,
     "C12a": false,
     "C12b": false,

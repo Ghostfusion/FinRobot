@@ -96,6 +96,78 @@ def test_13f_holding_missing_shares_or_value_is_dropped_not_zeroed() -> None:
     assert holdings[0].value_usd == 57_843_260_493.0
 
 
+def _holder(
+    name: str, shares: int, value_usd: float, cusip: str = "125269100"
+) -> dict[str, object]:
+    """One raw 13F row; ``value_usd`` is the filing's own figure (not derived)."""
+    return {
+        "holder_name": name,
+        "cusip": cusip,
+        "name_of_issuer": "CF INDUSTRIES HOLDINGS INC",
+        "title_of_class": "COM",
+        "shares": shares,
+        "value_usd": value_usd,
+        "period_end": "2026-06-30",
+        "filing_date": "2026-08-12",
+        "accession_no": f"0001-{name}",
+    }
+
+
+def test_13f_rows_that_disagree_on_their_quarters_price_are_named() -> None:
+    """CF 2026-10-14: 16 of 20 rows implied the 2026-06-30 close ($108.26) while
+    Geode implied $116.95 and Jones Financial $105.70 — and the published top-5
+    concentration was computed from exactly those share counts. A row whose value
+    and share count contradict the same quarter's other rows is internally
+    inconsistent, so the reader has to be told which rows those are."""
+    holders = [
+        _holder("HOLDER A", 1_000_000, 1_000_000 * 108.26),
+        _holder("HOLDER B", 900_000, 900_000 * 108.26),
+        _holder("HOLDER C", 800_000, 800_000 * 108.26),
+        # The two real outliers, with the filings' own value/share pairs.
+        _holder("GEODE CAPITAL MANAGEMENT, LLC", 5_386_783, 629_980_502.0),
+        _holder("JONES FINANCIAL COMPANIES LLLP", 298_949, 31_600_067.0),
+    ]
+
+    analysis = compute_ownership_governance(
+        insider_data=None,
+        institutional_data={"holders": holders},
+        proxy_data=None,
+    )
+
+    warning = next((w for w in analysis.warnings if "internally inconsistent" in w), None)
+    assert warning is not None
+    assert "$116.95" in warning
+    assert "$105.70" in warning
+    assert "GEODE CAPITAL MANAGEMENT, LLC" in warning
+    # The rows are still published — the note qualifies the aggregate, it does not
+    # censor the filings.
+    assert len(analysis.institutional_holdings) == 5
+
+
+def test_13f_value_basis_check_is_quiet_when_the_rows_agree_or_are_too_few() -> None:
+    """One holder for one row (or a set that agrees) says nothing about a wrong
+    row, so the check must abstain rather than name a majority of one."""
+    agreeing = [
+        _holder("HOLDER A", 1_000_000, 1_000_000 * 108.26),
+        _holder("HOLDER B", 900_000, 900_000 * 108.26),
+        _holder("HOLDER C", 800_000, 800_000 * 108.26),
+    ]
+    # Two rows are ONE comparison, not a majority — an outlier there is not
+    # evidence of a wrong row, so the check abstains.
+    two_rows = [
+        _holder("HOLDER A", 1_000_000, 1_000_000 * 108.26),
+        _holder("OUTLIER", 100_000, 100_000 * 200.0),
+    ]
+
+    for holders in (agreeing, two_rows):
+        analysis = compute_ownership_governance(
+            insider_data=None,
+            institutional_data={"holders": holders},
+            proxy_data=None,
+        )
+        assert not [w for w in analysis.warnings if "internally inconsistent" in w]
+
+
 def test_schedule13_pct_optional_when_unparseable() -> None:
     """Vanguard-style cover pages can defeat the % regex; shares is still real,
     pct stays None rather than a fabricated number."""

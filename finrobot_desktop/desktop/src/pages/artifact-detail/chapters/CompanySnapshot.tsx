@@ -80,8 +80,14 @@ function isoDate(iso: string | null | undefined): string {
 /** Standard, deterministic beta classification (β is a unit-free ratio). */
 function betaDescriptor(beta: number): string {
   if (!Number.isFinite(beta)) return ''
-  if (beta < 0.8) return 'DEFENSIVE · LOW β'
-  if (beta > 1.2) return 'AGGRESSIVE · HIGH β'
+  // β-SCOPED ON PURPOSE: state the beta regime, never a volatility claim. β
+  // measures co-movement with the market, not risk in isolation — a name can hold
+  // a low 5y β and still be violently volatile on its own (CF 2026-10-14: β 0.53
+  // beside a 43% realized equity volatility, a 16.9% debt/value and a $74–142
+  // 52-week range, while the old "DEFENSIVE · LOW β" read as a low-risk claim the
+  // same artifact's credit_risk block contradicted).
+  if (beta < 0.8) return 'LOW β vs MARKET'
+  if (beta > 1.2) return 'HIGH β vs MARKET'
   return '≈ MARKET RISK'
 }
 

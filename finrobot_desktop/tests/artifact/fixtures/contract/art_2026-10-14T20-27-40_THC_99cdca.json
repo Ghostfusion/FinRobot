@@ -1,6 +1,6 @@
 {
   "artifact_id": "art_2026-10-14T20:27:40_THC_equity_research_99cdca",
-  "extracted_at": "2026-10-14",
+  "extracted_at": "2026-10-15",
   "inputs_raw_data": {
     "balance": {
       "noncontrolling_interest": 4042000000.0,
@@ -313,7 +313,7 @@
       "ev_revenue": 1.6958078405290473
     }
   },
-  "notes": "instance B, the ORDERING case: the verdict read no cross-check (the own-history band resolved to 0 samples) and the cross-check in the payload arrived after the verdict; the note still claims there was no cross-validation",
+  "notes": "instance B, the ORDERING case: the verdict read no cross-check (the own-history band resolved to 0 samples) and the cross-check in the payload arrived after the verdict; the note still claims there was no cross-validation; and the pre-fix operating margin C10e catches",
   "outputs_structured": {
     "catalyst_analysis": {
       "category_breakdown": {
@@ -1114,7 +1114,8 @@
   "pinned_for": [
     "C6b",
     "C8",
-    "C11"
+    "C11",
+    "C10e"
   ],
   "source": "~/.finrobot/artifacts.db",
   "ticker": "THC",
@@ -1125,6 +1126,7 @@
     "C10b": false,
     "C10c": false,
     "C10d": true,
+    "C10e": true,
     "C11": true,
     "C12a": true,
     "C12b": false,

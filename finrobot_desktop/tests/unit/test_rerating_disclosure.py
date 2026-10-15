@@ -161,12 +161,12 @@ class TestEvEbitdaReratingDisclosure:
         assert m.mid == pytest.approx(300.0)  # (250 + 350) / 2 — the price band is unchanged
         assert m.assumptions is not None
         assert (
-            "implied re-rating: price-implied EV/TTM-EBITDA 20.0× → own 5y trailing band mid 30.0× (1.50×)"
+            "implied re-rating: price-implied EV/TTM-EBITDA 20.0× → own 5y p25–p75 midpoint 30.0× (1.50×)"
             in m.assumptions
         )
         rr = [w for w in warnings if _WARN_TAIL in w]
         assert len(rr) == 1
-        assert "expand from 20.0× to the trailing band mid 30.0×" in rr[0]
+        assert "expand from 20.0× to the p25–p75 midpoint of that band 30.0×" in rr[0]
 
     def test_small_gap_discloses_in_assumptions_without_warning(self) -> None:
         # price 280 → current implied 28.0x vs band mid 30.0x; ratio 1.07 (< 0.25).
@@ -175,7 +175,7 @@ class TestEvEbitdaReratingDisclosure:
         assert m is not None
         assert m.assumptions is not None
         assert (
-            "price-implied EV/TTM-EBITDA 28.0× → own 5y trailing band mid 30.0× (1.07×)"
+            "price-implied EV/TTM-EBITDA 28.0× → own 5y p25–p75 midpoint 30.0× (1.07×)"
             in m.assumptions
         )
         assert not any(_WARN_TAIL in w for w in warnings)
@@ -188,12 +188,12 @@ class TestEvEbitdaReratingDisclosure:
         assert m is not None
         assert m.assumptions is not None
         assert (
-            "implied re-rating: price-implied EV/TTM-EBITDA 30.0× → own 5y trailing band mid 21.0× (0.70×)"
+            "implied re-rating: price-implied EV/TTM-EBITDA 30.0× → own 5y p25–p75 midpoint 21.0× (0.70×)"
             in m.assumptions
         )
         rr = [w for w in warnings if _WARN_TAIL in w]
         assert len(rr) == 1
-        assert "compress from 30.0× to the trailing band mid 21.0×" in rr[0]
+        assert "compress from 30.0× to the p25–p75 midpoint of that band 21.0×" in rr[0]
 
     def test_no_price_discloses_nothing_and_changes_no_number(self) -> None:
         priced_w: list[str] = []

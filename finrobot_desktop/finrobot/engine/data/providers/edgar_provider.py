@@ -352,10 +352,26 @@ _LATEST_OPERATING_INCOME_CONCEPTS: tuple[str, ...] = (
     "OperatingProfit",
 )
 _LATEST_TOTAL_ASSETS_CONCEPTS: tuple[str, ...] = ("Assets", "TotalAssets", "AssetsCurrent")
+# ``LiabilitiesAndStockholdersEquity`` is deliberately NOT a fallback here: it is
+# the balance-sheet IDENTITY TOTAL (total assets, tagged twice), not a liabilities
+# figure, so selecting it makes ``latest_total_liabilities == latest_total_assets``
+# by definition — total equity 0 and an NCI of −(parent equity). CF 2026-10-14
+# published exactly that (assets 15,099 − "liabilities" 15,099 = 0, NCI
+# −5,748,000,000) in the equity-identity note, and the C10c clause could not catch
+# it: the record is internally consistent (0 = 0, 5,748 + −5,748 = 0), which is the
+# "self-consistent wrong number passes every gate" shape. An issuer whose true
+# liabilities tag is absent now abstains (no identity recorded) instead of
+# publishing a false one.
+#
+# ``XBRL_FACTS`` is deliberately NOT version-bumped for this (it is not in
+# ``cache._RAW_SLOT_VERSION`` at all): a stale cached row carrying the old
+# selection and a fresh one collapse onto the SAME downstream path, because
+# ``xbrl_aligned_comps._equity_identity_note`` withholds an identity whose
+# liabilities equal its assets — the BUG-038 read-compatible precedent, not the
+# "stale vs fresh route differently" case that forces a bump.
 _LATEST_TOTAL_LIABILITIES_CONCEPTS: tuple[str, ...] = (
     "Liabilities",
     "TotalLiabilities",
-    "LiabilitiesAndStockholdersEquity",
 )
 _LATEST_SHAREHOLDERS_EQUITY_CONCEPTS: tuple[str, ...] = (
     "StockholdersEquity",

@@ -648,6 +648,27 @@ Measure = Present(value, source, period, as_of, derivation: list[str]) \
    count here is a date, not a constant — the clause docstrings say the same thing once, in
    `contract.py`.
 
+   **Added 2026-10-15 — `C10e`, the clause that divides a ratio by its own operands.** The family
+   had `C10a` (the numerator must exist), `C10b` (both operands from ONE source), `C10c` (the
+   balance-sheet identity recorded and closing) and `C10d` (a caliber-divergent accept must be
+   disclosed) — and not one of them divides the two figures the artifact itself publishes. The CF
+   audit (`docs/CF_AUDIT_REMEDIATION.md`) found the hole: a margin 21% above its own operands, above
+   its own gross margin, with a provenance trail that was internally clean and a divergence count of
+   zero. `C10e` reads only the artifact's own leaves (`income.operating_margin` against
+   `income.operating_income ÷ income.revenue`, plus `income.ebitda_margin`, `valuation.ev_ebitda`,
+   `valuation.ev_revenue`) against `RATIO_IDENTITY_TOLERANCE`, so it is source-agnostic and no
+   decision record can talk it out of a finding.
+
+   **Measured 2026-10-15** over the 140-row store: **22 artifacts / 12 tickers**, span
+   10-14T05:39:47 … **10-15T00:50:08**, every one a yfinance run carrying Yahoo's
+   `info.operatingMargins` scalar beside the TTM frame's own operands (CF: 0.49325 published
+   against 3,025,000,000 ÷ 7,738,999,808 = 0.39088). The SPAN is the point — it does not stop at the
+   provider fix (`4e1a75f`, 15:41:52 local) but at the cache invalidation shipped with this change:
+   four of the 22 were generated AFTER that fix out of a payload cached before it (THC 21:54, KMX
+   22:19, LPLA 23:50, CF 00:50), which is why the same change bumps the `financials` raw slot to v6
+   and `CANONICAL_CONTRACT_VERSION` to 13. Six of the 22 sit in the pinned fixture set and now pin
+   `C10e` there, so the pre-fix population stays the regression oracle for the clause.
+
    **Promoted severity, and why four clauses did not enter at §9's locked severity.** `C8`/`C11`
    entered at the severity §9 locks for them. `C9`, `C10`, `C12` and `C14` entered `S`/annotate
    although §9 locks them `H`, because their locked shape is not a per-artifact veto: `C9`'s locked

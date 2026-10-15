@@ -1,6 +1,6 @@
 {
   "artifact_id": "art_2026-10-13T20:18:24_EHC_equity_research_d6d487",
-  "extracted_at": "2026-10-14",
+  "extracted_at": "2026-10-15",
   "inputs_raw_data": {
     "balance": {
       "noncontrolling_interest": 863400000.0,
@@ -931,6 +931,7 @@
     "C10b": false,
     "C10c": true,
     "C10d": false,
+    "C10e": false,
     "C11": true,
     "C12a": false,
     "C12b": false,

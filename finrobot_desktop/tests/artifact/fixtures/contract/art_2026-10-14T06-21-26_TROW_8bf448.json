@@ -1,6 +1,6 @@
 {
   "artifact_id": "art_2026-10-14T06:21:26_TROW_equity_research_8bf448",
-  "extracted_at": "2026-10-14",
+  "extracted_at": "2026-10-15",
   "inputs_raw_data": {
     "balance": {
       "noncontrolling_interest": 1170300000.0,
@@ -312,7 +312,7 @@
       "ev_revenue": 2.6362874245916754
     }
   },
-  "notes": "TROW — the artifact discloses that its 8-K index is stale relative to the news window and ships the catalyst read anyway",
+  "notes": "TROW — the artifact discloses that its 8-K index is stale relative to the news window and ships the catalyst read anyway; and the pre-fix operating margin C10e catches (0.28688 published against 2,615,100,000 / 7,592,000,000 = 0.34445)",
   "outputs_structured": {
     "catalyst_analysis": {
       "category_breakdown": {
@@ -1219,7 +1219,8 @@
     }
   },
   "pinned_for": [
-    "C12a"
+    "C12a",
+    "C10e"
   ],
   "source": "~/.finrobot/artifacts.db",
   "ticker": "TROW",
@@ -1230,6 +1231,7 @@
     "C10b": false,
     "C10c": true,
     "C10d": true,
+    "C10e": true,
     "C11": true,
     "C12a": true,
     "C12b": false,

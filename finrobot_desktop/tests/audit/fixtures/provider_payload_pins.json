@@ -1,0 +1,35 @@
+{
+  "declared": {
+    "canonical_contract_version": 13,
+    "raw_slot:financials": 6,
+    "raw_slot:forward_estimates": 2,
+    "raw_slot:peer_candidates": 3,
+    "raw_slot:price": 3,
+    "raw_slot:proxy_statement": 2,
+    "raw_slot:sentiment": 2
+  },
+  "sources": {
+    "finrobot/engine/data/normalize/contracts.py": "1d5bf8e66f1ae22a",
+    "finrobot/engine/data/providers/adanos_provider.py": "a1e89f3be3363249",
+    "finrobot/engine/data/providers/alpha_vantage_provider.py": "05b85842de44ec71",
+    "finrobot/engine/data/providers/benzinga_provider.py": "4100224d0670324b",
+    "finrobot/engine/data/providers/cboe_provider.py": "96651b55eca4f821",
+    "finrobot/engine/data/providers/edgar_provider.py": "161cac0d49e60fd3",
+    "finrobot/engine/data/providers/eodhd_provider.py": "dcb67579b8787957",
+    "finrobot/engine/data/providers/federal_reserve_provider.py": "df97ecf89fb60d78",
+    "finrobot/engine/data/providers/finnhub_provider.py": "9636ad828111847d",
+    "finrobot/engine/data/providers/fmp_provider.py": "b8b3d18e8f61cfcd",
+    "finrobot/engine/data/providers/fred_provider.py": "2faf1e9523bc8a81",
+    "finrobot/engine/data/providers/fx.py": "eb8a38865ad94348",
+    "finrobot/engine/data/providers/gdelt_provider.py": "338467a669d20bc1",
+    "finrobot/engine/data/providers/massive_provider.py": "9065c60dfac0adde",
+    "finrobot/engine/data/providers/moomoo_provider.py": "d0562c800a3e8558",
+    "finrobot/engine/data/providers/news_aggregator.py": "756f35621aa9193c",
+    "finrobot/engine/data/providers/newsapi_provider.py": "1d94b664944ffde9",
+    "finrobot/engine/data/providers/polymarket_provider.py": "38cfd947db90d662",
+    "finrobot/engine/data/providers/stockdata_provider.py": "aba0d052717ab80a",
+    "finrobot/engine/data/providers/tiingo_provider.py": "a9642b975f1d3964",
+    "finrobot/engine/data/providers/twelvedata_provider.py": "48d07c7def6c9b10",
+    "finrobot/engine/data/providers/yfinance_provider.py": "a337138b35b44aff"
+  }
+}

@@ -129,13 +129,27 @@ def canonical_key(data_type: str | DataType, provider: str | None = None) -> str
 #   earnings into EV as if it were an equity claim). Pairs with the
 #   CANONICAL_CONTRACT_VERSION v11 bump (the normalized slot, read ahead of this raw
 #   slot).
+#   financials v6 — 2026-10-14: the yfinance financials payload now DERIVES
+#   gross_margin / operating_margin from its own TTM statement frame and never
+#   publishes Yahoo's ``info.operatingMargins`` / ``info.grossMargins`` scalar in
+#   place of a frame row (the margins gain a ``*_margin_basis`` tag; operating
+#   margin is WITHHELD rather than scalar-filled when the frame carries no
+#   Operating Income row). A pre-v6 row can carry a margin whose numerator and
+#   denominator contradict the same block's own revenue + operating_income, and
+#   because the canonical slot is read BEFORE this raw slot with a 24h TTL, a run
+#   inside that window publishes the contradiction (CF 2026-10-14: operating
+#   margin 0.49325 beside OI 3,025 / revenue 7,739 = 39.1% — and above the same
+#   block's 42.5% gross margin, which is impossible). Pairs with the
+#   CANONICAL_CONTRACT_VERSION v13 bump. Observed: CF's canonical cached
+#   2026-10-14T06:19Z (pre-fix) still served the pre-fix margin hours after the fix
+#   landed, and the report shipped the contradiction.
 _RAW_SLOT_VERSION: dict[str, int] = {
     DataType.PRICE.value: 3,
     DataType.PROXY_STATEMENT.value: 2,
     DataType.PEER_CANDIDATES.value: 3,
     DataType.SENTIMENT.value: 2,
     DataType.FORWARD_ESTIMATES.value: 2,
-    DataType.FINANCIALS.value: 5,
+    DataType.FINANCIALS.value: 6,
 }
 
 

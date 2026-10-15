@@ -1,6 +1,6 @@
 {
   "artifact_id": "art_2026-10-14T16:34:07_HMY_equity_research_b86736",
-  "extracted_at": "2026-10-14",
+  "extracted_at": "2026-10-15",
   "inputs_raw_data": {
     "balance": {
       "noncontrolling_interest": 19245283.603668213,
@@ -705,6 +705,7 @@
     "C10b": false,
     "C10c": false,
     "C10d": false,
+    "C10e": false,
     "C11": false,
     "C12a": false,
     "C12b": false,

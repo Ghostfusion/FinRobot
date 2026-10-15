@@ -1,6 +1,6 @@
 {
   "artifact_id": "art_2026-10-14T20:37:52_THC_equity_research_bab351",
-  "extracted_at": "2026-10-14",
+  "extracted_at": "2026-10-15",
   "inputs_raw_data": {
     "balance": {
       "noncontrolling_interest": 4042000000.0,
@@ -313,7 +313,7 @@
       "ev_revenue": 1.6958078405290473
     }
   },
-  "notes": "instance C — HOLD, two methods, the equity identity recorded (C10c quiet); the payload that shows the identity fix and the caliber divergence side by side",
+  "notes": "instance C — HOLD, two methods, the equity identity recorded (C10c quiet); the payload that shows the identity fix and the caliber divergence side by side; and the pre-fix operating margin C10e catches (0.19516 published against 4,418,000,000 / 21,812,000,768 = 0.20255)",
   "outputs_structured": {
     "catalyst_analysis": {
       "category_breakdown": {},
@@ -1095,7 +1095,8 @@
   "pinned_for": [
     "C10d",
     "C12a",
-    "C12b"
+    "C12b",
+    "C10e"
   ],
   "source": "~/.finrobot/artifacts.db",
   "ticker": "THC",
@@ -1106,6 +1107,7 @@
     "C10b": false,
     "C10c": false,
     "C10d": true,
+    "C10e": true,
     "C11": false,
     "C12a": true,
     "C12b": true,

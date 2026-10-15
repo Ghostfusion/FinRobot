@@ -1482,6 +1482,18 @@ _DOLLAR_RE = re.compile(
 # (engine/models/reconcile_tolerances) so the output contract's C3 (basis
 # conclusion == headline) and this reconcile speak the same "same number" rule.
 
+# A prose $-amount this many times larger than EVERY per-share reference the guard
+# holds is not a drifted restatement of a per-share number — it is a total (an
+# enterprise value, a market cap, a revenue line). See
+# _reconcile_narrative_targets._is_total_not_per_share.
+_PER_SHARE_MAGNITUDE_HEADROOM = 10.0
+
+# Absolute floor for the same rule: no listed equity these reports cover trades at a
+# seven-figure share price, so an un-suffixed $1,000,000+ amount is a total. Closes the
+# case the relative test alone cannot see — a fabricated point target on a cheap stock
+# (>10× a $50 tape is still only $500).
+_TOTAL_AMOUNT_FLOOR = 1_000_000.0
+
 
 def _reconcile_narrative_targets(
     thesis: ThesisResult,
@@ -1500,7 +1512,8 @@ def _reconcile_narrative_targets(
         replaced with a ``[target withheld]`` marker. This stops the LLM from
         printing "fair value ≈ $X" in prose when the structured target is null.
         Amounts that cannot be a per-share price at all — a zero amount, a
-        magnitude-suffixed total, a minus-prefixed figure — are left alone.
+        magnitude-suffixed total, a minus-prefixed figure, and any un-suffixed total
+        orders of magnitude above every per-share reference — are left alone.
 
     After the deterministic override forces ``price_target`` to the canonical
     weighted value, the headline-bearing free-text fields from the *same* LLM
@@ -1543,6 +1556,33 @@ def _reconcile_narrative_targets(
         # ("DCF $5.88 vs comps $19.54, they disagree" is the honest narrative).
         return any(abs(value - mid) <= abs(mid) * NARRATIVE_DRIFT_TOLERANCE for mid in allowed_mids)
 
+    def _is_total_not_per_share(value: float) -> bool:
+        """True when ``value`` cannot be a per-share price at all.
+
+        This guard exists to catch a prose restatement of a PER-SHARE number (the
+        target, the price, a method mid) — the only thing a drifting model can
+        plausibly be restating. A TOTAL cannot be that: it is an enterprise value, a
+        market cap, a revenue line or a share count, and rewriting it corrupts a
+        sentence that was right.
+
+        The magnitude-suffixed form ("$3.41T", "$391.0B") is already skipped by
+        ``_DOLLAR_RE``; the un-suffixed comma form was not, so CF 2026-10-14 shipped
+        "46.8% of the $80.69 enterprise value landing in the terminal period" — the
+        prose's own $15,783,943,454 EV rewritten to the canonical target, while the
+        risk bullets on the same report still printed $15,783,943,454 (they are not
+        scanned). Two answers for one enterprise value inside one artifact.
+
+        Two independent tests, either sufficient: orders of magnitude above every
+        per-share reference this guard holds, or at least a million dollars (no
+        listed equity our reports cover trades at a seven-figure share price). With
+        NO reference present there is nothing to compare against, so the guard keeps
+        its original conservative behavior rather than inventing a ceiling.
+        """
+        references = [r for r in (canonical_target, current_price) if r is not None and r > 0]
+        if references and value > max(references) * _PER_SHARE_MAGNITUDE_HEADROOM:
+            return True
+        return value >= _TOTAL_AMOUNT_FLOOR
+
     drift_found = False
 
     def _scan_text(text: str) -> str:
@@ -1572,6 +1612,9 @@ def _reconcile_narrative_targets(
             # (GMED 2026-10-14: the thesis and the summary both read "[target
             # withheld] of open-market purchases").
             if value == 0:
+                return match.group(0)
+            # A TOTAL is categorically not a per-share target (see the helper).
+            if _is_total_not_per_share(value):
                 return match.group(0)
             if _is_allowed(value):
                 return match.group(0)

@@ -37,3 +37,14 @@ NARRATIVE_DRIFT_TOLERANCE = 0.01
 # "$1.58 trillion" 15% off, "$140.95B" 22.5% off, MU LBO "$-31892M" 102% off)
 # — a visible break, not a smooth continuum.
 NARRATIVE_APPROXIMATION_BAND = 0.10
+
+# Relative tolerance for "a published ratio IS its own operands divided" (contract
+# clause C10e). Structural rather than statistical: both sides are read from the
+# SAME published leaves of one artifact, so a correct ratio is exact to float
+# representation and 1% only absorbs a provider's own rounding of the ratio. The
+# check exists for the CF 2026-10-14 shape — ``operating_margin`` 0.49325 published
+# beside ``operating_income`` 3,025,000,000 / ``revenue`` 7,738,999,808 = 0.39088
+# (21% out, and above that same block's 42.49% gross margin, which is impossible)
+# — where every provenance check was silent because one provider supplied all
+# three figures.
+RATIO_IDENTITY_TOLERANCE = 0.01

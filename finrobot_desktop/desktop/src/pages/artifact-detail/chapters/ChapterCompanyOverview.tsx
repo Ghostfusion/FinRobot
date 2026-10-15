@@ -134,12 +134,15 @@ function buildSnapshot(
       label: 'Beta',
       value: formatNumber(market.beta, locale, 2),
       raw: market.beta,
-      // Caliber: this is the provider-reported 5y raw beta; the DCF uses
-      // adjust_beta_blume (2/3·β + 1/3·1.0). Naming both stops the tile (2.22)
-      // and the WACC table (1.81) from reading as a contradiction.
+      // Caliber: this is the provider-reported 5y raw beta; the DCF runs
+      // adjust_beta_blume (2/3·β + 1/3·1.0) — ASYMMETRICALLY, for β > 1 only, so
+      // a low-β defensive keeps its raw value (wacc.adjust_beta_blume docstring;
+      // CF 2026-10-14: the tile's β 0.53 IS the WACC β, and a blanket "DCF uses a
+      // Blume-adjusted β" invited exactly the misreading that the model had used
+      // 0.69). The note must name BOTH the caliber and the threshold.
       note: tr(
-        '行情商 5 年 β（未调整）— DCF 采用 Blume 调整后 β',
-        'Provider 5y β, unadjusted — DCF uses a Blume-adjusted β',
+        '行情商 5 年 β（未调整）—— DCF 的 Blume 调整 β 仅在 β>1 时适用（β≤1 直接用原值）',
+        "Provider 5y β, unadjusted — the DCF's Blume-adjusted β applies only when β>1 (β≤1 is used as-is)",
         locale,
       ),
       source,

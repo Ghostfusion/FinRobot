@@ -78,6 +78,16 @@ export function ReverseDcfHeadline({
 
   const impliedCardValue = unreachable ? (ceilingGrowthPct ?? '—') : (growthPct ?? '—')
 
+  // The premium's DRIVER, not just its size. In the reachable regime the panel
+  // already prints the market's own implied growth; when that is NEGATIVE the
+  // market is pricing a DECLINE, so a price above the model's central cash-flow
+  // value cannot be "a bet on the implied growth" — in that direction the gap is
+  // carried by the discount rate. CF 2026-10-14 shipped the contradiction in one
+  // block: "the market is pricing in ~-9.8%/yr" beside "that premium is a bet on
+  // the implied growth", while the thesis (correctly) attributed the gap to the
+  // 4.83%-vs-6.01% discount rate.
+  const premiumIsRateBet = !unreachable && mi.implied_growth != null && mi.implied_growth < 0
+
   return (
     <section
       data-testid="reverse-dcf-headline"
@@ -158,14 +168,25 @@ export function ReverseDcfHeadline({
           <span>
             <b style={{ color: 'var(--secondary)', fontWeight: 600 }}>
               {multiple >= 1.05
-                ? t('chapter.cover.reverseDcf.withheldTitle')
+                ? premiumIsRateBet
+                  ? // Inline bilingual (the sibling chapters' convention) rather than a
+                    // catalog entry — the Lingui catalogs are frozen snapshots and a new
+                    // msgid would need both .po files regenerated.
+                    locale === 'en'
+                    ? 'Priced on the discount rate'
+                    : '折现率溢价'
+                  : t('chapter.cover.reverseDcf.withheldTitle')
                 : multiple <= 0.95
                   ? t('chapter.cover.reverseDcf.belowValueTitle')
                   : t('chapter.cover.reverseDcf.atValueTitle')}
             </b>{' '}
             —{' '}
             {multiple >= 1.05
-              ? t('chapter.cover.reverseDcf.withheldBody', { multiple: multipleLabel })
+              ? premiumIsRateBet
+                ? locale === 'en'
+                  ? `the price is ${multipleLabel} the model's central cash-flow value, while the market's own implied growth is ${growthPct}/yr — that premium is a bet on the discount rate, not on growth; not a value entry.`
+                  : `价格是模型中央现金流价值的 ${multipleLabel}，而市场自身隐含的营收增速为 ${growthPct}/年 —— 这一溢价是对折现率的押注，不是对增长的押注；不构成价值买入点。`
+                : t('chapter.cover.reverseDcf.withheldBody', { multiple: multipleLabel })
               : multiple <= 0.95
                 ? t('chapter.cover.reverseDcf.belowValueBody', { multiple: multipleLabel })
                 : t('chapter.cover.reverseDcf.atValueBody')}

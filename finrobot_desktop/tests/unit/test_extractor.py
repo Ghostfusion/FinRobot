@@ -278,6 +278,35 @@ def test_extract_uses_provider_market_cap_not_shares_times_price():
     assert "one net-income authority" in fd.market.pe_basis
 
 
+def test_extract_discloses_a_market_cap_one_session_behind_the_quote():
+    """The cap and the resolved quote are different instants → the report must say so.
+
+    CF 2026-10-14: provider cap 17,744,396,288 ⇒ $117.25/share against the run's
+    $119.46 close (1.85% apart, i.e. exactly one session) — the artifact printed both
+    the cap (which feeds EV and every EV-based multiple) and "+1.88% last session"
+    (which feeds upside/downside) with nothing reconciling them.
+    """
+    fin = _make_fin(market_cap=17_744_396_288.0, shares_outstanding=151_338_130.0)
+    price = _make_price_from(
+        [
+            {"date": "2026-10-13", "close": 117.25},
+            {"date": "2026-10-14", "close": 119.46},
+        ]
+    )
+    fd = extract_financial_data(fin, price)
+    assert any("different instants" in w and "implies" in w for w in fd.warnings)
+    # Disclosure, not a swap: the provider's cap is still published verbatim (F3).
+    assert fd.market.market_cap == pytest.approx(17_744_396_288.0, rel=1e-9)
+    assert fd.market.shares_outstanding == pytest.approx(151_338_130.0, rel=1e-6)
+
+
+def test_extract_silent_when_the_cap_matches_the_quote():
+    """Same-instant provider data closes to the cent (Yahoo derives
+    marketCap = shares × price), so the staleness note must not fire."""
+    fd = extract_financial_data(_make_fin(), _make_price())  # 3e12 / 15e9 = 200.0
+    assert not any("different instants" in w for w in fd.warnings)
+
+
 def test_extract_derives_market_cap_only_when_provider_omits_it():
     """F3 fallback path: with NO provider cap, derive shares × current_price and
     LABEL it (the only labelled fallback), rather than raising."""

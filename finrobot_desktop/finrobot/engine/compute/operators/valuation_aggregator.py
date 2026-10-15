@@ -33,7 +33,10 @@ from collections.abc import Callable, Sequence
 from datetime import datetime, timezone
 from typing import Any, Final
 
-from finrobot.engine.compute.operators.multiples import ev_band_equity_per_share
+from finrobot.engine.compute.operators.multiples import (
+    ev_band_equity_per_share,
+    implied_ev_multiple,
+)
 from finrobot.engine.models.financial import (
     CrossCheck,
     DCFResult,
@@ -358,11 +361,12 @@ def aggregate_valuation(
     historical_p_fcf_band: tuple[float, float] | None = None,
     cyclical: bool = False,
     financial_sector: bool = False,
-    # EV→equity bridge components for the cross-check. Preferred stock and
-    # noncontrolling interest are claims on the enterprise, so the band-implied EV
-    # must clear them before it becomes common equity (mirrors calculate_ev). None
-    # = "not carried by this issuer" → contributes 0, the same convention
-    # current_ev_ebitda uses.
+    # EV→equity bridge components for EVERY band-implied row — the published
+    # EV/EBITDA re-rating method and the own-history cross-check both bridge the same
+    # way. Preferred stock and noncontrolling interest are claims on the enterprise,
+    # so the band-implied EV must clear them before it becomes common equity (mirrors
+    # calculate_ev). None = "not carried by this issuer" → contributes 0, the same
+    # convention current_ev_ebitda uses.
     preferred_stock: float | None = None,
     noncontrolling_interest: float | None = None,
     as_of: datetime | None = None,
@@ -513,6 +517,8 @@ def aggregate_valuation(
             historical_ev_ebitda_band,
             shares_outstanding,
             current_net_debt,
+            preferred_stock=preferred_stock,
+            noncontrolling_interest=noncontrolling_interest,
             band_sample_n=historical_ev_ebitda_sample_n,
             warnings=warnings,
             current_price=current_price,
@@ -1184,6 +1190,8 @@ def _ev_ebitda_method(
     shares: float | None,
     current_net_debt: float | None,
     *,
+    preferred_stock: float | None = None,
+    noncontrolling_interest: float | None = None,
     band_sample_n: int | None = None,
     warnings: list[str] | None = None,
     current_price: float | None = None,
@@ -1191,7 +1199,8 @@ def _ev_ebitda_method(
     if ttm_ebitda is None or ttm_ebitda <= 0 or band is None or shares is None or shares <= 0:
         return None
     # EV/EBITDA is a CURRENT relative-multiple method, so the EV→equity bridge
-    # MUST subtract CURRENT net debt (total_debt − cash, same口径 as dcf_seed).
+    # MUST subtract CURRENT net debt (total_debt − cash, same口径 as dcf_seed) —
+    # plus the balance-sheet claims beside it (preferred, NCI), see below.
     # A missing net-debt figure means there is no honest bridge — hide the row
     # rather than (a) assume net_debt = 0, which values a levered firm as
     # debt-free, or (b) borrow LBO's post-paydown ending_debt, a *future*
@@ -1212,8 +1221,22 @@ def _ev_ebitda_method(
                 "no valid historical range for the multiple, this row is hidden — method withheld"
             )
         return None
-    raw_low = (p25 * ttm_ebitda - current_net_debt) / shares
-    raw_high = (p75 * ttm_ebitda - current_net_debt) / shares
+    # The ONE EV→equity bridge (multiples.ev_band_equity_per_share): a multiple times
+    # TTM EBITDA is an ENTERPRISE value, so the equity leg must clear EVERY claim on
+    # that enterprise — net debt AND preferred AND noncontrolling interest — exactly
+    # as the own-history cross-check row and the DCF's own equity_bridge do.
+    # Bridging net debt alone made this the one surface that valued a minority-heavy
+    # issuer as if the NCI were free, and it disagreed with the cross-check printed
+    # beside it (CF 2026-10-14: $86.40 here vs $65.44 with the issuer's own $3.17B of
+    # balance-sheet NCI deducted, while the cross-check used the full bridge).
+    raw_low = ev_band_equity_per_share(
+        p25, ttm_ebitda, current_net_debt, preferred_stock, noncontrolling_interest, shares
+    )
+    raw_high = ev_band_equity_per_share(
+        p75, ttm_ebitda, current_net_debt, preferred_stock, noncontrolling_interest, shares
+    )
+    if raw_low is None or raw_high is None:
+        return None
     # Debt exceeds the implied EV even at the OPTIMISTIC p75 multiple (p75 ≥ p25 ⇒
     # raw_high ≥ raw_low): implied equity is negative across the whole band, so
     # EV/EBITDA equity is undefined. Drop the row — mirroring the LBO grid's
@@ -1227,8 +1250,8 @@ def _ev_ebitda_method(
         if warnings is not None:
             warnings.append(
                 "ev_ebitda: even at the optimistic p75 multiple the implied equity is ≤ 0 "
-                "(current net debt exceeds the implied EV) — multiple method does not apply, "
-                "this row is hidden — method withheld"
+                "(current net debt plus preferred and noncontrolling interest exceed the "
+                "implied EV) — multiple method does not apply, this row is hidden — method withheld"
             )
         return None
     low = max(0.01, raw_low)
@@ -1271,24 +1294,39 @@ def _ev_ebitda_method(
     assumptions: str | None = None
     rerating_ratio: float | None = None
     if current_price is not None and current_price > 0:
-        current_ev = current_price * shares + current_net_debt
-        if current_ev > 0:
-            current_implied = current_ev / ttm_ebitda
+        # The SAME full bridge as the target side, and the same one the technical
+        # chapter's ``historical_bands.current`` publishes (multiples.implied_ev_multiple
+        # / .current_ev_ebitda): price × shares + net debt + preferred + NCI over TTM
+        # EBITDA. Bridging net debt alone here made one artifact print two different
+        # "price-implied EV/TTM-EBITDA" for one name — CF 2026-10-14: 4.9× in the thesis
+        # against 5.6× on the technical rail, the gap being the $3.17B NCI — and compared
+        # an NCI-free current multiple against an NCI-inclusive own-history band.
+        current_implied = implied_ev_multiple(
+            current_price,
+            shares,
+            current_net_debt,
+            preferred_stock,
+            noncontrolling_interest,
+            ttm_ebitda,
+        )
+        if current_implied is not None and current_implied > 0:
             band_mid = (p25 + p75) / 2
             ratio = band_mid / current_implied
             rerating_ratio = ratio  # structured twin — the dial GRADES on this
             assumptions = (
                 f"implied re-rating: price-implied EV/TTM-EBITDA {current_implied:.1f}× → "
-                f"own 5y trailing band mid {band_mid:.1f}× ({ratio:.2f}×)"
+                f"own 5y p25–p75 midpoint {band_mid:.1f}× ({ratio:.2f}×)"
             )
             if abs(ratio - 1.0) > _RERATING_DISCLOSURE_THRESHOLD and warnings is not None:
                 shift = "expand" if ratio > 1.0 else "compress"
                 warnings.append(
                     f"ev_ebitda: reverting the target to its own 5-year historical multiple "
                     f"implies its price-implied EV/TTM-EBITDA must {shift} from "
-                    f"{current_implied:.1f}× to the trailing band mid {band_mid:.1f}× "
-                    f"({ratio:.2f}×) — an unproven mean-reversion premise (band and denominator "
-                    f"are the same trailing caliber, so the gap is not a caliber artifact); "
+                    f"{current_implied:.1f}× to the p25–p75 midpoint of that band "
+                    f"{band_mid:.1f}× ({ratio:.2f}×) — an unproven mean-reversion premise on "
+                    f"the BAND AS PUBLISHED (p25–p75 midpoint, not the median); band, "
+                    f"denominator and bridge are the same trailing caliber, so the gap is not "
+                    f"a caliber artifact; "
                     f"{RERATING_WARNING_MARKER}."
                 )
     return ValuationMethodRange(
@@ -1301,7 +1339,7 @@ def _ev_ebitda_method(
         # Window mirrors fetch_reverse_multiple_band(years=5) — the requested band
         # window (all callers use that default); actual sample depth is disclosed
         # separately via band_sample_n. Keep this label in sync if the default changes.
-        source="self_5y_p25_p75 × ttm_ebitda − current_net_debt",
+        source="self_5y_p25_p75 × ttm_ebitda − net_debt − preferred − NCI",
         assumptions=assumptions,
         rerating_ratio=rerating_ratio,
         warnings=method_warnings,

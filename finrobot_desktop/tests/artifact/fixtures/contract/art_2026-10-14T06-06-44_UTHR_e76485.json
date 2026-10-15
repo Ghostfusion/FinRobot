@@ -1,6 +1,6 @@
 {
   "artifact_id": "art_2026-10-14T06:06:44_UTHR_equity_research_e76485",
-  "extracted_at": "2026-10-14",
+  "extracted_at": "2026-10-15",
   "inputs_raw_data": {
     "balance": {
       "noncontrolling_interest": null,
@@ -312,7 +312,7 @@
       "ev_revenue": 6.544460770496676
     }
   },
-  "notes": "UTHR — 'insiders were net sellers to the tune of [target withheld]' beside a published flow; the largest payload in the set, so it pins the pruning",
+  "notes": "UTHR — 'insiders were net sellers to the tune of [target withheld]' beside a published flow; the largest payload in the set, so it pins the pruning; and the pre-fix operating margin C10e catches",
   "outputs_structured": {
     "catalyst_analysis": {
       "category_breakdown": {},
@@ -1117,7 +1117,8 @@
   },
   "pinned_for": [
     "C8",
-    "C14b"
+    "C14b",
+    "C10e"
   ],
   "source": "~/.finrobot/artifacts.db",
   "ticker": "UTHR",
@@ -1128,6 +1129,7 @@
     "C10b": false,
     "C10c": true,
     "C10d": true,
+    "C10e": true,
     "C11": false,
     "C12a": false,
     "C12b": true,

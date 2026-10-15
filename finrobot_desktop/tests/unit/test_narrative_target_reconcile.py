@@ -106,6 +106,87 @@ def test_minus_prefixed_amounts_are_never_rewritten() -> None:
     assert out.valuation_overview == thesis.valuation_overview
 
 
+def test_unsuffixed_total_is_never_rewritten() -> None:
+    """An un-suffixed comma-form TOTAL is not a drifted per-share target.
+
+    CF 2026-10-14: the thesis and the valuation chapter read "46.8% of the $80.69
+    enterprise value landing in the terminal period" — the prose's own
+    $15,783,943,454 EV rewritten to the canonical target, while the risk bullets on
+    the SAME report still printed $15,783,943,454 (they are not scanned). The
+    sourceless magnitude rules covered "$3.41T" but not the comma form, so a correct
+    sentence was corrupted into two answers for one enterprise value.
+    """
+    thesis = _thesis(
+        valuation_overview=(
+            "The DCF lands at $75.85, with 46.8% of the $15,783,943,454 enterprise "
+            "value arriving in the terminal period."
+        ),
+    )
+
+    out, drift = _reconcile_narrative_targets(
+        thesis,
+        canonical_target=80.69,
+        allowed_mids=[75.85, 86.40],
+        current_price=119.46,
+    )
+
+    assert drift is False
+    assert out.valuation_overview == thesis.valuation_overview
+    assert "$15,783,943,454" in (out.valuation_overview or "")
+
+
+def test_total_above_the_headroom_of_every_per_share_reference_is_kept() -> None:
+    """The relative branch: >10× BOTH the target and the tape cannot be a per-share
+    restatement even below the absolute floor — a debt/cash total on a low-priced
+    name must survive."""
+    thesis = _thesis(
+        price_target=1.2,
+        narrative="Total debt of $20,000 and $4,500 of cash leave the equity thin.",
+    )
+
+    out, drift = _reconcile_narrative_targets(
+        thesis, canonical_target=1.2, allowed_mids=[], current_price=1.05
+    )
+
+    assert drift is False
+    assert out.narrative == thesis.narrative
+
+
+def test_a_plausible_drift_on_a_low_priced_name_is_still_neutralized() -> None:
+    """The total gate must not blunt the guard: $1.35 against a $1.20 target is a
+    per-share claim and is still rewritten."""
+    thesis = _thesis(
+        price_target=1.2,
+        valuation_overview="Fair value of $1.35 on the trough multiple.",
+    )
+
+    out, drift = _reconcile_narrative_targets(
+        thesis, canonical_target=1.2, allowed_mids=[], current_price=1.05
+    )
+
+    assert drift is True
+    assert out.valuation_overview is not None
+    assert "$1.20 on the trough multiple." in out.valuation_overview
+
+
+def test_unsuffixed_total_survives_the_withheld_path() -> None:
+    """With a withheld point, an un-suffixed total is data — not a smuggled target —
+    and must not become a ``[target withheld]`` marker.
+
+    With no per-share reference left the relative branch has nothing to compare
+    against, so the absolute floor is what protects the figure here.
+    """
+    thesis = _thesis(
+        narrative="The DCF's $15,783,943,454 enterprise value is 46.8% terminal perpetuity.",
+    )
+
+    out = apply_canonical_override(thesis, _thc_withheld_canonical(), _thc_withheld_vs())
+
+    narrative = out.narrative or ""
+    assert "$15,783,943,454" in narrative
+    assert "[target withheld]" not in narrative
+
+
 def test_plain_drift_amount_followed_by_word_still_rewritten() -> None:
     """The optional-suffix group must not swallow ordinary words: "$280 Buyback"
     is still a plain drifting per-share amount (B is followed by word chars, so

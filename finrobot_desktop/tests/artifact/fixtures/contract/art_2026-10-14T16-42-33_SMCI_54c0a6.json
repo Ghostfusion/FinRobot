@@ -1,6 +1,6 @@
 {
   "artifact_id": "art_2026-10-14T16:42:33_SMCI_equity_research_54c0a6",
-  "extracted_at": "2026-10-14",
+  "extracted_at": "2026-10-15",
   "inputs_raw_data": {
     "balance": {
       "noncontrolling_interest": 164000.0,
@@ -946,6 +946,7 @@
     "C10b": false,
     "C10c": true,
     "C10d": false,
+    "C10e": false,
     "C11": true,
     "C12a": false,
     "C12b": false,

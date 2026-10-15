@@ -110,22 +110,26 @@ _PINNED: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ),
     (
         "art_2026-10-14T20:27:40_THC_equity_research_99cdca",
-        ("C6b", "C8", "C11"),
+        ("C6b", "C8", "C11", "C10e"),
         "instance B, the ORDERING case: the verdict read no cross-check (the own-history "
         "band resolved to 0 samples) and the cross-check in the payload arrived after the "
-        "verdict; the note still claims there was no cross-validation",
+        "verdict; the note still claims there was no cross-validation; and the pre-fix "
+        "operating margin C10e catches",
     ),
     (
         "art_2026-10-14T20:37:52_THC_equity_research_bab351",
-        ("C10d", "C12a", "C12b"),
+        ("C10d", "C12a", "C12b", "C10e"),
         "instance C — HOLD, two methods, the equity identity recorded (C10c quiet); the "
-        "payload that shows the identity fix and the caliber divergence side by side",
+        "payload that shows the identity fix and the caliber divergence side by side; "
+        "and the pre-fix operating margin C10e catches (0.19516 published against "
+        "4,418,000,000 / 21,812,000,768 = 0.20255)",
     ),
     (
         "art_2026-10-14T21:12:35_THC_equity_research_c75ac2",
-        ("C10d",),
+        ("C10d", "C10e"),
         "the newest stored artifact — the post-fix reference for C10c/C13b, and the "
-        "reference for C11 NOT firing (root and synthesis both emit the flag)",
+        "reference for C11 NOT firing (root and synthesis both emit the flag); and the "
+        "pre-fix operating margin C10e catches",
     ),
     (
         "art_2026-10-14T16:44:09_SKM_equity_research_2e8161",
@@ -147,22 +151,26 @@ _PINNED: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ),
     (
         "art_2026-10-14T06:06:44_UTHR_equity_research_e76485",
-        ("C8", "C14b"),
+        ("C8", "C14b", "C10e"),
         "UTHR — 'insiders were net sellers to the tune of [target withheld]' beside a "
-        "published flow; the largest payload in the set, so it pins the pruning",
+        "published flow; the largest payload in the set, so it pins the pruning; and the "
+        "pre-fix operating margin C10e catches",
     ),
     (
         "art_2026-10-14T06:21:26_TROW_equity_research_8bf448",
-        ("C12a",),
+        ("C12a", "C10e"),
         "TROW — the artifact discloses that its 8-K index is stale relative to the news "
-        "window and ships the catalyst read anyway",
+        "window and ships the catalyst read anyway; and the pre-fix operating margin "
+        "C10e catches (0.28688 published against 2,615,100,000 / 7,592,000,000 = 0.34445)",
     ),
     (
         "art_2026-10-14T16:12:39_GMED_equity_research_c9080e",
-        ("C14b",),
+        ("C14b", "C10e"),
         "GMED — '[target withheld] of open-market purchases' for a $0 datum: the "
         "placeholder took an amount that is not the target. §4.7 cites this artifact; "
-        "the later GMED run (27c788) does not carry the sentence",
+        "the later GMED run (27c788) does not carry the sentence; and the pre-fix "
+        "operating margin C10e catches in THIS one (0.24755 against 673,764,000 / "
+        "3,144,933,888 = 0.21424) which the post-fix run does not",
     ),
     (
         "art_2026-10-14T19:18:07_GMED_equity_research_27c788",

@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import math
 import re
+import statistics
 from datetime import date, datetime, timezone
 from typing import Any, Literal
 
@@ -1060,6 +1061,58 @@ def build_insider_transactions(raw_insider: dict[str, Any]) -> list[InsiderTrans
     return rows
 
 
+# A 13F-HR row reports SHARES and VALUE for ONE security at ONE period end, so every
+# row filing the same CUSIP for the same quarter must imply the same price
+# (value_usd / shares = that quarter's close): both figures are exact, so this is a
+# BASIS check, not a price check — 1% already sits far above the only legitimate
+# spread (a filer's own rounding).
+_HOLDING_PRICE_BASIS_TOL = 0.01
+# Below three rows there is no majority to compare against — abstain rather than
+# call the only row wrong.
+_HOLDING_PRICE_BASIS_MIN_ROWS = 3
+
+
+def holding_value_basis_warning(rows: list[InstitutionalHolding]) -> str | None:
+    """Name 13F rows whose VALUE ÷ SHARES contradicts the same quarter's other rows.
+
+    Two rows on the same CUSIP and period end that imply different prices are
+    mutually exclusive — one of them mis-parsed a column, mixed a share class into a
+    single-class total, or carried a value in the wrong unit. The rows are still
+    published (they are the filing's own figures), but any aggregate built by adding
+    them up is unreliable, so the reader must be told which rows disagree. CF
+    2026-10-14: 16 of 20 rows implied $108.26 (the 2026-06-30 close) while Geode
+    implied $116.95 and Jones Financial $105.70, inside a table whose top-5
+    concentration was computed from exactly those shares.
+    """
+    by_period: dict[tuple[str, date], list[InstitutionalHolding]] = {}
+    for row in rows:
+        if row.shares > 0 and row.value_usd > 0:
+            by_period.setdefault((row.cusip, row.period_end), []).append(row)
+
+    offenders: list[tuple[str, float, float]] = []
+    for group in by_period.values():
+        if len(group) < _HOLDING_PRICE_BASIS_MIN_ROWS:
+            continue
+        median_price = statistics.median(r.value_usd / r.shares for r in group)
+        for row in group:
+            implied = row.value_usd / row.shares
+            if abs(implied - median_price) / median_price > _HOLDING_PRICE_BASIS_TOL:
+                offenders.append((row.holder_name, implied, median_price))
+    if not offenders:
+        return None
+    offenders.sort(key=lambda item: item[0])
+    listed = ", ".join(f"{name} (${implied:,.2f})" for name, implied, _ in offenders[:3])
+    if len(offenders) > 3:
+        listed += f" (+{len(offenders) - 3} more)"
+    return (
+        f"{len(offenders)} of {len(rows)} 13F row(s) report a value and share count that "
+        f"imply a different price than the same CUSIP's other holders for the same quarter "
+        f"(median ${offenders[0][2]:,.2f}/share): {listed} — those rows are internally "
+        "inconsistent (mis-parsed column, mixed share class, or a value in the wrong unit), "
+        "so any figure that sums them (top-5 concentration, listed-share total) is unreliable."
+    )
+
+
 def build_institutional_holdings(raw_holdings: dict[str, Any]) -> list[InstitutionalHolding]:
     rows: list[InstitutionalHolding] = []
     for row in raw_holdings.get("holders") or []:
@@ -1581,6 +1634,14 @@ def compute_ownership_governance(
             "are a subset of the quarter's filers, so the coverage percentage and any top-5 "
             "concentration are computed over a partial index."
         )
+
+    # Rows that disagree with their own quarter's price basis: the filing's value
+    # and share count are mutually inconsistent for those holders, so every figure
+    # that adds them up inherits it. Independent of the coverage/completeness
+    # warnings above — those say the index is partial, this says a row is wrong.
+    value_basis_warning = holding_value_basis_warning(institutions)
+    if value_basis_warning:
+        warnings.append(value_basis_warning)
 
     return OwnershipGovernanceAnalysis(
         insider_transactions=insiders,

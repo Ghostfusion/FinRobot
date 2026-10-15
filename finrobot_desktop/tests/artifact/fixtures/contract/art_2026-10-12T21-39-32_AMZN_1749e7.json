@@ -1,6 +1,6 @@
 {
   "artifact_id": "art_2026-10-12T21:39:32_AMZN_equity_research_1749e7",
-  "extracted_at": "2026-10-14",
+  "extracted_at": "2026-10-15",
   "inputs_raw_data": {
     "balance": {
       "noncontrolling_interest": null,
@@ -310,6 +310,7 @@
     "C10b": false,
     "C10c": false,
     "C10d": false,
+    "C10e": false,
     "C11": true,
     "C12a": false,
     "C12b": false,

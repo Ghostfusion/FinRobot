@@ -57,7 +57,10 @@ from typing import TYPE_CHECKING, Any, Callable, Literal
 
 from finrobot.artifact.summary_extractor import extract_entry_price, extract_target_price
 from finrobot.engine.models.numeric_claim import Finding
-from finrobot.engine.models.reconcile_tolerances import NARRATIVE_DRIFT_TOLERANCE
+from finrobot.engine.models.reconcile_tolerances import (
+    NARRATIVE_DRIFT_TOLERANCE,
+    RATIO_IDENTITY_TOLERANCE,
+)
 from finrobot.engine.models.valuation_thresholds import (
     MARKET_DIVERGENCE_RATIO_K,
     METHOD_CORROBORATION_SPAN_K,
@@ -604,6 +607,18 @@ _OPERAND_PAIRS: tuple[tuple[str, str, str], ...] = (
     ("net_income", "operating_income", "net_income_vs_operating_income"),
 )
 
+#: (ratio path, numerator path, denominator path) — the published ratios whose VALUE
+#: is defined by two other leaves of the same artifact, so the artifact itself says
+#: whether the three figures describe one period and one caliber. C10a checks the
+#: operands exist, C10b that they came from one provider, C10d that a
+#: caliber-divergent pair is disclosed; none of them divides the two.
+_RATIO_IDENTITIES: tuple[tuple[str, str, str], ...] = (
+    ("income.operating_margin", "income.operating_income", "income.revenue"),
+    ("income.ebitda_margin", "income.ebitda", "income.revenue"),
+    ("valuation.ev_ebitda", "valuation.enterprise_value", "valuation.ebitda_operating"),
+    ("valuation.ev_revenue", "valuation.enterprise_value", "income.revenue"),
+)
+
 #: The three us-gaap tags the ``Assets − Liabilities = equity`` identity needs.
 #: The snapshot keeps them as independent leaves, which is exactly why the
 #: identity has to be recorded rather than left to whoever reads them next.
@@ -650,6 +665,20 @@ def _num(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, int | float):
         return None
     return float(value)
+
+
+def _dig(raw: dict[str, Any], path: str) -> float | None:
+    """A float at a dotted path inside the raw snapshot, None when absent.
+
+    Used by the ratio-identity clause, which compares leaves from DIFFERENT blocks
+    (``valuation.enterprise_value`` against ``income.revenue``) — a ratio's two
+    sides are not always siblings."""
+    node: Any = raw
+    for part in path.split("."):
+        if not isinstance(node, dict):
+            return None
+        node = node.get(part)
+    return _num(node)
 
 
 def _decisions(raw: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1216,6 +1245,50 @@ def _clause_c10d_caliber_divergent_accepted(artifact: "Artifact") -> Finding | N
     )
 
 
+def _clause_c10e_ratio_contradicts_operands(artifact: "Artifact") -> Finding | None:
+    """S — §4.3(a), arithmetic half: a published ratio must BE its own operands.
+
+    C10a checks the operands are present, C10b that they came from one provider,
+    C10c the balance-sheet identity, C10d that a caliber-divergent pair is
+    disclosed — none of them divides the two published leaves. That left the one
+    contradiction no provenance record can speak to: a ratio that disagrees with
+    the income block it sits in. CF 2026-10-14 shipped ``income.operating_margin``
+    0.49325 beside ``operating_income`` 3,025,000,000 / ``revenue`` 7,738,999,808
+    (= 0.39088) — 21% out, and ABOVE that same block's own 42.49% gross margin,
+    which is arithmetically impossible — while the decision record named one
+    source (yfinance), the C10d note listed only ebitda / gross_margin /
+    total_debt, and the run's divergence count was zero.
+
+    Source-agnostic by construction: it reads only the artifact's own published
+    leaves, so it fires whoever supplied them and whatever the decision record
+    says. Annotation only (`S`) — the ratio publishes as the provider stated it and
+    the reader is told it does not divide out.
+    """
+    raw = _raw(artifact)
+    for ratio_path, numerator_path, denominator_path in _RATIO_IDENTITIES:
+        published = _dig(raw, ratio_path)
+        numerator = _dig(raw, numerator_path)
+        denominator = _dig(raw, denominator_path)
+        if published is None or numerator is None or denominator is None or denominator == 0:
+            continue
+        expected = numerator / denominator
+        if abs(published - expected) <= abs(expected) * RATIO_IDENTITY_TOLERANCE:
+            continue
+        return Finding(
+            field_key=ratio_path,
+            check="contract_c10e_ratio_contradicts_operands",
+            severity="review",
+            evidence=(
+                f"{ratio_path} = {published:.5f} is published while its own operands "
+                f"{numerator_path} / {denominator_path} = {numerator:,.0f} / "
+                f"{denominator:,.0f} = {expected:.5f} — the ratio contradicts the block "
+                "it sits in, so one of the three figures describes a different period "
+                "or a different caliber than the other two"
+            ),
+        )
+    return None
+
+
 def _clause_c12a_stale_8k_index(artifact: "Artifact") -> Finding | None:
     """S — §4.5, recency: the artifact's own staleness disclosure becomes a gate.
 
@@ -1599,6 +1672,13 @@ CONTRACT_CLAUSES: list[ContractClause] = [
         check=_clause_c10d_caliber_divergent_accepted,
         title="Caliber-divergent accepted decision",
         doc="a ratio may not ship on operands of different calibers without a caliber_mismatch basis.",
+    ),
+    ContractClause(
+        id="C10e",
+        severity="S",
+        check=_clause_c10e_ratio_contradicts_operands,
+        title="Ratio contradicts its operands",
+        doc="a published ratio must equal its own operands divided, else it describes another period.",
     ),
     ContractClause(
         id="C11",

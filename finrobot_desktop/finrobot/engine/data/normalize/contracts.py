@@ -117,7 +117,21 @@ from finrobot.engine.models.metric_authority import ReconciliationReport
 # Bumping invalidates every FINANCIALS canonical slot once, so the next read
 # refetches a payload carrying the field. Observed: an IEI canonical cached earlier
 # the same day reproduced the old error path until the bump.
-CANONICAL_CONTRACT_VERSION = 12
+# v13 — 2026-10-14: the yfinance FINANCIALS payload now derives its two margins
+# from the TTM statement frame it publishes beside them (``_ratio(meta[...],
+# ratio_revenue)``) instead of answering with Yahoo's ``info.*Margins`` scalar, and
+# a margin with no frame row is WITHHELD (``*_margin_basis`` names which). Before
+# this, a cached row could carry a margin that contradicts its own income block —
+# CF 2026-10-14 published operating_margin 0.49325 next to operating_income
+# 3,025 / revenue 7,739 (= 39.1%), and above that block's own 42.5% gross margin,
+# which is arithmetically impossible; the C10d caliber note never covered the
+# field, so nothing flagged it. The canonical slot is read BEFORE the raw slot with
+# a 24h TTL, so a run in that window re-publishes the contradiction even though the
+# provider fix already shipped (the audited artifact was generated 9h after the
+# fix landed, from a payload cached 14h before it). Pairs with the FINANCIALS
+# raw-slot bump (cache._RAW_SLOT_VERSION v6) so the rebuild refetches a payload
+# whose margins carry their basis rather than re-normalizing a stale raw row.
+CANONICAL_CONTRACT_VERSION = 13
 
 # Degradation markers carried in ``Provenance.degraded``. Surfaced to the UI so
 # a fallback is visible rather than silent.

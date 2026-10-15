@@ -71,6 +71,15 @@ _MARGIN_FLOOR = -5.0
 # degradation view.
 _VALIDATOR_DIVERGENCE_PREFIXES = ("Data discrepancy:", "Price discrepancy:")
 
+# A market cap and a share count from the SAME provider payload close to the cent
+# (Yahoo derives ``marketCap = sharesOutstanding × price``; FMP rederives the count as
+# ``marketCap/price``), so any gap between ``market_cap / shares`` and the run's
+# resolved quote is a CLOCK difference, not an accounting one — the FINANCIALS
+# canonical and the PRICE canonical have independent TTLs and the financials payload
+# embeds its own, older quote. 1% is far above that noise floor and far below a
+# session's move on a volatile name.
+_MARKET_CAP_PRICE_TOL = 0.01
+
 
 def _count_validator_divergences(warnings: list[str]) -> int:
     """Number of validator cross-source divergence warnings in ``warnings``."""
@@ -309,6 +318,27 @@ def extract_financial_data(
                 shares = implied
             else:
                 shares = reported_shares
+                # Below the multi-class band the two counts agree as a SHARE count —
+                # but this same ratio is the market cap's implied price against the
+                # run's quote, and a gap there is not a share-structure fact. It
+                # means the cap and the quote are different instants (CF 2026-10-14:
+                # cap 17.744B ⇒ $117.25/share against a resolved $119.46 close, a
+                # 1.88% one-session lag, while the report also printed "+1.88% last
+                # session"). The cap feeds EV and every EV-based multiple; the quote
+                # feeds upside/downside — publishing both without this note puts two
+                # price bases in one artifact.
+                cap_implied_price = provider_market_cap / reported_shares
+                cap_price_gap = abs(cap_implied_price - current_price) / current_price
+                if cap_price_gap > _MARKET_CAP_PRICE_TOL:
+                    warnings.append(
+                        f"market_cap for {ticker} ({provider_market_cap:,.0f}) implies "
+                        f"${cap_implied_price:,.2f}/share against the run's "
+                        f"${current_price:,.2f} quote ({cap_price_gap:.1%} apart) — the cap "
+                        "and the quote are from different instants (the financials snapshot "
+                        "carries its own, older price), so EV and the EV-based multiples ride "
+                        "the cap's session while the upside/downside percentages ride the "
+                        "quote's. Read the multiples as of the cap's session."
+                    )
         else:
             shares = reported_shares
     elif provider_market_cap and provider_market_cap > 0:

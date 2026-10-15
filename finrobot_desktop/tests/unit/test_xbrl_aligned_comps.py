@@ -478,6 +478,30 @@ def test_xbrl_concept_snapshot_publishes_equity_identity_with_nci() -> None:
     assert snapshot["us-gaap:Assets"][0]["value"] == 30_676_000_000.0
 
 
+def test_xbrl_concept_snapshot_withholds_identity_when_liabilities_are_the_identity_total() -> None:
+    """A "liabilities" leaf equal to Assets is the L+E identity tag, not debt.
+
+    CF 2026-10-14 published assets 15,099 − "liabilities" 15,099 = total equity 0
+    with a noncontrolling interest of −5,748,000,000 — an impossible statement that
+    the C10c arithmetic checks cannot see, because the record is internally
+    consistent (0 − 0 and parent + NCI both close). No identity is better.
+    """
+    snapshot = xbrl_concept_snapshot(
+        {
+            "latest_total_assets": {"concept": "us-gaap:Assets", "value": 15_099_000_000.0},
+            "latest_total_liabilities": {
+                "concept": "us-gaap:LiabilitiesAndStockholdersEquity",
+                "value": 15_099_000_000.0,
+            },
+            "latest_shareholders_equity": {
+                "concept": "us-gaap:StockholdersEquity",
+                "value": 5_748_000_000.0,
+            },
+        }
+    )
+    assert "_equity_identity" not in snapshot
+
+
 def test_xbrl_concept_snapshot_no_identity_without_all_three_leaves() -> None:
     """The identity note is only emitted when Assets, Liabilities AND parent
     equity are all present — never a partial subtraction."""

@@ -1,6 +1,6 @@
 {
   "artifact_id": "art_2026-10-14T16:12:39_GMED_equity_research_c9080e",
-  "extracted_at": "2026-10-14",
+  "extracted_at": "2026-10-15",
   "inputs_raw_data": {
     "balance": {
       "noncontrolling_interest": null,
@@ -312,7 +312,7 @@
       "ev_revenue": 3.0772386347855716
     }
   },
-  "notes": "GMED — '[target withheld] of open-market purchases' for a $0 datum: the placeholder took an amount that is not the target. §4.7 cites this artifact; the later GMED run (27c788) does not carry the sentence",
+  "notes": "GMED — '[target withheld] of open-market purchases' for a $0 datum: the placeholder took an amount that is not the target. §4.7 cites this artifact; the later GMED run (27c788) does not carry the sentence; and the pre-fix operating margin C10e catches in THIS one (0.24755 against 673,764,000 / 3,144,933,888 = 0.21424) which the post-fix run does not",
   "outputs_structured": {
     "catalyst_analysis": {
       "category_breakdown": {
@@ -1141,7 +1141,8 @@
     }
   },
   "pinned_for": [
-    "C14b"
+    "C14b",
+    "C10e"
   ],
   "source": "~/.finrobot/artifacts.db",
   "ticker": "GMED",
@@ -1152,6 +1153,7 @@
     "C10b": false,
     "C10c": true,
     "C10d": true,
+    "C10e": true,
     "C11": false,
     "C12a": true,
     "C12b": false,

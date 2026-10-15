@@ -117,6 +117,12 @@ def _latest_fact_entry(field: Any) -> dict[str, Any] | None:
 # current quarter.
 _STALE_FACT_DAYS = 365
 
+# Relative epsilon for the equity-identity leaf check. The comparison it guards is
+# DEFINITIONAL (the ``LiabilitiesAndStockholdersEquity`` identity total equals
+# ``Assets`` exactly, by construction), so this only absorbs float representation —
+# it is not a tolerance band and must stay far below any real capital structure.
+_IDENTITY_LEAF_EPS = 1e-6
+
 
 def _fact_period_end(entry: dict[str, Any]) -> date | None:
     """Parse an entry's ``period_end``; None when absent or malformed."""
@@ -151,6 +157,19 @@ def _equity_identity_note(raw_xbrl: dict[str, Any]) -> dict[str, Any] | None:
     liabilities = _usd("latest_total_liabilities")
     parent_equity = _usd("latest_shareholders_equity")
     if assets is None or liabilities is None or parent_equity is None:
+        return None
+    # A "liabilities" figure equal to total assets to the cent is not a capital
+    # structure: it is the balance-sheet IDENTITY TOTAL (the
+    # ``LiabilitiesAndStockholdersEquity`` tag, which equals Assets by definition)
+    # read as a liabilities leaf. Recording the identity from it publishes a false
+    # statement the arithmetic checks cannot see — assets − liabilities = 0 and
+    # parent + NCI = 0 both close — while telling the reader the issuer has a
+    # negative NCI as large as its parent equity (CF 2026-10-14: NCI
+    # −5,748,000,000). Abstain: no identity is better than an impossible one.
+    # The selector no longer offers that concept at all (see
+    # edgar_provider._LATEST_TOTAL_LIABILITIES_CONCEPTS); this is the guard for a
+    # provider that repeats where the company tags both totals identically.
+    if abs(liabilities - assets) <= _IDENTITY_LEAF_EPS * max(1.0, abs(assets)):
         return None
     total_equity = assets - liabilities
     nci = total_equity - parent_equity

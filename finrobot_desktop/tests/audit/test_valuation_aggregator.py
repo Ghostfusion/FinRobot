@@ -367,13 +367,16 @@ class TestAggregatorContract:
 
     def test_ev_ebitda_bridges_on_current_net_debt(self) -> None:
         """EV/EBITDA EV→equity bridge must subtract CURRENT net debt — the same
-        total_debt − cash口径 dcf_seed uses — not LBO ending_debt, not 0."""
+        total_debt − cash口径 dcf_seed uses — not LBO ending_debt, not 0 — plus the
+        preferred/NCI claims the same bridge clears (the cross-check's convention)."""
         agg = aggregate_valuation(
             ticker="NVDA",
             current_price=876.42,
             dcf=_dcf(),
             shares_outstanding=2.4e9,
             current_net_debt=30e9,
+            preferred_stock=5e9,
+            noncontrolling_interest=3e9,
             ttm_ebitda=40e9,
             historical_ev_ebitda_band=(20.0, 30.0),
             as_of=AS_OF,
@@ -381,10 +384,54 @@ class TestAggregatorContract:
         row = next(m for m in agg.methods if m.method == "ev_ebitda")
         assert row.method_type == "multiple"
         assert row.confidence == 0.72
-        # Exact bridge: (p × ttm_ebitda − current_net_debt) / shares.
-        assert row.low == (20.0 * 40e9 - 30e9) / 2.4e9
-        assert row.high == (30.0 * 40e9 - 30e9) / 2.4e9
-        assert "current_net_debt" in row.source
+        # Exact bridge: (p × ttm_ebitda − net_debt − preferred − NCI) / shares.
+        assert row.low == (20.0 * 40e9 - 30e9 - 5e9 - 3e9) / 2.4e9
+        assert row.high == (30.0 * 40e9 - 30e9 - 5e9 - 3e9) / 2.4e9
+        # The label names every leg of the bridge the numbers were built on.
+        assert "net_debt" in row.source
+        assert "preferred" in row.source and "NCI" in row.source
+
+    def test_ev_ebitda_method_and_cross_check_share_one_bridge(self) -> None:
+        """The published EV/EBITDA method and the own-history cross-check row apply
+        the SAME p25/p75 band to the SAME TTM EBITDA through the SAME EV→equity
+        bridge, so their per-share bounds must be identical.
+
+        Real inputs from CF 2026-10-14: bridging net debt alone in the method put
+        $86.40 beside a cross-check that had already cleared the issuer's $3.17B
+        balance-sheet NCI ($65.44) — one report, two answers for one multiple.
+        """
+        ebitda, net_debt, nci, shares = (
+            3_913_000_000.0,
+            1_132_999_936.0,
+            3_172_000_000.0,
+            151_338_130.0,
+        )
+        p25, median, p75 = 2.063206954371756, 4.200088182786716, 5.199326909024062
+        agg = aggregate_valuation(
+            ticker="CF",
+            current_price=119.46,
+            dcf=_dcf(),
+            shares_outstanding=shares,
+            current_net_debt=net_debt,
+            preferred_stock=0.0,
+            noncontrolling_interest=nci,
+            ttm_ebitda=ebitda,
+            historical_ev_ebitda_band=(p25, p75),
+            historical_ev_ebitda_median=median,
+            historical_ev_ebitda_window_years=5,
+            as_of=AS_OF,
+        )
+        row = next(m for m in agg.methods if m.method == "ev_ebitda")
+        check = next(c for c in agg.cross_checks if c.name == "ev_ebitda_band")
+        # Independent restatement of the arithmetic — catches a dropped NCI leg.
+        assert row.low == pytest.approx((p25 * ebitda - net_debt - nci) / shares)
+        assert row.high == pytest.approx((p75 * ebitda - net_debt - nci) / shares)
+        assert check.low == pytest.approx(row.low)
+        assert check.high == pytest.approx(row.high)
+        # The method's mid is the midpoint of ITS OWN published band; the band's
+        # median is the cross-check's mid. Different estimators, both disclosed.
+        assert row.mid == pytest.approx((row.low + row.high) / 2)
+        assert check.mid == pytest.approx((median * ebitda - net_debt - nci) / shares)
 
     def test_ev_ebitda_net_debt_lowers_target_by_exactly_net_debt_per_share(self) -> None:
         """A levered firm's per-share target is lower than the debt-free case by
