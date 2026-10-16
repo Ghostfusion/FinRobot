@@ -150,6 +150,25 @@ _DIGEST_CHARS = 12
 #   10x understatement of a 5%+ holder, invisible to the reader (review 2026-10-16,
 #   item 3). The 24h row would otherwise keep serving it: SCHEDULE_13 was an
 #   UNVERSIONED raw type, so neither a revision nor a digest guarded its slot.
+#   filings_10k v2 — 2026-10-16: the 10-K section extractor no longer ships an
+#   empty Item silently and recovers every narrative Item from the raw filing
+#   corpus (``Filing.text()`` → ``Filing.html()`` → strip) when the structured
+#   API yields nothing. The pre-fix fallback called ``Filing.text()`` ALONE, which
+#   on edgartools 5.31 died with ``AttributeError: 'NoneType' object has no
+#   attribute 'download'`` (``primary_html_document`` is Optional) and repaired
+#   nothing — so Items 1 / 1A / 7 / 10 were stored at ``char_count == 0`` with
+#   ``management_discussion`` / ``mdna_text`` empty and
+#   ``sections_extraction_quality == "fallback_to_full_text"``, leaving every
+#   qualitative claim (moat, competition, MD&A) with no filing text behind it
+#   (EHC review 2026-10-13; NVIDIA's 10-K). The pre-fix row is SERVED, not merely
+#   stale: FILINGS_10K was an UNVERSIONED raw type (and absent from PRODUCERS), so
+#   neither a revision nor a source digest guarded its slot and the 7-day row
+#   survives the code fix — NVIDIA's ``filings_10k`` row written 2026-10-10 is
+#   still fresh on 2026-10-16. Bumped to v2 so it misses and refetches.
+#   10k_rag v2 — the SAME payload: ``_fetch_10k(want_rag=True)`` builds
+#   ``rag_chunks`` from those very sections, so a pre-v2 row carries an empty
+#   chunk list (``build_rag_chunks`` skips blank text) and run_qa cites nothing.
+#   Unversioned for the same reason as FILINGS_10K, so it moves with it.
 RAW_SLOT_VERSION: dict[str, int] = {
     DataType.PRICE.value: 3,
     DataType.PROXY_STATEMENT.value: 2,
@@ -158,6 +177,8 @@ RAW_SLOT_VERSION: dict[str, int] = {
     DataType.FORWARD_ESTIMATES.value: 2,
     DataType.FINANCIALS.value: 6,
     DataType.SCHEDULE_13.value: 2,
+    DataType.FILINGS_10K.value: 2,
+    DataType.RAG_10K.value: 2,
 }
 
 

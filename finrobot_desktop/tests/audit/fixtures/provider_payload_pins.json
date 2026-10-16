@@ -22,6 +22,8 @@
   },
   "declared": {
     "canonical_contract_version": 13,
+    "raw_slot:10k_rag": 2,
+    "raw_slot:filings_10k": 2,
     "raw_slot:financials": 6,
     "raw_slot:forward_estimates": 2,
     "raw_slot:peer_candidates": 3,

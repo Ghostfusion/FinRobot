@@ -400,6 +400,19 @@ class TestRawSlotVersion:
         assert raw_slot_key(DataType.FINANCIALS) == (
             f"financials:v6-{semantics_digest('financials')}"
         )
+        # FILINGS_10K bumped to v2 (2026-10-16): the 10-K section extractor now
+        # recovers every narrative Item from the raw filing corpus when the
+        # structured API is empty (and warns instead of shipping an empty Item) —
+        # a pre-bump row carries Items 1 / 1A / 7 / 10 at char_count 0 with an
+        # empty management_discussion, because the pre-fix fallback called
+        # Filing.text() alone and died with AttributeError. FILINGS_10K was
+        # UNVERSIONED, so the 7-day row survived the code fix; it must miss now.
+        assert raw_slot_key(DataType.FILINGS_10K) == (
+            f"filings_10k:v2-{semantics_digest('filings_10k')}"
+        )
+        # RAG_10K carries the SAME sections (its rag_chunks are built from them),
+        # so an unversioned pre-fix row would index nothing — it moves with v2.
+        assert raw_slot_key(DataType.RAG_10K) == f"10k_rag:v2-{semantics_digest('10k_rag')}"
         # INSIDER_TRADES has no shape change → bare slot (the "others bare" case).
         assert raw_slot_key(DataType.INSIDER_TRADES) == "insider_trades"
 
@@ -415,6 +428,22 @@ class TestRawSlotVersion:
         # A fresh set()/get() round-trips through the versioned slot.
         await cache.set("proxy_statement", "NVDA", _result("NVDA", "proxy_statement"))
         hit = await cache.get("proxy_statement", "NVDA")
+        assert hit is not None and hit.data.ticker == "NVDA"
+
+    async def test_old_unversioned_filings_10k_entry_is_not_served(self, cache):
+        """The shipped-artifact case: NVIDIA's ``filings_10k`` row (written
+        2026-10-10 by the pre-fix extractor, Items 1 / 1A / 7 / 10 at 0 chars) sat
+        under the BARE key — FILINGS_10K was unversioned, so the 7-day TTL kept
+        serving empty section text long after the code fix. It must read as a MISS
+        now (refetch), for both the canonical type and its ``filings`` alias."""
+        pret = _result("NVDA", "filings_10k")
+        await cache._set_slot("filings_10k", "NVDA", pret.model_dump_json())
+        # The public get() now looks under 'filings_10k:v2-…' → miss.
+        assert await cache.get("filings_10k", "NVDA") is None
+        assert await cache.get("filings", "NVDA") is None  # alias normalizes to the same slot
+        # A fresh set()/get() round-trips through the versioned slot.
+        await cache.set("filings_10k", "NVDA", _result("NVDA", "filings_10k"))
+        hit = await cache.get("filings_10k", "NVDA")
         assert hit is not None and hit.data.ticker == "NVDA"
 
 

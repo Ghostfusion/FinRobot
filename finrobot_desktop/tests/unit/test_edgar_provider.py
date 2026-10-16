@@ -2637,6 +2637,81 @@ async def test_fetch_10k_document_none_is_not_silently_swallowed() -> None:
     assert section["extracted_via"] != "edgartools_attribute"
 
 
+def test_filing_full_text_recovers_via_html_when_text_raises() -> None:
+    """The 5.31 crash the fallback exists for: ``Filing.text()`` raises
+    ``AttributeError`` (``primary_html_document`` is ``None``) but the filing's
+    HTML is readable. ``_filing_full_text`` must NOT give up on the first method
+    — it retries ``html()`` and strips it to text. A pre-fix fallback that called
+    ``Filing.text()`` alone returned nothing here."""
+    from finrobot.engine.data.providers.edgar_provider import _filing_full_text
+
+    filing = MagicMock()
+    filing.text.side_effect = AttributeError("'NoneType' object has no attribute 'download'")
+    filing.html.return_value = (
+        "<html><body><p>Item 7. Management's Discussion and Analysis</p><p>"
+        + ("MD&A body text. " * 300)
+        + "</p></body></html>"
+    )
+
+    text = _filing_full_text(filing)
+    assert len(text) > 1000
+    assert "Item 7." in text
+    assert "<p>" not in text  # html() output was stripped, not stored raw
+
+
+@pytest.mark.asyncio
+async def test_fetch_10k_recovers_items_via_html_when_text_raises() -> None:
+    """End-to-end NVDA-class recovery: the structured API is empty AND
+    ``Filing.text()`` raises ``AttributeError``, but the filing HTML is readable.
+    Every narrative Item must come back from the corpus (``full_text_item_split``)
+    instead of shipping 0 chars — the regression that left Items 1 / 1A / 7 / 10
+    blank (and ``mdna_text`` empty) in the shipped artifact."""
+    p = EdgarToolsProvider("Jane Doe jane@example.com")
+    filing = MagicMock()
+    filing.form = "10-K"
+    filing.accession_no = "0001045810-26-000021"
+    filing.filing_date = date(2026, 2, 25)
+    filing.homepage_url = None
+    filing.obj.return_value = _stub_tenk_empty_attrs()
+    filing.text.side_effect = AttributeError("'NoneType' object has no attribute 'download'")
+    filing.html.return_value = (
+        "<html><body>"
+        "<p>Item 1. Business</p><p>" + ("Business narrative. " * 200) + "</p>"
+        "<p>Item 1A. Risk Factors</p><p>" + ("Risk factor narrative. " * 200) + "</p>"
+        "<p>Item 7. Management's Discussion and Analysis</p><p>"
+        + ("MD&A narrative. " * 200)
+        + "</p>"
+        "<p>Item 10. Directors and Executive Officers</p><p>"
+        + ("Governance narrative. " * 60)
+        + "</p>"
+        "</body></html>"
+    )
+    c = MagicMock()
+    c.name = "NVIDIA CORP"
+    c.cik = 1045810
+    c.latest.return_value = filing
+
+    data, warnings = p._fetch_10k(c, want_rag=False)
+
+    items = data["items"]
+    # The four narrative Items are non-empty despite text() raising.
+    assert items["item_1_business"].startswith("Item 1. Business")
+    assert len(items["item_1_business"]) > 1000
+    assert "Risk factor narrative" in items["item_1a_risk_factors"]
+    assert items["item_7_mdna"].startswith("Item 7.")
+    assert "MD&A narrative" in items["item_7_mdna"]
+    assert "Governance narrative" in items["item_10_directors_officers"]
+    assert data["mdna_text"] == items["item_7_mdna"]
+    assert data["mdna_available"] is True
+
+    by_id = {s["canonical_id"]: s for s in data["sections"]}
+    assert by_id["item_1_business"]["extracted_via"] == "full_text_item_split"
+    assert by_id["item_7_mdna"]["extracted_via"] == "full_text_item_split"
+    assert data["sections_extraction_quality"] == "fallback_to_full_text"
+    # No "0 chars" warning for the four recovered Items.
+    assert not [w for w in warnings if "0 chars" in w and "item_1" in w]
+
+
 def test_split_tenk_items_prefers_body_over_toc_line() -> None:
     from finrobot.engine.data.providers.edgar_provider import _split_tenk_items
 
