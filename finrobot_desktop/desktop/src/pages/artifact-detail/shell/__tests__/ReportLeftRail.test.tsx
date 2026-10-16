@@ -58,7 +58,12 @@ const CHAPTERS_ONLY = reportSectionEntries('en', {
 function renderRail(
   entries: ReportSectionEntry[] = ALL_SECTIONS,
   extra?: React.ReactNode,
-  card?: { priceSession?: PriceSessionShape | null; snapshotAsOf?: string | null },
+  card?: {
+    priceSession?: PriceSessionShape | null
+    snapshotAsOf?: string | null
+    quoteIsLive?: boolean
+    quoteAsOf?: string | null
+  },
 ) {
   return render(
     <MemoryRouter>
@@ -73,6 +78,8 @@ function renderRail(
           snapshotPrice={187.42}
           priceSession={card?.priceSession ?? null}
           snapshotAsOf={card?.snapshotAsOf ?? null}
+          quoteIsLive={card?.quoteIsLive ?? false}
+          quoteAsOf={card?.quoteAsOf ?? null}
         />
         {extra}
       </div>
@@ -337,5 +344,28 @@ describe('ReportLeftRail — the session delta beside the spot', () => {
 
     expect(screen.queryByTestId('rail-session-change')).toBeNull()
     expect(screen.getByText(/187.42/)).toBeTruthy()
+  })
+})
+
+// 2026-10-16 CRWV: the caption read "spot $69.69" for a price the payload itself
+// stamps `quote_is_live: false` / `quote_as_of: 2026-10-15` — the run's own
+// degradation marker said "provider served no tick time, so the price is the
+// session close". The caption names what the price IS, from that flag.
+describe('ReportLeftRail — the price caption names the price basis', () => {
+  it('calls a session close a close, and dates it', () => {
+    renderRail(ALL_SECTIONS, undefined, { quoteAsOf: '2026-10-15T00:00:00Z' })
+
+    expect(screen.getByText(/Close \$187\.42 · Oct 15/)).toBeTruthy()
+    expect(screen.queryByText(/spot/i)).toBeNull()
+  })
+
+  it('calls a live intraday quote live, and dates nothing', () => {
+    renderRail(ALL_SECTIONS, undefined, {
+      quoteIsLive: true,
+      quoteAsOf: '2026-10-15T00:00:00Z',
+    })
+
+    expect(screen.getByText(/Live \$187\.42/)).toBeTruthy()
+    expect(screen.queryByText(/Oct 15/)).toBeNull()
   })
 })

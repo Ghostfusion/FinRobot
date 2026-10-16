@@ -282,6 +282,78 @@ describe('DataAuthorityPanel', () => {
     expect(screen.getByTestId('report-data-authority-no-record')).toBeInTheDocument()
   })
 
+  // 2026-10-16 CRWV: the price record published "eodhd 69.69 vs yfinance 62.12,
+  // 10.9% above tolerance" for what were two DIFFERENT instants — eodhd's
+  // 2026-10-15 daily-bar close against a yfinance quote that stamps no session at
+  // all (`fast_info.last_price`). The record now carries each side's own stamp, so
+  // the gap is readable as an instant difference instead of a suspected bad value.
+
+  it('stamps the published price with its session and names the side with no session', () => {
+    render(
+      <DataAuthorityPanel
+        authority={null}
+        priceAuthority={{
+          policy_version: 'metric_authority_v1',
+          decisions: [
+            {
+              metric: 'current_price',
+              status: 'conflict',
+              value: 69.69,
+              unit: 'USD',
+              currency: 'USD',
+              selected_source: 'eodhd',
+              is_authoritative: true,
+              reason_code: 'above_tolerance_published_flagged',
+              basis: 'delayed quote / last daily bar close, quote currency',
+              comparability: 'session_price',
+              period_end: '2026-10-15',
+              period_basis: 'session',
+              disagreement_pct: 0.1087,
+              candidates: [
+                {
+                  source: 'eodhd',
+                  value: 69.69,
+                  eligible: true,
+                  deviation_pct: 0,
+                  reason_code: 'authoritative_selected',
+                  period_end: '2026-10-15',
+                  period_basis: 'session',
+                },
+                {
+                  source: 'yfinance',
+                  value: 62.12,
+                  eligible: true,
+                  deviation_pct: 0.1087,
+                  reason_code: 'above_tolerance_published_flagged',
+                  period_end: null,
+                  period_basis: 'session',
+                },
+              ],
+            },
+          ],
+        }}
+      />,
+    )
+
+    expect(screen.getByTestId('report-data-authority-decision-instant').textContent).toBe(
+      'session 2026-10-15',
+    )
+    const alternative = screen.getByTestId('report-data-authority-alternative')
+    expect(alternative).toHaveTextContent('yfinance')
+    expect(alternative).toHaveTextContent('no session stamp')
+    // The record states the rule rather than leaving the stamps for the reader to weigh.
+    expect(screen.getByTestId('report-data-authority-price')).toHaveTextContent(
+      /not evidence about the published one/,
+    )
+  })
+
+  it('stamps a statement metric by its period end, never by a session', () => {
+    render(<DataAuthorityPanel authority={CONFLICT} />)
+    expect(screen.getByTestId('report-data-authority-decision-instant').textContent).toBe(
+      'period end 2026-06-30',
+    )
+  })
+
   // ── Provenance degradation markers (the PRICE feed's quote codes) ─────────
   // The audited NVDA artifact's price feed carried `quote_ts_missing` +
   // `quote_currency_inferred` in `raw_data.provenance.degraded` — markers that

@@ -197,6 +197,8 @@ export function ArtifactDetailPage(): React.ReactElement {
     snapshotPrice,
     priceSession,
     snapshotAsOf,
+    quoteIsLive,
+    quoteAsOf,
     fairlyValued,
     quoteCurrency,
     inputs,
@@ -398,6 +400,8 @@ export function ArtifactDetailPage(): React.ReactElement {
           snapshotPrice={snapshotPrice}
           priceSession={priceSession}
           snapshotAsOf={snapshotAsOf}
+          quoteIsLive={quoteIsLive}
+          quoteAsOf={quoteAsOf}
           fairlyValued={fairlyValued}
           confidence={valuationSynthesis?.confidence ?? null}
           quoteCurrency={quoteCurrency}

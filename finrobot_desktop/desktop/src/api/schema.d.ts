@@ -3596,6 +3596,10 @@ export interface components {
        * @default false
        */
       non_independent: boolean
+      /** Period End */
+      period_end?: string | null
+      /** Period Basis */
+      period_basis?: string | null
     }
     /** MetricDecision */
     MetricDecision: {

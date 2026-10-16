@@ -313,8 +313,12 @@ msgid "report.leftRail.targetLabel"
 msgstr "Target"
 
 #. js-lingui-explicit-id
-msgid "report.leftRail.spotLabel"
-msgstr "spot"
+msgid "report.leftRail.closeLabel"
+msgstr "Close"
+
+#. js-lingui-explicit-id
+msgid "report.leftRail.liveLabel"
+msgstr "Live"
 
 #. js-lingui-explicit-id
 msgid "report.leftRail.lastSession"
@@ -411,6 +415,18 @@ msgstr "Selected source"
 #. js-lingui-explicit-id
 msgid "report.dataAuthority.alternatives"
 msgstr "Alternatives"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.sessionStamp"
+msgstr "session {date}"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.periodStamp"
+msgstr "period end {date}"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.noSessionStamp"
+msgstr "no session stamp"
 
 #. js-lingui-explicit-id
 msgid "report.dataAuthority.notCompared"

@@ -2,7 +2,7 @@
 //
 // Replaces the old split of a left TOC + a right Version Timeline rail (which
 // squeezed the reading column between two sidebars). Now one sticky rail holds:
-//   • an identity card (ticker · verdict · company · 12-mo target + spot · confidence)
+//   • an identity card (ticker · verdict · company · 12-mo target + last close · confidence)
 //   • a CONTENTS | VERSIONS tab switch
 //       - CONTENTS: the report's section table of contents with scroll-spy
 //         highlight, the active section's sub-headings, a reading-progress bar
@@ -22,7 +22,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ArtifactSummaryV5 } from '../../../types/v5'
 import { useI18n } from '../../../i18n'
-import { formatCurrency, formatDate, formatPercent } from '../../../utils/format'
+import { formatCurrency, formatDate, formatMonthDay, formatPercent } from '../../../utils/format'
 import {
   verdictLabel,
   verdictTone,
@@ -51,6 +51,16 @@ interface ReportLeftRailProps {
   /** When the market snapshot was taken — labels the session delta so a
    *  closed-market view cannot read the last session as live. */
   snapshotAsOf?: string | null
+  /** Whether `snapshotPrice` is a LIVE intraday quote (`raw_data.market
+   *  .quote_is_live`). Absent/false ⇒ a prior session's close, so the caption
+   *  reads "last close", never "spot": the page's own degradation marker says
+   *  "provider served no tick time, so the price is the session close", and the
+   *  caption contradicted it (2026-10-16 CRWV: a 2026-10-15 close shown as "spot",
+   *  zh 现价). Same rule the cover and TargetRange already apply. */
+  quoteIsLive?: boolean
+  /** The QUOTE's own session date (`raw_data.market.quote_as_of`), appended to the
+   *  non-live caption so the close is dated rather than floating. */
+  quoteAsOf?: string | null
   /** Point withheld because price is inside the fair-value band → "Fairly Valued"
    *  (confident HOLD), not a generic "WITHHELD". From deriveReportData. */
   fairlyValued?: boolean
@@ -124,6 +134,8 @@ export function ReportLeftRail({
   snapshotPrice = null,
   priceSession = null,
   snapshotAsOf = null,
+  quoteIsLive = false,
+  quoteAsOf = null,
   fairlyValued = false,
   confidence = null,
   quoteCurrency = 'USD',
@@ -146,9 +158,19 @@ export function ReportLeftRail({
   // SAME timeline entry (`target_price`) the version rows render — so the card can
   // never disagree with its own v-row. Previously this card showed snapshotPrice
   // (the spot the target was computed against) as a bare, unlabelled number, which
-  // read as contradicting the target shown in the v-rows + the report body. Spot
-  // is kept as a small labelled caption for context.
+  // read as contradicting the target shown in the v-rows + the report body. The
+  // snapshot price is kept as a small labelled caption for context — labelled with
+  // what it IS (live quote vs last close), never with the bare word "spot".
   const targetPrice = timeline.find((a) => a.id === currentArtifactId)?.target_price ?? null
+
+  // What the snapshot price IS, in one word: a live intraday quote, or the last
+  // session's close. `quote_is_live` is recorded on the payload, so neither word is
+  // an inference — and the caption must not call a session close a spot price
+  // (2026-10-16 CRWV: "spot $69.69" for a 2026-10-15 close, zh 现价).
+  const priceBasisLabel = quoteIsLive
+    ? t('report.leftRail.liveLabel')
+    : t('report.leftRail.closeLabel')
+  const priceAsOfSuffix = !quoteIsLive && quoteAsOf ? ` · ${formatMonthDay(quoteAsOf, locale)}` : ''
 
   // Scroll-spy + reading progress. The spy is driven by measured offsets rather
   // than IntersectionObserver: it is deterministic (see pickActiveSection), it
@@ -300,7 +322,7 @@ export function ReportLeftRail({
             >
               {t('report.leftRail.targetLabel')}
               {typeof snapshotPrice === 'number' &&
-                ` · ${t('report.leftRail.spotLabel')} ${formatCurrency(snapshotPrice, quoteCurrency, locale, 2)}`}
+                ` · ${priceBasisLabel} ${formatCurrency(snapshotPrice, quoteCurrency, locale, 2)}${priceAsOfSuffix}`}
             </div>
           </>
         ) : (
@@ -333,8 +355,8 @@ export function ReportLeftRail({
                   fontVariantNumeric: 'tabular-nums',
                 }}
               >
-                {t('report.leftRail.spotLabel')}{' '}
-                {formatCurrency(snapshotPrice, quoteCurrency, locale, 2)}
+                {priceBasisLabel} {formatCurrency(snapshotPrice, quoteCurrency, locale, 2)}
+                {priceAsOfSuffix}
               </div>
             )}
           </>

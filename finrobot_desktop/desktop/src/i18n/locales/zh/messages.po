@@ -313,7 +313,11 @@ msgid "report.leftRail.targetLabel"
 msgstr "目标价"
 
 #. js-lingui-explicit-id
-msgid "report.leftRail.spotLabel"
+msgid "report.leftRail.closeLabel"
+msgstr "收盘价"
+
+#. js-lingui-explicit-id
+msgid "report.leftRail.liveLabel"
 msgstr "现价"
 
 #. js-lingui-explicit-id
@@ -411,6 +415,18 @@ msgstr "选定来源"
 #. js-lingui-explicit-id
 msgid "report.dataAuthority.alternatives"
 msgstr "备选值"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.sessionStamp"
+msgstr "{date} 交易日"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.periodStamp"
+msgstr "期末 {date}"
+
+#. js-lingui-explicit-id
+msgid "report.dataAuthority.noSessionStamp"
+msgstr "无交易日标记"
 
 #. js-lingui-explicit-id
 msgid "report.dataAuthority.notCompared"

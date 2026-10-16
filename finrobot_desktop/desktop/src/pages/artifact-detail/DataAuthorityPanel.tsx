@@ -33,6 +33,17 @@ export interface DataAuthorityCandidate {
   /** Relative deviation vs the selected value; null when not compared. */
   deviation_pct: number | null
   reason_code: string
+  /** The session / period THIS candidate's own value is stamped for. The deviation
+   *  alone cannot say whether two sources measured the same instant, so the record
+   *  carries each side's own stamp: 2026-10-16 CRWV published "eodhd 69.69 vs
+   *  yfinance 62.12, 10.9% above tolerance" where one side was a dated session
+   *  close and the other a bare live quote (`{"price": …}`, nothing else).
+   *
+   *  ``null`` = the provider stamped no session (a fact about the quote);
+   *  ``undefined`` = the record predates this field (a legacy artifact). Never
+   *  conflate them — only the first may be rendered as "no session stamp". */
+  period_end?: string | null
+  period_basis?: string | null
 }
 
 /** One metric's resolved decision. */
@@ -47,6 +58,12 @@ export interface DataAuthorityDecision {
   reason_code: string
   /** The registry row's basis, verbatim (period + caliber). */
   basis: string
+  /** What two numbers must share before a comparison means anything —
+   *  `session_price` = bar session + quote currency (the `current_price` row). */
+  comparability: string
+  /** The session / period the PUBLISHED value is stamped for. */
+  period_end: string | null
+  period_basis: string | null
   disagreement_pct: number | null
   candidates: DataAuthorityCandidate[]
 }
@@ -89,7 +106,32 @@ function parseCandidate(raw: unknown): DataAuthorityCandidate | null {
     eligible: r.eligible === true,
     deviation_pct: asNumber(r.deviation_pct),
     reason_code: asString(r.reason_code),
+    // Absent stays absent (a record written before the field existed); a present
+    // null stays null (the provider stamped no session).
+    period_end: 'period_end' in r ? asNullableString(r.period_end) : undefined,
+    period_basis: 'period_basis' in r ? asNullableString(r.period_basis) : undefined,
   }
+}
+
+/** How a value is stamped in time, as the record states it — never left implicit.
+ *  `session_price` rows (the price) are stamped by BAR SESSION; a null stamp there
+ *  is the fact that the provider named no session, not a missing field to fill.
+ *  Statement metrics are stamped by period end instead. */
+function instantStamp(
+  decision: { comparability: string; period_end: string | null | undefined },
+  t: Translate,
+): string {
+  // ``undefined`` is a legacy record that predates the field: say nothing rather
+  // than claim the provider stamped no session.
+  if (decision.period_end === undefined) return ''
+  if (!decision.period_end) {
+    return decision.comparability === 'session_price'
+      ? t('report.dataAuthority.noSessionStamp')
+      : ''
+  }
+  return decision.comparability === 'session_price'
+    ? t('report.dataAuthority.sessionStamp', { date: decision.period_end })
+    : t('report.dataAuthority.periodStamp', { date: decision.period_end })
 }
 
 /** Narrow `raw_data.data_authority` into the read model. Returns null when the
@@ -118,6 +160,9 @@ export function parseDataAuthority(raw: unknown): DataAuthorityRecord | null {
       is_authoritative: d.is_authoritative === true,
       reason_code: asString(d.reason_code),
       basis: asString(d.basis),
+      comparability: asString(d.comparability),
+      period_end: asNullableString(d.period_end),
+      period_basis: asNullableString(d.period_basis),
       disagreement_pct: asNumber(d.disagreement_pct),
       candidates,
     })
@@ -347,6 +392,11 @@ export function DataAuthorityPanel({
     ? priceRecord.decisions.filter((d) => d.status !== 'accepted')
     : []
   const priceAccepted = priceRecord ? priceRecord.decisions.length - priceFlagged.length : 0
+  // Does the price record actually STAMP its candidates? A legacy artifact predates
+  // the field, and the record's note must not promise rows that aren't there.
+  const priceCandidatesStampSessions = (priceRecord?.decisions ?? []).some((d) =>
+    d.candidates.some((c) => c.period_end !== undefined),
+  )
   // The FINANCIALS record is absent for the audited run. The panel must say so
   // explicitly — a bare "· 0" reads as "zero conflicts", which is the defect.
   const financialsMissing = record === null
@@ -431,6 +481,13 @@ export function DataAuthorityPanel({
             {locale === 'zh'
               ? '权威现价(current_price)的对账记录——封面与各章节所用价格的来源。'
               : 'The reconciliation record behind the authoritative current price — the value the cover and every chapter publish.'}
+            {/* Only promise the per-row stamps when the record carries them: a
+                legacy payload predates the field, and a note about stamps that are
+                not on screen would be worse than no note. */}
+            {priceCandidatesStampSessions &&
+              (locale === 'zh'
+                ? '每一行都标注该数值所属的交易日;若某个来源自身没有时段标记,它报出的可能是另一个时点的价格,其差额并不说明已发布价格有误。'
+                : 'Each row states the session its value is stamped for; a source that stamps none of its own may be quoting a different instant, so its gap is not evidence about the published one.')}
           </p>
           {priceFlagged.length > 0 && (
             <ul style={panelListStyle}>
@@ -458,6 +515,10 @@ function DecisionRow({ decision }: { decision: DataAuthorityDecision }): React.R
   const alternatives = decision.candidates.filter((c) => c.source !== selected)
   const statusText = codeLabel(decision.status, STATUS_KEYS, t)
   const reasonText = codeLabel(decision.reason_code, REASON_KEYS, t)
+  // What instant the PUBLISHED value is for. "Current Price $69.69" alone reads as
+  // the price now; the record says which session it is stamped for (or that the
+  // provider stamped none).
+  const valueStamp = instantStamp(decision, t)
 
   return (
     <li
@@ -493,6 +554,18 @@ function DecisionRow({ decision }: { decision: DataAuthorityDecision }): React.R
         >
           {formatAuthorityValue(decision.value, decision.unit, decision.currency, locale)}
         </span>
+        {valueStamp && (
+          <span
+            data-testid="report-data-authority-decision-instant"
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 11,
+              color: 'var(--text-muted)',
+            }}
+          >
+            {valueStamp}
+          </span>
+        )}
         {statusText && <span style={panelBadgeStyle}>{statusText}</span>}
         <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
           {t('report.dataAuthority.selectedSource')}: {selected ?? '—'}
@@ -538,35 +611,52 @@ function DecisionRow({ decision }: { decision: DataAuthorityDecision }): React.R
               listStyle: 'none',
             }}
           >
-            {alternatives.map((c) => (
-              <li
-                key={c.source}
-                data-testid="report-data-authority-alternative"
-                style={{
-                  display: 'flex',
-                  alignItems: 'baseline',
-                  gap: 10,
-                  flexWrap: 'wrap',
-                  fontSize: 11.5,
-                  color: 'var(--text-secondary)',
-                }}
-              >
-                <span style={{ fontFamily: 'var(--font-mono)' }}>{c.source}</span>
-                <span style={{ fontFamily: 'var(--font-mono)' }}>
-                  {formatAuthorityValue(c.value, decision.unit, decision.currency, locale)}
-                </span>
-                <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--warning)' }}>
-                  {c.deviation_pct !== null
-                    ? formatPercent(c.deviation_pct, locale)
-                    : t('report.dataAuthority.notCompared')}
-                </span>
-                {c.reason_code && (
-                  <span style={{ color: 'var(--text-muted)' }}>
-                    {codeLabel(c.reason_code, REASON_KEYS, t)}
+            {alternatives.map((c) => {
+              // Each candidate carries its OWN stamp: the published row's session
+              // is not the alternative's, and a reader comparing two numbers must be
+              // able to see whether they are the same measurement.
+              const candidateStamp = instantStamp(
+                { comparability: decision.comparability, period_end: c.period_end },
+                t,
+              )
+              return (
+                <li
+                  key={c.source}
+                  data-testid="report-data-authority-alternative"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    gap: 10,
+                    flexWrap: 'wrap',
+                    fontSize: 11.5,
+                    color: 'var(--text-secondary)',
+                  }}
+                >
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>{c.source}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>
+                    {formatAuthorityValue(c.value, decision.unit, decision.currency, locale)}
                   </span>
-                )}
-              </li>
-            ))}
+                  {candidateStamp && (
+                    <span
+                      data-testid="report-data-authority-alternative-instant"
+                      style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}
+                    >
+                      {candidateStamp}
+                    </span>
+                  )}
+                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--warning)' }}>
+                    {c.deviation_pct !== null
+                      ? formatPercent(c.deviation_pct, locale)
+                      : t('report.dataAuthority.notCompared')}
+                  </span>
+                  {c.reason_code && (
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      {codeLabel(c.reason_code, REASON_KEYS, t)}
+                    </span>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         </>
       )}
