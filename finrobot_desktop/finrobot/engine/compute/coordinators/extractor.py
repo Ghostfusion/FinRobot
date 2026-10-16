@@ -14,7 +14,7 @@ receive raw ``DataResult`` slices from ``fetch_historical`` wrap them with
 
 import math
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, Final
 
 from finrobot.engine.data.instrument import FundInstrumentError, is_fund_quote_type
 from finrobot.engine.data.normalize.contracts import NormalizedFinancials, NormalizedPrice
@@ -195,7 +195,9 @@ def post_balance_sheet_financing_warning(
     newest_date, newest_items = hits[0]
     item_label = "Items" if len(newest_items) > 1 else "Item"
     reasons = "; ".join(_BALANCE_SHEET_8K_ITEMS[code] for code in newest_items)
-    others = f"; {len(hits) - 1} further such filing(s) since the balance sheet" if len(hits) > 1 else ""
+    others = (
+        f"; {len(hits) - 1} further such filing(s) since the balance sheet" if len(hits) > 1 else ""
+    )
     return (
         f"an SEC 8-K filed {newest_date} ({item_label} {', '.join(newest_items)}: {reasons})"
         f"{others} post-dates the balance sheet ({horizon}): total debt, net debt, enterprise "

@@ -373,7 +373,10 @@ class TestPostBalanceSheetFinancingWarning:
     _NVDA_8KS = [
         {"filing_date": "2026-09-03", "items": ["Item 8.01", "Item 9.01"]},
         {"filing_date": "2026-08-26", "items": ["Item 2.02", "Item 9.01"]},
-        {"filing_date": "2026-08-17", "items": ["Item 1.01", "Item 2.03", "Item 7.01", "Item 9.01"]},
+        {
+            "filing_date": "2026-08-17",
+            "items": ["Item 1.01", "Item 2.03", "Item 7.01", "Item 9.01"],
+        },
         {"filing_date": "2026-07-02", "items": ["Item 5.02"]},
     ]
 

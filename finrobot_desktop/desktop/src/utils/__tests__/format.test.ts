@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import {
   formatNumber,
   formatInteger,
@@ -141,18 +141,20 @@ describe('format / formatMonthDay (as-of stamp)', () => {
     // in local time it slips a day backwards west of UTC — NVDA's Oct 15 close
     // printed "Close $217.23 (Oct 14)" in US Pacific while its own price
     // authority, price cache and preceding-session change all say Oct 15.
-    const prevTz = process.env.TZ
-    process.env.TZ = 'America/Los_Angeles'
-    try {
-      // Proves the runtime really switched to a negative offset (else the
-      // assertions below would hold under the OLD local-time read too).
-      expect(new Date('2026-10-15T00:00:00Z').getDate()).toBe(14)
-      expect(formatMonthDay('2026-10-15T00:00:00Z', 'en')).toBe('Oct 15')
-      expect(formatMonthDay('2026-10-15T00:00:00+00:00', 'en')).toBe('Oct 15')
-      expect(formatMonthDay('2026-10-15T00:00:00Z', 'zh')).toBe('10月15日')
-    } finally {
-      process.env.TZ = prevTz
-    }
+    // A negative-offset viewer is the whole point of the case, so pin the zone
+    // rather than inheriting the machine's (a UTC runner would pass under the old
+    // local-time read too). vitest's stub keeps it typed and restores it after.
+    vi.stubEnv('TZ', 'America/Los_Angeles')
+    // Proves the runtime really switched to a negative offset — the day IS the 14th
+    // when read locally, so a regression to local formatting fails right here.
+    expect(new Date('2026-10-15T00:00:00Z').getDate()).toBe(14)
+    expect(formatMonthDay('2026-10-15T00:00:00Z', 'en')).toBe('Oct 15')
+    expect(formatMonthDay('2026-10-15T00:00:00+00:00', 'en')).toBe('Oct 15')
+    expect(formatMonthDay('2026-10-15T00:00:00Z', 'zh')).toBe('10月15日')
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
   })
 
   it('keeps a date-only string on its own day', () => {
