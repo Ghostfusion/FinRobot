@@ -82,6 +82,29 @@ def _catalyst_event_line(event: CatalystEvent) -> str:
     )
 
 
+#: The 10-K sections whose ABSENCE means the narrative has no filing prose to lean
+#: on (Item 1 business, Item 1A risk factors, Item 7 MD&A).
+_FILING_TEXT_ITEMS: tuple[str, ...] = ("item_1_business", "item_1a_risk_factors", "item_7_mdna")
+
+
+def _filing_text_missing(sec_filings: object) -> bool:
+    """True when the 10-K's business / risk-factor / MD&A text did not extract.
+
+    Requires the keys to EXIST and all be empty: a legacy artifact that never
+    carried the block is not evidence of a failed extraction, so it stays silent.
+    """
+    if not isinstance(sec_filings, Mapping):
+        return False
+    tenk = sec_filings.get("10k")
+    if not isinstance(tenk, Mapping):
+        return False
+    items = tenk.get("items")
+    if not isinstance(items, Mapping):
+        return False
+    present = [str(items.get(key) or "").strip() for key in _FILING_TEXT_ITEMS if key in items]
+    return bool(present) and not any(present)
+
+
 def build_thesis_prompt(
     base_prompt: str,
     structured_context: dict[str, object],
@@ -429,6 +452,23 @@ def build_thesis_prompt(
             f"{thesis_prompt}\n\nBALANCE-SHEET STALENESS (computed — state it wherever the "
             f"narrative quotes debt, cash, enterprise value or the default barrier): "
             f"{_post_bs_note}"
+        )
+
+    # ── Filing-text caveat (computed) ──────────────────────────────────────────
+    # When the 10-K's business / risk-factor / MD&A sections do not extract, the
+    # narrative has NO filing prose to draw on — but the model still knows the
+    # company and writes confident moat / competitive-position sentences that read
+    # as if they came from the filing. NVDA 2026-10-16 asserted a CUDA switching-
+    # cost moat while Items 1, 1A and 7 were all 0 chars (review 2026-10-16,
+    # checklist F). The caveat bounds the register; it never licenses invention.
+    if _filing_text_missing(_sec_ctx):
+        thesis_prompt = (
+            f"{thesis_prompt}\n\nFILING-TEXT CAVEAT (computed): this run's 10-K sections "
+            f"for Item 1 (business), Item 1A (risk factors) and Item 7 (MD&A) were NOT "
+            f"extracted, so nothing in the filing prose supports a business-model, moat, "
+            f"competitive-position or management-commentary claim. Never imply such a "
+            f"claim comes from the filing: ground it in a figure from the strict "
+            f"whitelist instead, or leave it out."
         )
 
     # ── Momentum context (BACKLOG A2/P1-1) ─────────────────────────────────────

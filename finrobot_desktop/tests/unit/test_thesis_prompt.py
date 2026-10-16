@@ -394,6 +394,39 @@ class TestBuildThesisPrompt:
         assert "2026-08-17" in prompt
         assert "default barrier" in prompt
 
+    def test_missing_filing_text_bounds_qualitative_claims(self):
+        """An unextracted 10-K must not let moat/competitive prose read as sourced.
+
+        NVDA 2026-10-16 asserted a CUDA switching-cost moat while Items 1, 1A and 7
+        all extracted 0 chars, so nothing in the run supports a filing-sourced
+        business-model claim.
+        """
+        methods = [
+            ValuationMethod(name="DCF", low=210, mid=245, high=290, confidence=0.5, source="DCF")
+        ]
+        empty = {
+            "10k": {
+                "items": {
+                    "item_1_business": "",
+                    "item_1a_risk_factors": "",
+                    "item_7_mdna": "",
+                }
+            }
+        }
+        prompt = _build(methods, current_price=230.0, extra_context={"sec_filings": empty})
+        assert "FILING-TEXT CAVEAT" in prompt
+        assert "NOT extracted" in prompt
+
+        # Extracted text → no caveat.
+        filled = {"10k": {"items": {"item_1_business": "We design accelerators."}}}
+        assert "FILING-TEXT CAVEAT" not in _build(
+            methods, current_price=230.0, extra_context={"sec_filings": filled}
+        )
+        # A legacy artifact with no 10-K block at all → no caveat (absent ≠ failed).
+        assert "FILING-TEXT CAVEAT" not in _build(
+            methods, current_price=230.0, extra_context={"sec_filings": {"8k_events": []}}
+        )
+
     def test_catalyst_section_wraps_headlines_as_untrusted(self):
         """Injected catalyst headlines are wrapped in an untrusted-news block."""
         methods = [
