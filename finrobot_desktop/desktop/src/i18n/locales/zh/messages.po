@@ -493,6 +493,10 @@ msgid "report.dataAuthority.reason.non_independent_agreement"
 msgstr "来自非独立来源的一致"
 
 #. js-lingui-explicit-id
+msgid "report.dataAuthority.degraded"
+msgstr "降级标记"
+
+#. js-lingui-explicit-id
 msgid "chapter.financial.kv.revenueBase"
 msgstr "营收（基期）"
 
@@ -2283,6 +2287,18 @@ msgstr "{field} 跨源不一致 · 已标交叉校验"
 #. js-lingui-explicit-id
 msgid "workspace.market.degraded.priceDivergence"
 msgstr "{field} 行情源不一致 · 需复核实时报价"
+
+#. js-lingui-explicit-id
+msgid "workspace.market.degraded.quoteTsMissing"
+msgstr "缺少报价时间戳 · 数据源未给出盘中成交时间，该价格实为收盘价"
+
+#. js-lingui-explicit-id
+msgid "workspace.market.degraded.quoteCurrencyMissing"
+msgstr "报价币种未注明 · 数据源未标注币种，外汇校验将放弃判断"
+
+#. js-lingui-explicit-id
+msgid "workspace.market.degraded.quoteCurrencyInferred"
+msgstr "报价币种为推断值 · 取自交易所后缀，并非报价自带"
 
 #. js-lingui-explicit-id
 msgid "workspace.market.trend.uptrend"

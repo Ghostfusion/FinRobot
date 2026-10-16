@@ -282,6 +282,34 @@ describe('DataAuthorityPanel', () => {
     expect(screen.getByTestId('report-data-authority-no-record')).toBeInTheDocument()
   })
 
+  // ── Provenance degradation markers (the PRICE feed's quote codes) ─────────
+  // The audited NVDA artifact's price feed carried `quote_ts_missing` +
+  // `quote_currency_inferred` in `raw_data.provenance.degraded` — markers that
+  // qualify the published price. The panel used to read only the COUNTS of that
+  // same block, so both flags reached no report surface (the 2026-10-16 review:
+  // "the report does not surface them").
+
+  it('surfaces the provenance degraded markers as labels, never the raw code', () => {
+    render(
+      <DataAuthorityPanel
+        authority={null}
+        coverage={{ degraded: ['quote_ts_missing', 'quote_currency_inferred'] }}
+      />,
+    )
+    const row = screen.getByTestId('report-data-authority-degraded')
+    expect(row).toHaveTextContent('Quote timestamp missing')
+    expect(row).toHaveTextContent('Quote currency inferred')
+    expect(row.textContent ?? '').not.toContain('quote_ts_missing')
+    expect(row.textContent ?? '').not.toContain('quote_currency_inferred')
+  })
+
+  it('renders nothing when the provenance block carries no markers and no counts', () => {
+    const { container } = render(
+      <DataAuthorityPanel authority={null} coverage={{ degraded: [] }} />,
+    )
+    expect(container.firstChild).toBeNull()
+  })
+
   it('renders nothing when neither a record nor a coverage count is present', () => {
     const { container } = render(<DataAuthorityPanel authority={null} priceAuthority={null} />)
     expect(container.firstChild).toBeNull()

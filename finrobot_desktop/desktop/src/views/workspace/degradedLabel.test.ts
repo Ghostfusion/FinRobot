@@ -18,6 +18,11 @@ describe('degradedLabel', () => {
       'ccy_inferred',
       'price_fallback_close',
       'period_basis_unknown',
+      // The PRICE feed's quote codes (contracts.py DEGRADED_QUOTE_*). They ride
+      // the same merged `Provenance.degraded` list and used to render raw.
+      'quote_ts_missing',
+      'quote_currency_missing',
+      'quote_currency_inferred',
     ]) {
       const label = degradedLabel(tSync, flag)
       expect(label).not.toBe(flag) // resolved, not the raw marker

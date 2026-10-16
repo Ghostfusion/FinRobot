@@ -493,6 +493,10 @@ msgid "report.dataAuthority.reason.non_independent_agreement"
 msgstr "agreement from a non-independent source"
 
 #. js-lingui-explicit-id
+msgid "report.dataAuthority.degraded"
+msgstr "Degraded flags"
+
+#. js-lingui-explicit-id
 msgid "chapter.financial.kv.revenueBase"
 msgstr "Revenue (Base)"
 
@@ -2283,6 +2287,18 @@ msgstr "{field} differs across sources · cross-check flagged"
 #. js-lingui-explicit-id
 msgid "workspace.market.degraded.priceDivergence"
 msgstr "{field} differs across quote sources · review live price"
+
+#. js-lingui-explicit-id
+msgid "workspace.market.degraded.quoteTsMissing"
+msgstr "Quote timestamp missing · provider served no tick time, so the price is the session close"
+
+#. js-lingui-explicit-id
+msgid "workspace.market.degraded.quoteCurrencyMissing"
+msgstr "Quote currency unreported · provider did not state the currency, so FX checks abstain"
+
+#. js-lingui-explicit-id
+msgid "workspace.market.degraded.quoteCurrencyInferred"
+msgstr "Quote currency inferred · read off the venue suffix, not stamped on the quote"
 
 #. js-lingui-explicit-id
 msgid "workspace.market.trend.uptrend"

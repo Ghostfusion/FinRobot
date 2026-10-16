@@ -15,6 +15,7 @@
 // <details>, as in ComputeWarningsPanel) — no new page, no new nav entry.
 
 import { useI18n } from '../../i18n'
+import { degradedLabel } from '../../views/workspace/degradedLabel'
 import {
   formatCompactNumber,
   formatCurrency,
@@ -157,6 +158,19 @@ export function parseAuthorityCoverage(raw: unknown): DataAuthorityCoverage | nu
   return coverage
 }
 
+/** The degradation markers the SAME `raw_data.provenance` block carries beside
+ *  its counts (`degraded`, from the canonicals' `Provenance.degraded` — the
+ *  extractor merges the financials' markers with the PRICE feed's quote codes,
+ *  e.g. `quote_ts_missing` / `quote_currency_inferred`). These qualify the
+ *  numbers this panel is the record for — an accepted-but-degraded quote is
+ *  still reader-relevant — so they must reach the report, not stay in the
+ *  engine's own summary text. Returns [] for a legacy artifact. */
+export function parseProvenanceFlags(raw: unknown): string[] {
+  const r = asRecord(raw)
+  if (!r || !Array.isArray(r.degraded)) return []
+  return r.degraded.filter((f): f is string => typeof f === 'string' && f !== '')
+}
+
 // ── Labels ───────────────────────────────────────────────────────────────────
 // Finance names stay English (the repo's i18n exemption list: EV/EBITDA, P/E…),
 // mirroring ChapterAuditBanner's FIELD_LABELS. Falls back to Title Case.
@@ -277,6 +291,32 @@ const panelCountStyle: React.CSSProperties = {
   lineHeight: 1.6,
   color: 'var(--text-secondary)',
 }
+// The panel's ONE badge: the decision status pill and the provenance-flag pills
+// below are the same amber micro-mono chip, so the two read as the same kind of
+// marker rather than two visual languages.
+const panelBadgeStyle: React.CSSProperties = {
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10.5,
+  letterSpacing: '0.08em',
+  textTransform: 'uppercase',
+  color: 'var(--warning)',
+  background: 'color-mix(in srgb, var(--warning) 14%, transparent)',
+  border: '1px solid color-mix(in srgb, var(--warning) 40%, transparent)',
+  borderRadius: 999,
+  padding: '1px 8px',
+}
+// The degraded-flag line: a dim mono label + its badges, on one wrapping row.
+const panelFlagRowStyle: React.CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: 6,
+  margin: '10px 0 0',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 10.5,
+  letterSpacing: '0.08em',
+  color: 'var(--text-muted)',
+}
 
 export function DataAuthorityPanel({
   authority,
@@ -291,9 +331,11 @@ export function DataAuthorityPanel({
   const record = parseDataAuthority(authority)
   const priceRecord = parseDataAuthority(priceAuthority)
   const cov = parseAuthorityCoverage(coverage)
-  // Nothing to say when neither a record nor a coverage count reached the artifact
-  // (every artifact written before these fields existed) — never an empty shell.
-  if (!record && !priceRecord && !cov) return null
+  const marks = parseProvenanceFlags(coverage)
+  // Nothing to say when neither a record nor a coverage count nor a degradation
+  // marker reached the artifact (every artifact written before these fields
+  // existed) — never an empty shell.
+  if (!record && !priceRecord && !cov && marks.length === 0) return null
 
   // A conflict is PUBLISHED — only the non-accepted decisions need a row; the
   // accepted ones are summarised by a count (the canonical value is already on
@@ -340,6 +382,21 @@ export function DataAuthorityPanel({
               ? `覆盖:财务指标决策 ${cov.metricsDecided ?? '—'} 项 · 已比对但无记录 ${cov.metricsWithoutRecord ?? '—'} 项 · 校验分歧警告 ${cov.divergenceWarnings ?? '—'} 条`
               : `Coverage: ${cov.metricsDecided ?? '—'} financial-metric decision(s) · ${cov.metricsWithoutRecord ?? '—'} compared metric(s) with no record · ${cov.divergenceWarnings ?? '—'} validator divergence warning(s)`}
           </p>
+        )}
+
+        {/* The provenance block's degradation markers (financials + the PRICE
+            feed's quote codes). They qualify the numbers this record is about —
+            an accepted quote with no tick time, or an inferred quote currency,
+            is exactly what a reader must not have to infer from the price. */}
+        {marks.length > 0 && (
+          <div data-testid="report-data-authority-degraded" style={panelFlagRowStyle}>
+            <span style={{ textTransform: 'uppercase' }}>{t('report.dataAuthority.degraded')}</span>
+            {marks.map((flag) => (
+              <span key={flag} style={panelBadgeStyle}>
+                {degradedLabel(t, flag)}
+              </span>
+            ))}
+          </div>
         )}
 
         {flagged.length > 0 && (
@@ -436,23 +493,7 @@ function DecisionRow({ decision }: { decision: DataAuthorityDecision }): React.R
         >
           {formatAuthorityValue(decision.value, decision.unit, decision.currency, locale)}
         </span>
-        {statusText && (
-          <span
-            style={{
-              fontFamily: 'var(--font-mono)',
-              fontSize: 10.5,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: 'var(--warning)',
-              background: 'color-mix(in srgb, var(--warning) 14%, transparent)',
-              border: '1px solid color-mix(in srgb, var(--warning) 40%, transparent)',
-              borderRadius: 999,
-              padding: '1px 8px',
-            }}
-          >
-            {statusText}
-          </span>
-        )}
+        {statusText && <span style={panelBadgeStyle}>{statusText}</span>}
         <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
           {t('report.dataAuthority.selectedSource')}: {selected ?? '—'}
         </span>
