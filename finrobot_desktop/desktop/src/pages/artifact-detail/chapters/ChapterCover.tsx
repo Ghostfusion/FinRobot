@@ -214,6 +214,7 @@ export function ChapterCover({
           <PriceTargetReadout
             methods={methods}
             outlierMethods={outlierMethods}
+            anchorMethod={anchorMethod}
             target={target}
             low={targetLow}
             high={targetHigh}
@@ -361,6 +362,7 @@ export function ChapterCover({
 function PriceTargetReadout({
   methods,
   outlierMethods,
+  anchorMethod = null,
   target,
   low,
   high,
@@ -372,6 +374,7 @@ function PriceTargetReadout({
 }: {
   methods: ValuationMethodShape[]
   outlierMethods: string[]
+  anchorMethod?: string | null
   target: number
   low: number | null
   high: number | null
@@ -398,15 +401,32 @@ function PriceTargetReadout({
   const outlierSet = new Set(outlierMethods)
 
   // The band is the span of the surviving method MIDS, so a bound can come from a
-  // method the run itself flags OUTLIER (>30% off the cross-method median — NVDA
-  // 2026-10-16 flagged BOTH, and the $486.92 upper bound was the re-rating premise
-  // the run calls unproven). The margin-of-safety line compares the tape against
-  // exactly that bound, so it must name the caveat instead of reading as a
-  // judgement on a corroborated range.
+  // method the run itself flags OUTLIER (>30% off the cross-method median — the
+  // NVDA 2026-10-16 run flagged BOTH, and the $486.92 upper bound was the re-rating
+  // premise the run calls unproven). The margin-of-safety line compares the tape
+  // against exactly that bound, so it must name the caveat instead of reading as a
+  // judgement on a corroborated range. The flag itself is only published for a
+  // >=3-method set (a two-method spread has no majority to be an outlier from), so
+  // this clause is silent there — the anchor caveat below is what carries the
+  // two-method case.
   const lowMidName = sorted.length > 0 ? sorted[0].name : null
   const highMidName = sorted.length > 0 ? sorted[sorted.length - 1].name : null
   const boundOutlierBelow = lowMidName !== null && outlierSet.has(lowMidName)
   const boundOutlierAbove = highMidName !== null && outlierSet.has(highMidName)
+  // …and the band's LOW is the lowest method MID, not the anchor's own bear case.
+  // NVDA 2026-10-16: the band opened at $258.06 — the DCF's own MID — while the DCF's
+  // low was $206.45, BELOW the $217.23 tape, so "margin of safety" described a cushion
+  // the anchored method does not offer (owner review item 5). The anchor's own low is
+  // a published number on the same payload, so the line states it rather than leaving
+  // the reader to find it in the football field.
+  const anchorLow =
+    anchorMethod !== null ? (methods.find((m) => m.name === anchorMethod)?.low ?? null) : null
+  const anchorBearNote =
+    anchorLow !== null && currentPrice !== null && anchorLow < currentPrice
+      ? en
+        ? ` — though the anchored method's own low is ${cur(anchorLow)}, below the price, so the cushion does not extend to its bear case`
+        : `——但锚定方法自身的低端 ${cur(anchorLow)} 已低于现价,该安全边际并不覆盖其悲观情形`
+      : ''
   const outlierBoundNote = (flagged: boolean): string =>
     flagged
       ? en
@@ -434,7 +454,9 @@ function PriceTargetReadout({
         text:
           (en
             ? `${price} sits below the entire range — margin of safety`
-            : `${price} 低于整个区间下沿,有安全边际`) + outlierBoundNote(boundOutlierBelow),
+            : `${price} 低于整个区间下沿,有安全边际`) +
+          outlierBoundNote(boundOutlierBelow) +
+          anchorBearNote,
         tone: 'var(--success)',
       }
     } else {

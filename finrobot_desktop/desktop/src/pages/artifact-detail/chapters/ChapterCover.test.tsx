@@ -305,4 +305,20 @@ describe('ChapterCover — a band bound from an OUTLIER-flagged method is labell
     expect(screen.getByText(/sits below the entire range — margin of safety/)).toBeInTheDocument()
     expect(screen.queryByText(/flagged OUTLIER above/)).toBeNull()
   })
+
+  // Checklist B (review 2026-10-16, NVDA item 5): the band opens at the lowest method
+  // MID — the DCF's mid here — while the anchored method's OWN low can sit below the
+  // price, so "margin of safety" alone describes a cushion the anchor does not offer.
+  it("names the anchored method's own bear case when it sits below the price", () => {
+    render(<ChapterCover {...BASE_PROPS} anchorMethod="dcf" outlierMethods={[]} />)
+    const line = screen.getByText(/sits below the entire range — margin of safety/)
+    expect(line).toHaveTextContent(/anchored method's own low is \$206/)
+    expect(line).toHaveTextContent(/does not extend to its bear case/)
+  })
+
+  it('stays silent when the anchored method low is above the price', () => {
+    render(<ChapterCover {...BASE_PROPS} anchorMethod="ev_ebitda" outlierMethods={[]} />)
+    const line = screen.getByText(/sits below the entire range — margin of safety/)
+    expect(line).not.toHaveTextContent(/anchored method's own low/)
+  })
 })
