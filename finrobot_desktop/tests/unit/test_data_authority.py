@@ -29,6 +29,7 @@ from finrobot.engine.data import authority_log
 from finrobot.engine.data.authority import (
     observations_from_financials,
     observations_from_price,
+    price_session,
     reconcile_results,
 )
 from finrobot.engine.data.cache import DataCache
@@ -178,6 +179,63 @@ def test_price_observation_falls_back_to_quote_price_key() -> None:
     observation = observations_from_price(result)[0]
     assert observation.metric == "current_price"
     assert observation.value == 42.0
+    # A bare quote ("price" + nothing else) stamps NO session: the value is a live
+    # last-traded print, so the instant it belongs to is not established. ``None``
+    # here is that fact, not a missing field.
+    assert observation.period_end is None
+    assert price_session(result) is None
+
+
+def test_price_session_reads_the_bar_the_value_is_a_close_of() -> None:
+    """The session stamp comes from the payload's own bars — never from "now".
+
+    EODHD's ``/eod`` read returns ``current_price`` = the last bar's close beside
+    the bars themselves, so the value IS that session's close; yfinance's quote path
+    returns ``fast_info.last_price`` and no session at all.
+    """
+    dated = _price_result(
+        "eodhd",
+        {"current_price": 69.69, "price_history": [{"date": "2026-10-15", "close": 69.69}]},
+    )
+    bare = DataResult(
+        data={"price": 62.47},
+        provider="yfinance",
+        ticker="CRWV",
+        data_type=DataType.QUOTE,
+        timestamp=_NOW,
+    )
+    assert price_session(dated) == date(2026, 10, 15)
+    assert price_session(bare) is None
+
+
+def test_price_decision_publishes_each_candidates_own_session() -> None:
+    """2026-10-16 CRWV: the published ``current_price`` decision compared EODHD's
+    2026-10-15 session close against a live yfinance quote that stamped no session,
+    and the record published only the 10.9% gap. Each candidate now carries the
+    instant its own value is for, so a reader can tell "different number" from
+    "different measurement" without re-deriving it."""
+    primary = _price_result(
+        "eodhd",
+        {"current_price": 69.69, "price_history": [{"date": "2026-10-15", "close": 69.69}]},
+    )
+    secondary = DataResult(
+        data={"price": 62.12},
+        provider="yfinance",
+        ticker="CRWV",
+        data_type=DataType.QUOTE,
+        timestamp=_NOW,
+    )
+
+    decision = reconcile_results([primary, secondary]).decision("current_price")
+    assert decision is not None
+    assert decision.selected_source == "eodhd"
+    assert decision.period_end == date(2026, 10, 15)
+    by_source = {candidate.source: candidate for candidate in decision.candidates}
+    assert by_source["eodhd"].period_end == date(2026, 10, 15)
+    assert by_source["yfinance"].period_end is None
+    # The band still reports the disagreement: the check is unchanged, the record
+    # just states what each side is.
+    assert by_source["yfinance"].reason_code == "above_tolerance_published_flagged"
 
 
 # ---------------------------------------------------------------------------

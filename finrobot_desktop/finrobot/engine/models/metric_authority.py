@@ -979,6 +979,14 @@ class MetricCandidate:
     deviation_abs: float | None
     reason_code: str
     non_independent: bool = False
+    period_end: date | None = None
+    """The session / period THIS candidate's value is stamped for, ``None`` when the
+    payload stamped none. A deviation alone cannot tell "same measurement, different
+    number" from "two different instants", and the reader of a decision record needs
+    exactly that distinction: the 2026-10-16 CRWV ``current_price`` decision compared
+    EODHD's 2026-10-15 session close against a yfinance quote that stamped no
+    session at all, and published only the gap."""
+    period_basis: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1528,6 +1536,8 @@ def resolve_metric_observations(
                 deviation_abs=deviation_abs,
                 reason_code=reason,
                 non_independent=non_independent,
+                period_end=obs.period_end,
+                period_basis=obs.period_basis,
             )
         )
 

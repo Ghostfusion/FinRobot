@@ -56,7 +56,11 @@ import logging
 from numbers import Real
 from typing import Sequence
 
-from finrobot.engine.data.authority import _SHARES_DERIVED_EPS, reconcile_results
+from finrobot.engine.data.authority import (
+    _SHARES_DERIVED_EPS,
+    price_session,
+    reconcile_results,
+)
 from finrobot.engine.data.interface import DataResult
 from finrobot.engine.models.metric_authority import (
     METRIC_REGISTRY_BY_NAME,
@@ -205,7 +209,10 @@ def _num(v: object) -> float | None:
 # band as market_cap (market_cap ≈ price × shares, so a looser price tolerance
 # would be self-inconsistent) — wide enough to tolerate a delayed feed on a
 # volatile session, tight enough to catch a ~2× split mismatch or multi-day-stale
-# quote. Measured 2026-06-05: FMP vs yfinance agree to <0.04% across 12 names.
+# quote. Measured 2026-06-05: FMP vs yfinance agree to <0.04% across 12 names —
+# both quotes, i.e. two values for the same instant. The band is a claim about a
+# pair that IS the same instant, so the line below states each side's instant
+# before it says anything about the size of the gap.
 # A view over the ``current_price`` registry row's relative band (one home).
 _PRICE_REL_TOLERANCE: float = METRIC_REGISTRY_BY_NAME["current_price"].tolerance_pct
 
@@ -215,11 +222,39 @@ def _price_of(result: DataResult) -> float | None:
     return _num(result.data.get("current_price")) or _num(result.data.get("price"))
 
 
+def _price_instant(result: DataResult) -> str:
+    """The instant a price value belongs to, as a reader-facing phrase.
+
+    Structural, never inferred from the size of a gap: a payload carrying daily
+    bars states its session (its value IS that bar's close); a bare quote states
+    none, and saying so is the point — an unstamped quote is not established to be
+    the same instant as the other side, which is what the ``session_price``
+    comparability class asks for before two numbers may be compared.
+    """
+    session = price_session(result)
+    if session is None:
+        return "no session stamp on the quote"
+    return f"the {session.isoformat()} session close"
+
+
 def cross_validate_price(primary: DataResult, secondary: DataResult) -> list[str]:
     """Compare the current price of two providers; warn if they diverge >5%.
 
     Returns ``[]`` when they agree, when either price is missing/non-positive, or
     when no second price is available (abstain — never a false "agree" signal).
+
+    The warning names what each side IS before it names what might be wrong. The
+    two quotes are only like-for-like when both stamp the SAME bar session (the
+    ``current_price`` row's own comparability key); otherwise the gap may be an
+    instant difference rather than a value error, and saying "possible stale or
+    split-unadjusted price, wrong ticker" as a flat assertion makes the reader
+    adjudicate a claim the data does not support. Measured 2026-10-16 (CRWV): EODHD
+    served the 2026-10-15 daily bar close 69.69 (a ``PRICE`` payload carries the
+    bars) while the yfinance cross-check quote 62.12 carried no session stamp at
+    all (``fast_info.last_price``), so an 11% "price discrepancy" was one session
+    close compared against a live print — reported to the reader as a suspected bad
+    value. The band is unchanged: the tripwire still fires, it just stops asserting
+    a cause it cannot see.
     """
     pv, sv = _price_of(primary), _price_of(secondary)
     if pv is None or sv is None or pv <= 0 or sv <= 0:
@@ -227,11 +262,26 @@ def cross_validate_price(primary: DataResult, secondary: DataResult) -> list[str
     rel_diff = abs(pv - sv) / max(pv, sv)
     if rel_diff <= _PRICE_REL_TOLERANCE:
         return []
+    primary_session, secondary_session = price_session(primary), price_session(secondary)
+    primary_instant, secondary_instant = _price_instant(primary), _price_instant(secondary)
+    if primary_session is not None and primary_session == secondary_session:
+        adjudication = (
+            "Both sides name the same bar session, so this is a value disagreement — "
+            "check for a split (adjusted vs unadjusted) or a stale feed."
+        )
+    else:
+        adjudication = (
+            "The two sides are not established to be the same bar session, so the gap "
+            "may be an instant difference rather than a value error; confirm both are "
+            "the same measurement before treating it as a split, a stale feed or a "
+            "wrong ticker."
+        )
     return [
         f"Price discrepancy: current price differs by {rel_diff:.0%} "
-        f"({primary.provider}: {pv:,.2f} vs {secondary.provider}: {sv:,.2f}). "
-        f"Threshold: {_PRICE_REL_TOLERANCE:.0%}. Possible stale or split-unadjusted "
-        f"price, wrong ticker, or a delayed feed on a volatile session — verify."
+        f"({primary.provider}: {pv:,.2f} vs {secondary.provider}: {sv:,.2f}); "
+        f"threshold {_PRICE_REL_TOLERANCE:.0%}. Compared instants — "
+        f"{primary.provider}: {primary_instant}, {secondary.provider}: "
+        f"{secondary_instant}. {adjudication}"
     ]
 
 

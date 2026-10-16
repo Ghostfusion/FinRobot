@@ -155,6 +155,24 @@ def _period_end(data: dict[str, Any], *, price: bool) -> date | None:
     return None
 
 
+def price_session(result: DataResult) -> date | None:
+    """The bar session a PRICE / QUOTE value is stamped for, or ``None``.
+
+    ``None`` is NOT "today" — it is the honest report that the payload carries no
+    session at all. A daily-bar payload (``current_price`` beside ``price_history``)
+    names its session: its value IS the last bar's close. A bare quote payload
+    (``{"price": …}`` — yfinance's ``fast_info.last_price``, and EODHD's own
+    quote-only path) names none, so the instant its value belongs to is not
+    established. The ``current_price`` registry row's ``session_price``
+    comparability asks for exactly this key ("bar session + quote currency"), which
+    is why the rule has ONE home here: the observation builder reads the same
+    :func:`_period_end`, and ``validator.cross_validate_price`` states the two
+    sides' instants instead of asserting a defect it cannot establish.
+    """
+    data = result.data if isinstance(result.data, dict) else {}
+    return _period_end(data, price=True)
+
+
 def _period_basis(data: dict[str, Any], metric: str, *, price: bool) -> str | None:
     if price or metric == "current_price":
         return "session"

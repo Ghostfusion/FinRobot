@@ -80,6 +80,11 @@ def _candidate_to_dict(candidate: MetricCandidate) -> dict[str, object]:
         "deviation_abs": candidate.deviation_abs,
         "reason_code": candidate.reason_code,
         "non_independent": candidate.non_independent,
+        # The instant this candidate's value is stamped for (``None`` = the payload
+        # stamped none), so a logged disagreement stays readable as "different
+        # number" vs "different measurement" after the fact.
+        "period_end": candidate.period_end.isoformat() if candidate.period_end else None,
+        "period_basis": candidate.period_basis,
     }
 
 

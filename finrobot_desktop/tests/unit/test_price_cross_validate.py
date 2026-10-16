@@ -66,6 +66,79 @@ def test_just_over_tolerance_flagged() -> None:
     assert len(cross_validate_price(primary, secondary)) == 1
 
 
+def _priced(provider: str, value: float, *, session: str | None) -> DataResult:
+    """A price result, optionally stamped with the bar session it is the close OF.
+
+    ``session=None`` reproduces a bare quote payload (``{"price": …}`` — yfinance's
+    ``fast_info.last_price``): no bars, so no session at all.
+    """
+    data: dict[str, object] = {"current_price": value}
+    if session is not None:
+        data["price_history"] = [{"date": session, "close": value}]
+    return DataResult(
+        data=data,
+        provider=provider,
+        ticker="CRWV",
+        data_type=DataType.PRICE,
+        timestamp=datetime.now(tz=timezone.utc),
+    )
+
+
+def test_a_dated_close_versus_an_unstamped_quote_is_not_asserted_to_be_a_bad_value() -> None:
+    """2026-10-16 CRWV: EODHD served the 2026-10-15 daily-bar close 69.69 (its
+    ``/eod`` payload carries the bars) while the yfinance cross-check quote 62.12
+    carried no session stamp at all — a live intraday print. Both numbers were
+    right; the 11% "discrepancy" line named a suspected split/stale value/mistake
+    on a comparison of two different instants. The warning must state each side's
+    instant and stop asserting the cause it cannot see."""
+    warns = cross_validate_price(
+        _priced("eodhd", 69.69, session="2026-10-15"),
+        _priced("yfinance", 62.12, session=None),
+    )
+    assert len(warns) == 1
+    assert "the 2026-10-15 session close" in warns[0]
+    assert "no session stamp on the quote" in warns[0]
+    assert "not established to be the same bar session" in warns[0]
+    assert "69.69" in warns[0] and "62.12" in warns[0]
+    assert "Possible stale or split-unadjusted price, wrong ticker" not in warns[0]
+
+
+def test_two_different_session_closes_are_also_not_a_value_disagreement() -> None:
+    warns = cross_validate_price(
+        _priced("eodhd", 69.69, session="2026-10-15"),
+        _priced("yfinance", 58.0, session="2026-10-08"),
+    )
+    assert len(warns) == 1
+    assert "the 2026-10-15 session close" in warns[0]
+    assert "the 2026-10-08 session close" in warns[0]
+    assert "not established to be the same bar session" in warns[0]
+
+
+def test_a_same_session_divergence_keeps_the_value_disagreement_wording() -> None:
+    """The band's own claim — two values for the SAME session that differ beyond
+    tolerance — keeps its sharper reading (the split / stale-feed case)."""
+    warns = cross_validate_price(
+        _priced("eodhd", 100.0, session="2026-10-15"),
+        _priced("yfinance", 90.0, session="2026-10-15"),
+    )
+    assert len(warns) == 1
+    assert "Both sides name the same bar session" in warns[0]
+    assert "value disagreement" in warns[0]
+
+
+def test_two_unstamped_quotes_are_not_declared_the_same_instant() -> None:
+    """Two bare quotes still warn (the ~2x split tripwire), but neither is
+    established to be the same instant, so the line says that instead of asserting
+    which side is wrong."""
+    warns = cross_validate_price(
+        _priced("eodhd", 311.23, session=None),
+        _priced("yfinance", 155.60, session=None),
+    )
+    assert len(warns) == 1
+    assert "no session stamp on the quote" in warns[0]
+    assert "not established to be the same bar session" in warns[0]
+
+
 def test_missing_secondary_price_abstains() -> None:
     primary = _price_result("fmp", current=311.23)
     empty = _price_result("yfinance")
