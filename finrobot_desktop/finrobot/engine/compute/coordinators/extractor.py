@@ -202,7 +202,10 @@ def post_balance_sheet_financing_warning(
         f"an SEC 8-K filed {newest_date} ({item_label} {', '.join(newest_items)}: {reasons})"
         f"{others} post-dates the balance sheet ({horizon}): total debt, net debt, enterprise "
         f"value and the default barrier are stated as of the balance-sheet date and are NOT "
-        f"restated for it — treat them as possibly stale, not current."
+        f"restated for it — treat them as possibly stale, not current. The size of that "
+        f"obligation is not available from the sourced filing text (the stored 8-K text stops "
+        f"at its cover pages), so no amount is netted into those figures — they exclude it "
+        f"rather than reflect it."
     )
 
 
