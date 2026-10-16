@@ -1335,15 +1335,41 @@ def _schedule13_shares(text: str) -> int | None:
     return None
 
 
+#: The cover-page row-11 label, in every caption form seen in the wild:
+#: "Item 11. Percent of Class", "(b) Percent of Class:", and the full SEC caption
+#: "PERCENT OF CLASS REPRESENTED BY AMOUNT IN ROW 9".
+_SCHED13_PCT_LABEL = r"Percent\s+of\s+Class\b"
+#: Tier 1 — the value follows the label within a short NON-DIGIT run (compact
+#: cover tables, Item 4(b) prose).
+_SCHED13_PCT_TIGHT = re.compile(
+    rf"{_SCHED13_PCT_LABEL}[^0-9]{{0,40}}([0-9]+(?:\.[0-9]+)?)\s*%",
+    re.I,
+)
+#: Tier 2 — the full caption carries its OWN row number before the value
+#: ("...REPRESENTED BY AMOUNT IN ROW 9\n\n8.28%"), so tier 1's non-digit window
+#: can never reach it: VANGUARD GROUP INC's NVDA 13G/A (acc 0001104659-24-021596,
+#: filed 2024-02-13) parsed to ``pct_of_class=None`` on that layout, which left
+#: its as-filed 204,504,938 count (PRE the 10:1 split) unadjusted while
+#: BlackRock's equivalent 13G was adjusted — a 10x understatement in the same
+#: panel (review 2026-10-16, item 3). The gap may now contain DIGITS and cross
+#: line breaks, bounded and never crossing into a second label; the trailing
+#: literal ``%`` is still required, so a bare row number cannot be mistaken for
+#: the percentage.
+_SCHED13_PCT_WIDE = re.compile(
+    rf"{_SCHED13_PCT_LABEL}(?:(?!{_SCHED13_PCT_LABEL})[\s\S]){{0,60}}?([0-9]+(?:\.[0-9]+)?)\s*%",
+    re.I,
+)
+
+
 def _schedule13_pct(text: str) -> float | None:
-    """Parse "Percent of Class: X%" from a 13D/13G cover page (0..100)."""
+    """Parse "Percent of Class: X%" from a 13D/13G cover page (0..100).
+
+    Returns None when no percentage is parseable — the caller then cannot infer a
+    split basis, which is the honest outcome (never a fabricated 0%).
+    """
     if not text:
         return None
-    m = re.search(
-        r"Percent\s+of\s+Class[^0-9]{0,40}([0-9]+(?:\.[0-9]+)?)\s*%",
-        text,
-        re.I,
-    )
+    m = _SCHED13_PCT_TIGHT.search(text) or _SCHED13_PCT_WIDE.search(text)
     if m is None:
         return None
     try:

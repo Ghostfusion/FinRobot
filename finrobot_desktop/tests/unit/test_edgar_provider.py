@@ -1719,6 +1719,38 @@ def test_schedule13_pct_parses_percent_of_class() -> None:
     assert pct("Percent of Class: 250%") is None
 
 
+def test_schedule13_pct_parses_full_cover_caption() -> None:
+    """REGRESSION: the SEC caption's OWN row number sits between the label and the
+    value ("…REPRESENTED BY AMOUNT IN **ROW 9**"), so a non-digit window can never
+    reach it. VANGUARD GROUP INC's NVDA 13G/A (acc 0001104659-24-021596) is the
+    real layout: 204,504,938 shares = 8.28% of the then 2.47B-share class, and the
+    unparsed None left the count ~10x understated beside BlackRock's ADJUSTED row
+    (review 2026-10-16, item 3)."""
+    _, _, pct = _sched13_helpers()
+    vanguard = (
+        "9.  AGGREGATE AMOUNT BENEFICIALLY OWNED BY EACH REPORTING PERSON\n\n"
+        "204,504,938\n\n"
+        "10. CHECK BOX IF THE AGGREGATE AMOUNT IN ROW (9) EXCLUDES CERTAIN SHARES\n\n"
+        "N/A\n\n"
+        "11. PERCENT OF CLASS REPRESENTED BY AMOUNT IN ROW 9\n\n"
+        "8.28%\n\n"
+        "12. TYPE OF REPORTING PERSON\n\nIA\n"
+    )
+    assert pct(vanguard) == 8.28
+    # The caption's row number alone is not a percentage.
+    assert pct("11. PERCENT OF CLASS REPRESENTED BY AMOUNT IN ROW 9\n\n(check box)\n") is None
+    # An Item-4 label whose value lives on a referenced cover page stays unparsed.
+    item4 = (
+        "Item 4 - Ownership:\n\n(a) Amount Beneficially Owned:\n\n"
+        "(b) Percent of Class:\n\n(c) Number of shares as to which such person has:\n\n"
+        "(i) sole power to vote or direct to vote:\n"
+    )
+    assert pct(item4) is None
+    # Two labels: the value nearest the first one is bound (the wide tier stops at
+    # the next label rather than scanning past it).
+    assert pct("Percent of Class:\n\nPercent of Class: 4.1%") == 4.1
+
+
 def test_issuer_token_strips_legal_suffixes() -> None:
     token, _, _ = _sched13_helpers()
     assert token("NVIDIA CORP") == "nvidia"

@@ -1225,8 +1225,11 @@ def test_compute_ownership_governance_no_warnings_field_defaults_empty() -> None
 _NVDA_SHARES_OUT = 24_100_000_000.0
 _AS_OF = date(2026, 10, 13)
 
-# The two real cases: BlackRock's 2024 filing predates the 10:1 split (its own
-# numbers imply a class ~10× smaller than today's); FMR's is already post-split.
+# All three real NVDA cases: BlackRock's and Vanguard's 2024 filings predate the
+# 10:1 split (their own numbers imply a class ~10× smaller than today's); FMR's is
+# already post-split. Vanguard's 8.28% is the COVER PAGE's Row-11 value
+# ("PERCENT OF CLASS REPRESENTED BY AMOUNT IN ROW 9" → "8.28%"), which the parser
+# only reaches via the wide-caption tier (see _schedule13_pct).
 _NVDA_13G_PAYLOAD = {
     "alerts": [
         {
@@ -1254,7 +1257,7 @@ _NVDA_13G_PAYLOAD = {
             "filing_date": "2024-02-13",
             "accession_no": "0001104659-24-021596",
             "shares": 204_504_938,
-            "pct_of_class": None,
+            "pct_of_class": 8.28,
         },
     ]
 }
@@ -1287,16 +1290,48 @@ def test_schedule13_fmr_not_adjusted_when_already_post_split() -> None:
     assert fmr.shares_adjusted is None
 
 
-def test_schedule13_no_percentage_leaves_basis_unknown() -> None:
-    """A 13G whose cover-page percentage could not be parsed gets no basis — the
-    implied class size is unknowable, so never a fabricated 'post_split'."""
+def test_schedule13_vanguard_flagged_pre_split_and_adjusted() -> None:
+    """Vanguard's 13G/A (2024-02-13) is on the SAME pre-split basis as
+    BlackRock's — every filing must be adjusted, not just the first.
+
+    Its cover page states 204,504,938 shares (8.28% of the pre-split class), so
+    the as-filed count understates the position ~10x against the issuer's current
+    24.1B shares. The percentage arrives via the full caption "PERCENT OF CLASS
+    REPRESENTED BY AMOUNT IN ROW 9" → "8.28%" (review 2026-10-16, item 3).
+    """
     alerts = build_schedule13_alerts(
         _NVDA_13G_PAYLOAD, shares_outstanding=_NVDA_SHARES_OUT, as_of_date=_AS_OF
     )
     vanguard = alerts[2]
-    assert vanguard.pct_of_class is None
-    assert vanguard.share_basis is None
-    assert vanguard.shares_adjusted is None
+    assert vanguard.shares == 204_504_938  # as-filed, unchanged
+    assert vanguard.pct_of_class == 8.28
+    assert vanguard.share_basis == "pre_split"
+    assert vanguard.split_factor == 10.0
+    assert vanguard.shares_adjusted == 2_045_049_380
+
+
+def test_schedule13_no_percentage_leaves_basis_unknown() -> None:
+    """A 13G whose cover-page percentage could not be parsed gets no basis — the
+    implied class size is unknowable, so never a fabricated 'post_split'."""
+    alerts = build_schedule13_alerts(
+        {
+            "alerts": [
+                {
+                    "filer_name": "Unparsed Holder",
+                    "schedule_type": "13G",
+                    "filing_date": "2024-02-13",
+                    "accession_no": "x",
+                    "shares": 204_504_938,
+                    "pct_of_class": None,
+                }
+            ]
+        },
+        shares_outstanding=_NVDA_SHARES_OUT,
+        as_of_date=_AS_OF,
+    )
+    assert alerts[0].pct_of_class is None
+    assert alerts[0].share_basis is None
+    assert alerts[0].shares_adjusted is None
 
 
 def test_schedule13_huge_implied_class_is_not_a_split() -> None:
