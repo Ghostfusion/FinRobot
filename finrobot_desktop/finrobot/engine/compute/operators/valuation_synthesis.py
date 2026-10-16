@@ -47,10 +47,12 @@ def _method_label(name: str) -> str:
     return _METHOD_LABEL.get(name, name.upper())
 
 
-# Any method whose mid deviates from the cross-method median by more than this
-# fraction is flagged in outlier_methods and a soft cross-method spread warning
-# is appended (disclosure only — it never withholds the call; the confidence
-# dial below grades the call from method agreement).
+# Any method in a >=3-method set whose mid deviates from the cross-method median by
+# more than this fraction is flagged in outlier_methods, and a soft cross-method spread
+# warning is appended for every divergent method regardless of set size (disclosure
+# only — it never withholds the call; the confidence dial below grades the call from
+# method agreement). The flag itself is gated on >=3 methods: see the symmetry note at
+# the flagging loop.
 _OUTLIER_THRESHOLD = 0.30
 
 # MARKET_DIVERGENCE_RATIO_K (4.0, multi-method), SINGLE_METHOD_DIVERGENCE_RATIO_K
@@ -554,11 +556,13 @@ def synthesize_valuations(
     cross-check and MUST NOT be surfaced as a meaningful weighted average.
 
     Cross-method spread check (≥2 methods): any method whose mid deviates from
-    the median of all mids by > 30% is added to ``outlier_methods`` and a
-    human-readable spread warning is appended to ``warnings`` (soft disclosure
-    only — it never withholds the call). The graded call (confidence tier +
-    target band + the POINT-withhold decision) is produced by the confidence
-    dial (``_confidence_dial``): uncertainty lowers the tier and widens the band,
+    the median of all mids by > 30% gets a human-readable spread warning appended
+    to ``warnings``, and — when at least three methods are available — is also added
+    to ``outlier_methods`` (soft disclosure only; it never withholds the call). A
+    two-method set never populates ``outlier_methods``: both mids are equidistant
+    from their own midpoint, so the flag would name the whole set. The graded call
+    (confidence tier + target band + the POINT-withhold decision) is produced by the
+    confidence dial (``_confidence_dial``): uncertainty lowers the tier and widens the band,
     and only when the sole available number would be fabricated does it withhold
     the POINT (``valuation_withheld``) — the directional verdict always ships.
 
@@ -617,10 +621,22 @@ def synthesize_valuations(
     synthesis_warnings: list[str] = []
 
     if median_mid != 0:
+        # A MEDIAN-OUTLIER label needs a majority to be an outlier FROM. With exactly
+        # two methods the median IS their midpoint, so both mids sit the same distance
+        # from it and any spread over the threshold flags the ENTIRE set — NVDA
+        # 2026-10-16 shipped "DCF $258.06 diverges 31% from the cross-method median
+        # ($372.49)" TWICE, tagging both methods as outliers (owner review item 6: with
+        # two methods "each is always equidistant from the median, so the tags are
+        # vacuous"). A tag that names every method tells the reader nothing about which
+        # side is unreliable. Two methods disagreeing is a DIVERGENCE, which the spread
+        # warning below states exactly and completely; the outlier flag is reserved for
+        # a genuine minority inside a >=3-method set.
+        flag_outliers = len(methods) >= 3
         for m in methods:
             deviation = abs(m.mid - median_mid) / abs(median_mid)
             if deviation > _OUTLIER_THRESHOLD:
-                outlier_methods.append(m.name)
+                if flag_outliers:
+                    outlier_methods.append(m.name)
                 synthesis_warnings.append(
                     f"{_method_label(m.name)} valuation (${m.mid:,.2f}) diverges "
                     f"{deviation:.0%} from the cross-method median (${median_mid:,.2f})"
@@ -628,11 +644,14 @@ def synthesize_valuations(
                 )
                 logger.warning(
                     "synthesize_valuations: %s mid $%.2f deviates %.0f%% from "
-                    "cross-method median $%.2f — flagged as outlier",
+                    "cross-method median $%.2f — %s",
                     m.name,
                     m.mid,
                     deviation * 100,
                     median_mid,
+                    "flagged as outlier"
+                    if flag_outliers
+                    else "two-method divergence, not tagged (no majority to be an outlier from)",
                 )
 
     conf, anchor, t_lo, t_hi, withheld, note = _confidence_dial(

@@ -179,19 +179,24 @@ def test_chapter_5_single_method_synthesis_returns_none_weighted_price():
     assert syn.upside_downside is None
 
 
-def test_chapter_5_synthesis_flags_30pct_outlier_method():
-    """DCF $86 vs Comps $221 (AAPL real spread 157%) MUST raise an outlier
-    flag — silently weighting two methods that disagree by >30% hides the
-    very disagreement analysts most need to see."""
+def test_chapter_5_synthesis_discloses_30pct_method_divergence():
+    """DCF $86 vs Comps $221 (AAPL real spread 157%) MUST disclose the
+    disagreement — silently weighting two methods that disagree by >30% hides the
+    very disagreement analysts most need to see.
+
+    The disclosure is the spread warning, NOT an outlier tag: with two methods the
+    median is their midpoint, so both are equidistant from it and an outlier tag
+    names the whole set (NVDA 2026-10-16)."""
     methods = [
         _make_method("DCF", 86.0),
         _make_method("EV/EBITDA Comps", 221.0),
     ]
     syn = synthesize_valuations(methods, current_price=310.0)
-    assert syn.outlier_methods  # non-empty
+    assert syn.outlier_methods == []  # two-method set: no majority to be an outlier from
     assert syn.warnings  # human-readable warning surfaces in artifact
-    # Both methods are equidistant from median (153.5), so both flag
-    assert "DCF" in syn.outlier_methods or "EV/EBITDA Comps" in syn.outlier_methods
+    # Both methods get their own warning, each carrying its own mid.
+    assert any("$86.00" in w for w in syn.warnings)
+    assert any("$221.00" in w for w in syn.warnings)
 
 
 # ---------------------------------------------------------------------------

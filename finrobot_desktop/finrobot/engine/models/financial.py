@@ -1395,7 +1395,10 @@ class ValuationSynthesis(BaseModel):
         default_factory=list,
         description=(
             "Method names whose mid deviates > 30% from the cross-method median. "
-            "Populated by synthesize_valuations; empty when fewer than 2 methods."
+            "Populated by synthesize_valuations; empty when fewer than 3 methods — "
+            "with two methods the median is their midpoint, so every method would be "
+            "flagged and the tag would carry no information (that two-method "
+            "disagreement is stated by the spread warning instead)."
         ),
     )
     warnings: list[str] = Field(

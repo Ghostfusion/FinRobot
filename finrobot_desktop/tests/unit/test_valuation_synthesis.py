@@ -67,16 +67,20 @@ class TestSynthesizeValuations:
         assert result.outlier_methods == []
         assert result.warnings == []
 
-    def test_outlier_flagged_aapl_spread(self):
+    def test_two_method_divergence_warns_without_outlier_tags(self):
         """DCF $86 vs Comps $221 — AAPL-like 157% spread (2.57x ratio).
 
         median = ($86 + $221) / 2 = $153.50
-        DCF deviation  = |86  - 153.5| / 153.5 = 43.98% > 30% → soft outlier
-        Comps deviation = |221 - 153.5| / 153.5 = 43.98% > 30% → soft outlier
-        Both methods flagged as outliers, each with a soft cross-method spread
-        warning. The spread no longer appends a separate "UNRELIABLE" banner (the
-        binary reliable gate is deleted); the graded call (anchored point + tier)
-        is the confidence dial's job — see TestConfidenceDial / TestResolveCanonicalThesis.
+        DCF deviation   = |86  - 153.5| / 153.5 = 43.98% > 30%
+        Comps deviation = |221 - 153.5| / 153.5 = 43.98% > 30%
+        Each gets a soft cross-method spread warning — the disclosure that the two
+        methods disagree. Neither is tagged an OUTLIER: with two methods the median
+        is their midpoint, so the tag would name BOTH of them (NVDA 2026-10-16 read
+        "each 31% from median" on every two-method run) and tell the reader nothing
+        about which side is unreliable. The spread no longer appends a separate
+        "UNRELIABLE" banner (the binary reliable gate is deleted); the graded call
+        (anchored point + tier) is the confidence dial's job — see TestConfidenceDial
+        / TestResolveCanonicalThesis.
         """
         methods = [
             ValuationMethod(name="DCF", low=70, mid=86, high=100, confidence=0.5, source="DCF"),
@@ -85,8 +89,7 @@ class TestSynthesizeValuations:
             ),
         ]
         result = synthesize_valuations(methods, current_price=180.0)
-        assert "DCF" in result.outlier_methods
-        assert "Comps" in result.outlier_methods
+        assert result.outlier_methods == []
         # Exactly the two soft per-method spread warnings — no UNRELIABLE banner.
         assert len(result.warnings) == 2
         # Warnings carry the human method LABEL (_method_label), never a raw id:
