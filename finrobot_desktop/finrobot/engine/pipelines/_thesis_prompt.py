@@ -245,10 +245,23 @@ def build_thesis_prompt(
             # FIXED — never a joint condition (owner review 2026-10-13: the prompt
             # appended "(implied WACC ~9.1%)" inside the same sentence as the implied
             # growth, so the model narrated one simultaneous market forecast).
+            # The GAP between the two rates is injected as a COMPUTED number rather
+            # than left to the model: the 2026-10-16 NVDA narrative subtracted the
+            # rounded 13.3% from 11.88% and wrote "a roughly 132bp risk-premium",
+            # which a reader cannot reconcile with the two rates printed beside it
+            # (the solver's own 13.2747% gives 139bp). Both rates are printed at 2dp
+            # so the gap and the rates agree on the page.
+            wacc_gap_bp = (
+                (mi.implied_wacc - dcf_ctx.wacc) * 10_000
+                if mi.implied_wacc is not None and dcf_ctx.wacc > 0
+                else None
+            )
             wacc_solve = (
                 f"Holding the model's growth fade fixed, the current price implies a "
-                f"~{mi.implied_wacc:.1%} discount rate (WACC). "
-                if mi.implied_wacc is not None
+                f"~{mi.implied_wacc:.2%} discount rate (WACC) — {wacc_gap_bp:.0f}bp "
+                f"above the model's {dcf_ctx.wacc:.2%} WACC (cite this gap verbatim; "
+                f"never recompute it from the rounded rates). "
+                if wacc_gap_bp is not None
                 else ""
             )
             # "perpetual" was wrong: the reverse solver fits a FLAT constant
@@ -287,6 +300,31 @@ def build_thesis_prompt(
         else "n/a"
     )
     upside_str = f"{canonical_upside:+.1%}" if canonical_upside is not None else "n/a"
+    # The DOWN-side of the anchor method is the same kind of derived percentage as
+    # the upside, so it is computed here too: the 2026-10-16 NVDA narrative
+    # truncated its own division and wrote "the DCF low band of $206.45 sits 4.9%
+    # below the current price" (true value 5.0%, and the truncation is invisible to
+    # a reader checking the arithmetic). Empty unless the anchor's own low really
+    # is below the market price.
+    anchor_low_clause = ""
+    if isinstance(vs, ValuationSynthesis) and vs.current_price > 0:
+        # The anchor is named by the synthesis (comparability/divergence rules); a
+        # single-method run IS its own anchor. A genuine multi-method BLEND has no
+        # anchor, so no per-method low is framed as one.
+        anchor_method = next((m for m in vs.methods if m.name == vs.anchor_method), None)
+        if anchor_method is None and len(vs.methods) == 1:
+            anchor_method = vs.methods[0]
+        if (
+            anchor_method is not None
+            and anchor_method.low is not None
+            and anchor_method.low < vs.current_price
+        ):
+            below_pct = 1.0 - (anchor_method.low / vs.current_price)
+            anchor_low_clause = (
+                f" The anchor method's own low (${anchor_method.low:.2f}) is "
+                f"{below_pct:.1%} below the market price — cite that figure verbatim; "
+                f"do not compute your own percentage."
+            )
 
     thesis_prompt = base_prompt
     if catalyst_section:
@@ -341,7 +379,8 @@ def build_thesis_prompt(
             f"AUTHORITATIVE CURRENT MARKET PRICE (do not deviate): {market_price_str}\n"
             f"AUTHORITATIVE RECOMMENDATION (do not deviate): "
             f"{canonical_verdict} (confidence: {conf_str})\n"
-            f"Derivation: {canonical_basis}; implied upside vs current price = {upside_str}.\n"
+            f"Derivation: {canonical_basis}; implied upside vs current price = {upside_str}."
+            f"{anchor_low_clause}\n"
             f"Your `price_target` field MUST equal the authoritative number above. "
             f"Your `recommendation` field MUST equal the authoritative verdict above "
             f"(derived from confidence-tiered, asymmetric upside bands — a lower-confidence "

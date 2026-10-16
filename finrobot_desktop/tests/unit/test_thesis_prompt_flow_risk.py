@@ -134,8 +134,11 @@ class TestReverseDcfSolvesAreSeparate:
         prompt = _prompt({"financial_modeling": dcf})
         assert "SEPARATE single-variable solves" in prompt
         assert "NOT a joint market forecast" in prompt
-        # WACC solve: growth fade held fixed
-        assert "Holding the model's growth fade fixed, the current price implies a ~9.1%" in prompt
+        # WACC solve: growth fade held fixed, with the gap to the model's own WACC
+        # injected as a COMPUTED number (9.1013% - 6.97% = 213bp) so the narrative
+        # never re-derives it from rounded rates (NVDA 2026-10-16 read "132bp").
+        assert "Holding the model's growth fade fixed, the current price implies a ~9.10%" in prompt
+        assert "213bp above the model's 6.97% WACC" in prompt
         # growth solve: the MODEL's WACC (6.97%) held fixed
         assert "Holding the model's 6.97% WACC fixed, the current price implies ~1.2%/yr" in prompt
         # the old conflating shape is gone

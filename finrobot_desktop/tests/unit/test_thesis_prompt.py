@@ -312,6 +312,55 @@ class TestBuildThesisPrompt:
         assert "net sentiment: +0.00" not in prompt
         assert "Catalyst outlook: neutral" not in prompt
 
+    def test_market_implied_wacc_gap_is_computed_not_left_to_the_model(self):
+        """The bp gap between the implied discount rate and the model's WACC is
+        injected as a computed number.
+
+        NVDA 2026-10-16 narrated "a roughly 132bp risk-premium" by subtracting the
+        ROUNDED 13.3% from 11.88%; the solver's own 13.2747% gives ~139bp, so the
+        sentence did not reconcile with the two rates printed beside it.
+        """
+        methods = [
+            ValuationMethod(name="DCF", low=210, mid=245, high=290, confidence=0.5, source="DCF"),
+            ValuationMethod(
+                name="EV/EBITDA", low=220, mid=250, high=280, confidence=0.3, source="Comps"
+            ),
+        ]
+        dcf = _dcf_result(
+            cyclical=False,
+            market_implied=MarketImpliedCheck(
+                horizon_years=10,
+                implied_growth=0.20,
+                implied_wacc=0.1327,
+                growth_unreachable=False,
+            ),
+        )
+        prompt = _build(methods, current_price=230.0, extra_context={"financial_modeling": dcf})
+        # 13.27% vs the fixture's 11.00% WACC = 227bp, from the EXACT rates.
+        assert "227bp" in prompt
+        assert "~13.27%" in prompt
+        # The rounded-input subtraction (13.3 - 11.0 = 230) must not be what ships.
+        assert "230bp" not in prompt
+
+    def test_anchor_low_downside_is_computed_not_left_to_the_model(self):
+        """The anchor method's own low-vs-price percentage is injected too.
+
+        NVDA 2026-10-16 key_takeaways/risks said the DCF low "sits 4.9% below the
+        current price": the value is 4.96%, which rounds to 5.0%, and a reader
+        checking the arithmetic against the two published prices sees a truncated
+        figure.
+        """
+        methods = [
+            ValuationMethod(
+                name="DCF", low=206.45, mid=258.06, high=309.68, confidence=0.85, source="DCF"
+            )
+        ]
+        prompt = _build(methods, current_price=217.23)
+        # 206.45 / 217.23 - 1 = -4.96% -> 5.0% at one decimal.
+        assert "5.0% below the market price" in prompt
+        assert "4.9% below" not in prompt
+        assert "$206.45" in prompt
+
     def test_catalyst_section_wraps_headlines_as_untrusted(self):
         """Injected catalyst headlines are wrapped in an untrusted-news block."""
         methods = [
