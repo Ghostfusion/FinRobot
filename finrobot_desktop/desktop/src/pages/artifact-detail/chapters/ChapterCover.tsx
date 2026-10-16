@@ -397,6 +397,23 @@ function PriceTargetReadout({
   const sorted = [...methods].sort((a, b) => a.mid - b.mid)
   const outlierSet = new Set(outlierMethods)
 
+  // The band is the span of the surviving method MIDS, so a bound can come from a
+  // method the run itself flags OUTLIER (>30% off the cross-method median — NVDA
+  // 2026-10-16 flagged BOTH, and the $486.92 upper bound was the re-rating premise
+  // the run calls unproven). The margin-of-safety line compares the tape against
+  // exactly that bound, so it must name the caveat instead of reading as a
+  // judgement on a corroborated range.
+  const lowMidName = sorted.length > 0 ? sorted[0].name : null
+  const highMidName = sorted.length > 0 ? sorted[sorted.length - 1].name : null
+  const boundOutlierBelow = lowMidName !== null && outlierSet.has(lowMidName)
+  const boundOutlierAbove = highMidName !== null && outlierSet.has(highMidName)
+  const outlierBoundNote = (flagged: boolean): string =>
+    flagged
+      ? en
+        ? ' (that bound comes from a method flagged OUTLIER above — read the range as directional only)'
+        : '（该端点来自上方标记为 OUTLIER 的方法——区间仅作方向参考）'
+      : ''
+
   // Honest live-vs-range position — the gap IS the signal. Deterministic from the
   // numbers (no judgement, no fabrication): above the whole band = no margin of
   // safety (bearish/red), below = margin of safety (green), inside = neutral.
@@ -405,17 +422,19 @@ function PriceTargetReadout({
     if (currentPrice > high) {
       const price = `${basisWord} ${cur(currentPrice)}${asOfSuffix}`
       position = {
-        text: en
-          ? `${price} sits above the entire range — no margin of safety`
-          : `${price} 高于整个区间上沿,无安全边际`,
+        text:
+          (en
+            ? `${price} sits above the entire range — no margin of safety`
+            : `${price} 高于整个区间上沿,无安全边际`) + outlierBoundNote(boundOutlierAbove),
         tone: 'var(--danger)',
       }
     } else if (currentPrice < low) {
       const price = `${basisWord} ${cur(currentPrice)}${asOfSuffix}`
       position = {
-        text: en
-          ? `${price} sits below the entire range — margin of safety`
-          : `${price} 低于整个区间下沿,有安全边际`,
+        text:
+          (en
+            ? `${price} sits below the entire range — margin of safety`
+            : `${price} 低于整个区间下沿,有安全边际`) + outlierBoundNote(boundOutlierBelow),
         tone: 'var(--success)',
       }
     } else {

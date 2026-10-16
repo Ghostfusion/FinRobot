@@ -263,3 +263,46 @@ describe('ChapterCover — reverse-DCF cash-flow band caliber', () => {
     expect(screen.getByTestId('reverse-dcf-band')).toBeInTheDocument()
   })
 })
+
+// Checklist B (review 2026-10-16, NVDA): the band is the span of the surviving
+// method MIDS, so a bound can come from a method the engine itself flags OUTLIER
+// (>30% off the cross-method median). The margin-of-safety line compares the tape
+// against exactly that bound and must not read as a judgement on a corroborated
+// range.
+describe('ChapterCover — a band bound from an OUTLIER-flagged method is labelled', () => {
+  const NVDA_METHODS = [
+    { name: 'dcf', low: 206.45, mid: 258.06, high: 309.68, confidence: 0.85, source: 'dcf' },
+    {
+      name: 'ev_ebitda',
+      low: 316.09,
+      mid: 486.92,
+      high: 823.37,
+      confidence: 0.72,
+      source: 'comps',
+    },
+  ]
+  const BASE_PROPS = {
+    ...BASE,
+    thesis: thesis({
+      recommendation: 'HOLD',
+      price_target: 258.06,
+      price_target_basis: 'anchored on dcf (comparability rule)',
+    }),
+    methods: NVDA_METHODS,
+    targetLow: 258.06,
+    targetHigh: 486.92,
+    currentPrice: 217.23,
+  }
+
+  it('names the caveat when the bound the price sits below is flagged', () => {
+    render(<ChapterCover {...BASE_PROPS} outlierMethods={['dcf', 'ev_ebitda']} />)
+    expect(screen.getByText(/sits below the entire range — margin of safety/)).toBeInTheDocument()
+    expect(screen.getByText(/flagged OUTLIER above/)).toBeInTheDocument()
+  })
+
+  it('stays silent when no method in the band is flagged', () => {
+    render(<ChapterCover {...BASE_PROPS} outlierMethods={[]} />)
+    expect(screen.getByText(/sits below the entire range — margin of safety/)).toBeInTheDocument()
+    expect(screen.queryByText(/flagged OUTLIER above/)).toBeNull()
+  })
+})
