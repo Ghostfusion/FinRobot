@@ -86,19 +86,28 @@ _MIN_PEER_YEARS_FOR_MEDIAN = 3
 # full fiscal year + the normal reporting lag behind the TTM window.
 _ANNUAL_SERIES_MAX_LAG_MONTHS = 15
 
-# The annual bars and the report's TTM EBITDA are DIFFERENT calibers, and the
+# The annual bars and the report's TTM EBITDA are DIFFERENT constructs, and the
 # report compares them side by side: the bars take the provider's own-reported
 # ``ebitda`` field verbatim per fiscal year, while the TTM figure is computed as
-# operating income + D&A (engine/primitives/ebitda.py). The two legs therefore
-# treat D&A differently — NVDA FY2026's provider EBITDA implies ~$14B of D&A
-# against $3.7B in the TTM figure — so the gap is a definitional difference, not
-# a data error. Frozen onto every historical payload (builders.py) as
-# ``historical_metrics.ebitda_caliber`` so the report can label the caliber where
-# it puts the TTM figure beside the bars.
+# operating income + D&A (engine/primitives/ebitda.py). This label is chosen only
+# when the two genuinely disagree (see ebitda_caliber_label), so it states exactly
+# that — the provider's annual figure is not its own operating income + D&A.
+#
+# It used to attribute the gap to "two different D&A calibers". That explanation is
+# not supported by the numbers: NVDA FY2026's bar (144.552B) exceeds its own
+# operating income + D&A (130.387B + 2.843B = 133.230B) by 8.5%, while the provider's
+# D&A row is 1.3% of revenue — the same ratio as the TTM leg (1.2%), so D&A is not
+# what differs. The gap is a different EBITDA CONSTRUCT (a provider figure that
+# carries items this run's operating caliber excludes) and the label now says only
+# what the comparison actually established (owner review 2026-10-16, item 8: "the
+# 'not a data error' note should be verified"). Frozen onto every historical payload
+# (builders.py) as ``historical_metrics.ebitda_caliber``.
 EBITDA_CALIBER_LABEL = (
     "Annual bars are the provider's reported EBITDA per fiscal year; the TTM EBITDA "
-    "shown beside them is computed as operating income + D&A — two different D&A "
-    "calibers, not a data error"
+    "shown beside them is computed as operating income + D&A. Those are different "
+    "constructs for this issuer — the annual figure is not its own operating income "
+    "+ D&A — so they must not be read as one continuous series; the difference is a "
+    "definition, not a data error"
 )
 
 # The SAME-caliber label: when the newest annual bar IS operating income + D&A — the
