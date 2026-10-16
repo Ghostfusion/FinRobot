@@ -307,6 +307,14 @@ export function formatDateTimeUtc(d: string | number | Date | null | undefined):
  * ("Close $124.42 · Oct 12"). Date-only strings parse as local midnight (see
  * parseDateInput) so the calendar day round-trips regardless of viewer timezone.
  *   en → "Oct 12"   zh → "10月12日"
+ *
+ * A quote's as-of is stamped as a UTC INSTANT at midnight of the session day
+ * ("2026-10-15T00:00:00Z"), not as a date-only string — reading that instant in
+ * local time moves it to the PREVIOUS calendar day for every negative-offset
+ * viewer (NVDA's Oct 15 close printed "Close $217.23 (Oct 14)" in US Pacific,
+ * where the artifact's own price authority, price cache and preceding-session
+ * change all say Oct 15). So the instant path reads UTC; the date-only path keeps
+ * the local round-trip parseDateInput gives it.
  */
 export function formatMonthDay(
   d: Date | string | number | null | undefined,
@@ -315,8 +323,17 @@ export function formatMonthDay(
   if (d === null || d === undefined) return '—'
   const date = parseDateInput(d)
   if (Number.isNaN(date.getTime())) return '—'
-  if (locale === 'zh') return `${date.getMonth() + 1}月${date.getDate()}日`
-  return new Intl.DateTimeFormat(NF_LOCALE[locale], { month: 'short', day: 'numeric' }).format(date)
+  const utc = !(typeof d === 'string' && DATE_ONLY_RE.test(d))
+  if (locale === 'zh') {
+    return `${(utc ? date.getUTCMonth() : date.getMonth()) + 1}月${
+      utc ? date.getUTCDate() : date.getDate()
+    }日`
+  }
+  return new Intl.DateTimeFormat(NF_LOCALE[locale], {
+    month: 'short',
+    day: 'numeric',
+    ...(utc ? { timeZone: 'UTC' as const } : {}),
+  }).format(date)
 }
 
 /** Stale 阈值常量（秒）。> WARN 视为 delayed；> DANGER 视为 stale。 */
