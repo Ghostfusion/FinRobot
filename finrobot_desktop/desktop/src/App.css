@@ -8066,14 +8066,31 @@ body.app-bg .cosmic-stars.cosmic-stars-fast {
     gap: 0 !important;
   }
 
-  /* Recharts measures its container in SCREEN pixels and paints an <svg> at that
-     width. Print re-lays the column out at the paper width but runs no
-     ResizeObserver callback, so a chart kept its on-screen pixel width and the
-     card's overflow:hidden cut it at the right margin — the 2026-10-15 TROW review
-     saw charts "clipped at the right edge" on pages 9, 10 and 12. Every surface
-     carries a viewBox, so capping it to the column scales the chart down instead
-     of cropping it; where Recharts did re-measure, the cap is a no-op. */
+  /* Recharts measures its container in SCREEN pixels and writes that width as an
+     inline `width: <screen>px` on BOTH the sizing div and `.recharts-wrapper`, so
+     print — which re-lays the column out at the paper width but runs no
+     ResizeObserver callback — keeps a chart at its on-screen pixel width and the
+     card's overflow:hidden cuts it at the right margin. The 2026-10-15 TROW review
+     saw charts "clipped at the right edge" on pages 9, 10 and 12; the 2026-10-16
+     NVDA review still saw the EPS and cash-flow charts "stop at FY2025" because the
+     previous cap touched ONLY `.recharts-surface`, whose `max-width: 100%` resolves
+     against its fixed-width `.recharts-wrapper` parent — a no-op, measured: the SVG
+     stayed 1406px inside a 703px (A4) column.
+     The fix is to cap the WHOLE fixed-width chain. Recharts nests
+     `.recharts-responsive-container` (width:100%) > sizing div (inline width:0px)
+     > `.recharts-wrapper` (inline width:<screen>px) > `.recharts-surface`
+     (width:100% + viewBox), so every level must be width-driven for the percentages
+     to resolve against the paper column. Every surface carries a viewBox, so the
+     SVG then scales down (height:auto preserves the aspect ratio) instead of being
+     cropped; where Recharts DID re-measure, the cap is a no-op. Measured on the
+     NVDA report: EPS/cash-flow SVG 1406x260 at a 1440 print column, and 669x124 —
+     inside the 701px card body, all four FY bars (2023-2026) visible — when the
+     column is the A4 width with no ResizeObserver pass. */
+  .recharts-responsive-container,
+  .recharts-responsive-container > div,
+  .recharts-wrapper,
   .recharts-surface {
+    width: 100% !important;
     max-width: 100% !important;
     height: auto !important;
   }
