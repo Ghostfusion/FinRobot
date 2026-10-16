@@ -327,6 +327,41 @@ def ev_ebitda_band_cross_check(
     )
 
 
+# How close a cross-check must be to a published method row to count as that row's
+# arithmetic repeated rather than a coincidentally similar second read. Tighter than
+# the prose-drift tolerance on purpose: the duplication this guards against is exact
+# (same band quantiles × same TTM EBITDA through the same ev_band_equity_per_share
+# bridge), so anything above float noise means the two rows really did read different
+# inputs and the second read is worth publishing.
+_CROSS_CHECK_DUPLICATE_REL_TOL = 1e-9
+
+# Appended to a cross-check's own `note` (the field the renderers print) when the row
+# restates a method row. Kept as one constant so the wire wording is pinned by a test.
+_DUPLICATE_CROSS_CHECK_NOTE = (
+    "NOT independent corroboration: this row applies the same own-history band to the "
+    "same TTM EBITDA through the same EV→equity bridge as the EV/EBITDA method row "
+    "above, so its range restates that row's arithmetic rather than a second read of "
+    "the target."
+)
+
+
+def _restates_published_method(check: CrossCheck, methods: list[ValuationMethodRange]) -> bool:
+    """Whether a cross-check reproduces a primary method row number-for-number.
+
+    Compared across the whole band (low AND mid AND high): a genuinely independent
+    band that happens to share one endpoint still publishes.
+    """
+
+    def _same(left: float, right: float) -> bool:
+        scale = max(abs(left), abs(right), 1e-12)
+        return abs(left - right) <= scale * _CROSS_CHECK_DUPLICATE_REL_TOL
+
+    return any(
+        _same(check.low, m.low) and _same(check.mid, m.mid) and _same(check.high, m.high)
+        for m in methods
+    )
+
+
 def aggregate_valuation(
     *,
     ticker: str,
@@ -583,6 +618,23 @@ def aggregate_valuation(
             band_break_caveat=historical_ev_ebitda_break_caveat,
         )
         if cross_check is not None:
+            # A cross-check earns its row by being a SECOND, INDEPENDENT read — that is
+            # exactly how cross_check_contradicts_method consumes it (a second opinion
+            # on a single-method valuation). When it is built from the same band, the
+            # same TTM EBITDA and the same EV→equity bridge as the EV/EBITDA METHOD row
+            # it is that row's arithmetic repeated, and a reader takes two identical
+            # rows for corroboration. NVDA 2026-10-16 published "Own 5-year EV/EBITDA"
+            # $316.09 / $486.92 / $823.37 beside an EV/EBITDA method row carrying the
+            # identical three numbers (owner review item 6: "the 'independent'
+            # EV/EBITDA cross-check is identical to the primary method"). The row stays
+            # — it is the reader's view of the issuer's own band, and the audit
+            # back-fill path republishes it post-verdict — but it says in its own
+            # `note` (the field the renderers already print) that it corroborates
+            # nothing the method row does not already state.
+            if _restates_published_method(cross_check, methods):
+                cross_check = cross_check.model_copy(
+                    update={"note": f"{cross_check.note} {_DUPLICATE_CROSS_CHECK_NOTE}"}
+                )
             cross_checks.append(cross_check)
         elif historical_ev_ebitda_band is not None or historical_ev_ebitda_median is not None:
             # Never drop the triangulation SILENTLY: the whole point of the row

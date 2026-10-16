@@ -420,3 +420,55 @@ class TestCrossCheckDropIsDisclosed:
         )
         assert agg.cross_checks == []
         assert not [w for w in agg.warnings if "ev_ebitda cross-check" in w]
+
+
+class TestCrossCheckVersusTheMethodRow:
+    """NVDA 2026-10-16 (owner review item 6): "the 'independent' EV/EBITDA cross-check
+    is identical to the primary method".
+
+    The row and the method are built from the SAME own-history band through the same
+    EV→equity bridge, so the row restates the method's arithmetic. It stays published
+    (it is the reader's view of the issuer's own band, and the audit back-fill path
+    republishes it post-verdict) but must say what it is.
+    """
+
+    @staticmethod
+    def _aggregate():
+        return aggregate_valuation(
+            ticker="EHC",
+            current_price=124.42,
+            historical_ev_ebitda_band=(_EHC["p25"], _EHC["p75"]),
+            historical_ev_ebitda_median=_EHC["median"],
+            historical_ev_ebitda_sample_n=947,
+            historical_ev_ebitda_window_years=5,
+            ttm_ebitda=_EHC["ttm_ebitda"],
+            current_net_debt=_EHC["net_debt"],
+            shares_outstanding=_EHC["shares"],
+            noncontrolling_interest=_EHC["nci"],
+        )
+
+    def test_row_states_it_restates_the_method_row(self):
+        agg = self._aggregate()
+        row = agg.cross_checks[0]
+        method = next(
+            m for m in agg.methods if str(getattr(m.method, "value", m.method)) == "ev_ebitda"
+        )
+        assert (row.low, row.mid, row.high) == (method.low, method.mid, method.high)
+        assert "NOT independent corroboration" in row.note
+
+    def test_the_disclosure_is_a_comparison_not_a_constant(self):
+        """A row reading a DIFFERENT band (the audit back-fill re-reads the band after
+        the verdict, and it can resolve where the pre-verdict read found no samples)
+        keeps its clean note."""
+        from finrobot.engine.compute.operators.valuation_aggregator import (
+            _restates_published_method,
+        )
+
+        agg = self._aggregate()
+        row = agg.cross_checks[0]
+        method = next(
+            m for m in agg.methods if str(getattr(m.method, "value", m.method)) == "ev_ebitda"
+        )
+        assert _restates_published_method(row, agg.methods) is True
+        moved = method.model_copy(update={"high": method.high * 1.01})
+        assert _restates_published_method(row, [moved]) is False
