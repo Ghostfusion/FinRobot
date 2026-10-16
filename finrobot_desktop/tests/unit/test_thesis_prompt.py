@@ -20,11 +20,165 @@ from finrobot.engine.models.financial import (
     MarketImpliedCheck,
     ValuationMethod,
 )
+from finrobot.engine.compute.coordinators.technical_payload import TechnicalAnalysis
+from finrobot.engine.compute.operators.monte_carlo import MonteCarloResult
+from finrobot.engine.compute.operators.sniper import SniperPoints
 from finrobot.engine.compute.operators.valuation_synthesis import (
     resolve_canonical_thesis,
     synthesize_valuations,
 )
+from finrobot.engine.models.sec import OwnershipGovernanceAnalysis
 from finrobot.engine.pipelines._thesis_prompt import build_thesis_prompt
+
+
+def _technical_overlay(
+    *,
+    stop_loss: float = 201.06,
+    resistance: float = 239.24,
+    take_profit: float = 258.06,
+    mean: float = 271.91,
+) -> TechnicalAnalysis:
+    """The technical overlay as the run publishes it (NVDA 2026-10-16 shape)."""
+    return TechnicalAnalysis(
+        monte_carlo=MonteCarloResult(
+            implied_prices=[178.45, mean, 414.29],
+            percentiles={"5": 178.45, "50": 258.29, "95": 414.29},
+            mean=mean,
+            std=73.28,
+            current_price_percentile=23.4,
+            histogram_bins=[128.61, 517.16],
+            histogram_counts=[1, 1],
+            assumptions_used={
+                "centered_on": "base-case DCF assumptions",
+                "independent": False,
+            },
+            n_valid=9951,
+        ),
+        sniper=SniperPoints(
+            ideal_buy=232.26,
+            secondary_buy=217.23,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+            position_size_pct=1.9,
+            safety_margin=0.1,
+            support_level=217.23,
+            resistance_level=resistance,
+            risk_reward_ratio=2.52,
+        ),
+    )
+
+
+def _nvda_methods() -> list[ValuationMethod]:
+    return [
+        ValuationMethod(
+            name="dcf",
+            low=206.45,
+            mid=258.06,
+            high=309.68,
+            confidence=0.85,
+            source="implied_price +/- 20%",
+        ),
+        ValuationMethod(
+            name="ev_ebitda",
+            low=316.09,
+            mid=486.92,
+            high=823.37,
+            confidence=0.72,
+            source="self_5y_p25_p75 x ttm_ebitda",
+        ),
+    ]
+
+
+def test_price_level_ladder_orders_the_stop_below_the_dcf_low() -> None:
+    """NVDA 2026-10-16 (owner review item 2): the narrative wrote "a break of $201.06
+    invalidates the LONG setup and opens a test of the DCF low at $206.45" — the DCF
+    low sits ABOVE the stop, so price reaches it first. The levels come from two
+    different payloads, so the prompt now hands over ONE ascending ladder plus the
+    ordering rule instead of leaving the model to order them."""
+    prompt = _build(
+        _nvda_methods(),
+        current_price=217.23,
+        ticker="NVDA",
+        extra_context={"technical_analysis": _technical_overlay()},
+    )
+
+    assert "AUTHORITATIVE PRICE-LEVEL LADDER" in prompt
+    assert "LEVEL ORDERING RULE" in prompt
+    # Scope to the ladder block — the same levels also appear earlier in the
+    # authoritative target block and in the whitelist.
+    ladder = prompt[
+        prompt.index("AUTHORITATIVE PRICE-LEVEL LADDER") : prompt.index("LEVEL ORDERING RULE")
+    ]
+    rungs = [line.strip() for line in ladder.splitlines() if line.strip().startswith("$")]
+    # Ascending, one rung per level: the stop is the LOWEST level, so a break of it
+    # cannot "open a test of" the DCF low sitting above it.
+    assert [rung.split()[0] for rung in rungs] == [
+        "$201.06",
+        "$206.45",
+        "$217.23",
+        "$232.26",
+        "$239.24",
+        "$258.06",
+        "$309.68",
+        "$316.09",
+        "$486.92",
+        "$823.37",
+    ]
+    # A level two producers publish carries BOTH labels on ONE rung (the take-profit
+    # IS the published target, the support IS the current price).
+    ladder_line = next(
+        line
+        for line in ladder.splitlines()
+        if line.strip().startswith("$258.06") and "take-profit" in line
+    )
+    assert "dcf mid" in ladder_line
+    assert "published target band low" in ladder_line
+
+
+def test_monte_carlo_is_whitelisted_and_declared_non_independent() -> None:
+    """Review items 1/6/7: the distribution's figures must be CITABLE (they are
+    published leaves) and the prompt must say they are this run's own DCF read
+    twice, so the narrative cannot present them as independent corroboration."""
+    prompt = _build(
+        _nvda_methods(),
+        current_price=217.23,
+        ticker="NVDA",
+        extra_context={"technical_analysis": _technical_overlay()},
+    )
+
+    assert "technical_analysis.monte_carlo" in prompt
+    assert "mean $271.91" in prompt
+    assert "p5 $178.45" in prompt
+    assert "p95 $414.29" in prompt
+    assert "DISTRIBUTION INDEPENDENCE RULE" in prompt
+    assert "technical_analysis.sniper.stop_loss (invalidation level): $201.06" in prompt
+
+
+def test_insider_flow_scale_is_computed_from_the_published_market_cap() -> None:
+    """Review, "Data and ownership": the narrative called the 90-day insider flow
+    "the only informational flow" with no denominator. The market cap is published,
+    so the prompt states what fraction of it the flow is."""
+    ownership = OwnershipGovernanceAnalysis(
+        generated_at=datetime(2026, 10, 16, tzinfo=timezone.utc),
+        insider_net_flow=-967_599_313.46,
+        insider_buy_value=0.0,
+        insider_sell_value=967_599_313.46,
+        insider_window_days=90,
+    )
+    financials = _financial_data(current_price=217.23)
+    financials = financials.model_copy(
+        update={"market": financials.market.model_copy(update={"market_cap": 5_245_900_000_000.0})}
+    )
+    prompt = _build(
+        _nvda_methods(),
+        current_price=217.23,
+        ticker="NVDA",
+        extra_context={"ownership_governance": ownership, "data_collection": financials},
+    )
+
+    assert "INSIDER FLOW SCALE" in prompt
+    assert "0.02% of the" in prompt
+    assert "90-day net insider flow" in prompt
 
 
 def _financial_data(

@@ -33,6 +33,30 @@ from finrobot.engine.models.sec import OwnershipGovernanceAnalysis
 from finrobot.engine.pipelines._helpers import fmt_market_cap, fmt_multiple
 
 
+def _as_mapping(value: object) -> Mapping[str, object] | None:
+    """A structured-context section as a mapping — pydantic models included.
+
+    Sections land in ``structured_context`` as whatever their executor returned
+    (``ownership_governance`` a dict, ``technical_analysis`` a pydantic model), so
+    readers normalize instead of guessing a type or reaching for a model-specific
+    attribute.
+    """
+    if isinstance(value, Mapping):
+        return value
+    dump = getattr(value, "model_dump", None)
+    if callable(dump):
+        dumped = dump()
+        return dumped if isinstance(dumped, Mapping) else None
+    return None
+
+
+def _as_number(value: object) -> float | None:
+    """A published numeric leaf as a float; None for anything else (never a guess)."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return None
+
+
 def _model_growth_comparison(dcf_ctx: DCFResult) -> str:
     """The model's OWN revenue-growth schedule, injected next to the implied rate.
 
@@ -103,6 +127,81 @@ def _filing_text_missing(sec_filings: object) -> bool:
         return False
     present = [str(items.get(key) or "").strip() for key in _FILING_TEXT_ITEMS if key in items]
     return bool(present) and not any(present)
+
+
+def _price_level_ladder(structured_context: dict[str, object]) -> str:
+    """The run's published price levels as ONE ascending ladder (NVDA 2026-10-16).
+
+    The technical overlay and the valuation synthesis each publish their own levels in
+    their own JSON block, and the narrative relates them in prose. NVDA shipped "a
+    break of $201.06 invalidates the LONG setup and opens a test of the DCF low at
+    $206.45" — impossible, because $206.45 sits ABOVE the stop, so price reaches the
+    DCF low FIRST (owner review item 2). Every level is a published fact and their
+    ORDER is deterministic, so the prompt hands the model a merged, sorted ladder
+    instead of leaving it to order numbers that arrive in two separate payloads.
+    Returns "" when nothing is published — never a fabricated rung.
+    """
+    rungs: list[tuple[float, str]] = []
+
+    def _add(value: object, label: str) -> None:
+        number = _as_number(value)
+        if number is not None and number > 0:
+            rungs.append((number, label))
+
+    technical = _as_mapping(structured_context.get("technical_analysis"))
+    if technical is not None:
+        sniper = _as_mapping(technical.get("sniper"))
+        if sniper is not None:
+            _add(sniper.get("stop_loss"), "sniper stop loss")
+            _add(sniper.get("support_level"), "sniper support (20-day low)")
+            _add(sniper.get("secondary_buy"), "sniper secondary buy")
+            _add(sniper.get("ideal_buy"), "sniper ideal buy")
+            _add(sniper.get("resistance_level"), "sniper resistance (20-day high)")
+            _add(sniper.get("take_profit"), "sniper take-profit")
+
+    vs = structured_context.get("valuation_synthesis")
+    if isinstance(vs, ValuationSynthesis):
+        _add(vs.current_price, "current market price")
+        for m in vs.methods:
+            # Method ids as the payload carries them (the same tokens the whitelist
+            # and the JSON context use), so every rung names a leaf the model can see.
+            _add(m.low, f"{m.name} low band")
+            _add(m.mid, f"{m.name} mid")
+            _add(m.high, f"{m.name} high band")
+        _add(vs.target_low, "published target band low")
+        _add(vs.target_high, "published target band high")
+
+    if not rungs:
+        return ""
+
+    # One rung per distinct level; a level two producers agree on carries BOTH labels
+    # (NVDA: the 20-day support IS the current price, and the take-profit IS the
+    # published target) so the model can see they are one number, not two.
+    merged: dict[float, list[str]] = {}
+    for value, label in rungs:
+        merged.setdefault(round(value, 2), []).append(label)
+    lines = []
+    for value in sorted(merged):
+        labels = list(dict.fromkeys(merged[value]))
+        lines.append(f"  ${value:,.2f}  " + " · ".join(labels))
+
+    price_note = ""
+    if isinstance(vs, ValuationSynthesis) and vs.current_price > 0:
+        price_note = (
+            f" — from the current price of ${vs.current_price:,.2f} the NEAREST level in "
+            "the direction of travel is reached FIRST"
+        )
+    return (
+        "\nAUTHORITATIVE PRICE-LEVEL LADDER (computed from this run's OWN published "
+        f"levels, listed from LOWEST to HIGHEST{price_note}):\n"
+        + "\n".join(lines)
+        + "\nLEVEL ORDERING RULE: relate two levels by their POSITION on this ladder, "
+        "never by the order the numbers happen to arrive in. A move down from the "
+        "current price tests the NEXT LEVEL BELOW it; a move up tests the next level "
+        "above. Never write that a break of one level 'opens a test of' a level on the "
+        "other side of the price — a stop loss sits BELOW the levels it puts at risk, "
+        "so a break of the stop arrives AFTER those levels are already tested."
+    )
 
 
 def build_thesis_prompt(
@@ -502,6 +601,12 @@ def build_thesis_prompt(
             "the stock's OWN recent price action, independent of your valuation call:\n"
             + "\n".join(_momentum_lines)
         )
+    # The published price levels, merged and sorted (see _price_level_ladder): a
+    # technical sentence relates a stop, a support and the valuation band at once, and
+    # those levels arrive in two separate JSON blocks in the structured context.
+    _level_ladder = _price_level_ladder(structured_context)
+    if _level_ladder:
+        thesis_prompt = f"{thesis_prompt}\n{_level_ladder}"
     if is_momentum_divergent(canonical_verdict, momentum_ctx.one_year_return_pct):
         _one_year_return = momentum_ctx.one_year_return_pct
         assert _one_year_return is not None  # narrowed by is_momentum_divergent above
@@ -833,6 +938,91 @@ def build_thesis_prompt(
         if _current_basis
         else ""
     )
+    # ── Technical overlay: levels + distribution (NVDA 2026-10-16, items 2/6/7) ──
+    # The overlay's numbers ARE published leaves, but they were missing from this
+    # whitelist while the whole structured context is dumped into the prompt — so the
+    # model cited the sniper ladder and the simulated distribution while a strict
+    # reading of this list forbade them, and the target scrubber then rewrote them to
+    # the canonical target (see _published_citable_amounts). List them, and say what
+    # they are: the distribution is this run's own DCF read twice.
+    technical_for_prompt = _as_mapping(structured_context.get("technical_analysis"))
+    if technical_for_prompt is not None:
+        sniper_for_prompt = _as_mapping(technical_for_prompt.get("sniper"))
+        if sniper_for_prompt is not None:
+            for _key, _what in (
+                ("stop_loss", "invalidation level"),
+                ("support_level", "20-day support"),
+                ("resistance_level", "20-day resistance"),
+                ("ideal_buy", "modelled entry"),
+                ("take_profit", "the published target"),
+            ):
+                _level = _as_number(sniper_for_prompt.get(_key))
+                if _level is not None:
+                    _whitelist_parts.append(
+                        f"  - technical_analysis.sniper.{_key} ({_what}): ${_level:,.2f}"
+                    )
+        monte_carlo = _as_mapping(technical_for_prompt.get("monte_carlo"))
+        if monte_carlo is not None:
+            _mc_mean = _as_number(monte_carlo.get("mean"))
+            _mc_pct = _as_mapping(monte_carlo.get("percentiles")) or {}
+            _mc_parts = []
+            if _mc_mean is not None:
+                _mc_parts.append(f"mean ${_mc_mean:,.2f}")
+            for _q in ("5", "50", "95"):
+                _q_val = _as_number(_mc_pct.get(_q))
+                if _q_val is not None:
+                    _mc_parts.append(f"p{_q} ${_q_val:,.2f}")
+            _mc_pctile = _as_number(monte_carlo.get("current_price_percentile"))
+            if _mc_pctile is not None:
+                _mc_parts.append(f"current price at the {_mc_pctile:.1f}th percentile")
+            if _mc_parts:
+                _whitelist_parts.append(
+                    "  - technical_analysis.monte_carlo (the simulated distribution of "
+                    "this run's own DCF): " + ", ".join(_mc_parts)
+                )
+            _mc_assumptions = _as_mapping(monte_carlo.get("assumptions_used")) or {}
+            _mc_centered = _mc_assumptions.get("centered_on")
+            _mc_independent = _mc_assumptions.get("independent")
+            if _mc_centered is not None or _mc_independent is False:
+                _whitelist_parts.append(
+                    "  - DISTRIBUTION INDEPENDENCE RULE: the Monte Carlo perturbs THIS "
+                    "RUN'S OWN base-case DCF — "
+                    f"centered_on={_mc_centered!r}, independent={_mc_independent!r} — and "
+                    "the sniper take-profit IS the published target. They are not "
+                    "independent evidence: never present the distribution, the "
+                    "take-profit or the risk/reward ratio as corroborating the DCF, "
+                    "never count them as a second method or a separate vote, and when "
+                    "you cite the distribution say it is the model's own dispersion (a "
+                    "sensitivity read of one set of assumptions), not a second opinion."
+                )
+    # Insider-flow SCALE (NVDA 2026-10-16, "Data and ownership"): the narrative leaned
+    # on the 90-day flow as "the only informational flow" with no denominator — the
+    # $967.6M of sales is ~0.02% of market cap. Market cap is a published leaf, so the
+    # ratio is computed here and handed over; the model never estimates it.
+    ownership_for_prompt = structured_context.get("ownership_governance")
+    if isinstance(ownership_for_prompt, OwnershipGovernanceAnalysis) and (
+        ownership_for_prompt.insider_net_flow is not None
+    ):
+        _run_financials_for_scale = structured_context.get("data_collection")
+        _market_cap = None
+        if isinstance(_run_financials_for_scale, FinancialData):
+            _market_cap = _as_number(_run_financials_for_scale.market.market_cap)
+        if _market_cap:
+            _flow_share = abs(ownership_for_prompt.insider_net_flow) / _market_cap
+            _window_label = (
+                f"{ownership_for_prompt.insider_window_days}-day"
+                if ownership_for_prompt.insider_window_days
+                else "trailing"
+            )
+            _whitelist_parts.append(
+                f"  - INSIDER FLOW SCALE: the {_window_label} net insider flow "
+                f"(${ownership_for_prompt.insider_net_flow:+,.0f}) is {_flow_share:.2%} "
+                f"of the {fmt_market_cap(_market_cap)} market capitalisation. State that "
+                "denominator whenever you cite the flow as a signal — an insider-flow "
+                "figure without its scale is not evidence of anything, and it is never "
+                "the only informational flow in the report (the valuation, the model "
+                "and the credit read are all on the page)."
+            )
     _whitelist_parts += [
         # Period labeling (2026-10-13 NVDA: the narrative mixed FY margins 71.1% /
         # 60.4% with TTM tiles 74.7% / 65.2% and neither was labelled, so a reader
