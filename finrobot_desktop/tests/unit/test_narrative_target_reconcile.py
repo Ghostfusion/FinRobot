@@ -26,8 +26,12 @@ from finrobot.engine.models.financial import (
     ValuationMetrics,
     ValuationSynthesis,
 )
+from finrobot.engine.compute.coordinators.technical_payload import TechnicalAnalysis
+from finrobot.engine.compute.operators.monte_carlo import MonteCarloResult
+from finrobot.engine.compute.operators.sniper import SniperPoints
 from finrobot.engine.models.identities import leaves_of_kind
 from finrobot.engine.pipelines.equity_research import (
+    _published_citable_amounts,
     _published_leaf_snapshot,
     _reconcile_narrative_targets,
     apply_canonical_override,
@@ -848,3 +852,132 @@ def test_declared_total_survives_the_withheld_scrub_without_the_heuristic() -> N
     assert "[target withheld]" not in (out.narrative or "")
     assert "$850,000" in (out.narrative or "")
     assert "$120,000" in (out.narrative or "")
+
+
+def _technical_section() -> TechnicalAnalysis:
+    """The technical overlay as the run stores it — a pydantic model, not a dict."""
+    return TechnicalAnalysis(
+        monte_carlo=MonteCarloResult(
+            implied_prices=[178.45, 271.91, 414.29],
+            percentiles={"5": 178.45, "50": 258.29, "95": 414.29},
+            mean=271.91,
+            std=73.28,
+            current_price_percentile=23.4,
+            histogram_bins=[128.61, 517.16],
+            histogram_counts=[1, 1],
+            assumptions_used={
+                "centered_on": "base-case DCF assumptions",
+                "independent": False,
+            },
+            n_valid=9951,
+        ),
+        sniper=SniperPoints(
+            ideal_buy=232.26,
+            secondary_buy=217.23,
+            stop_loss=201.06,
+            take_profit=258.06,
+            position_size_pct=1.9,
+            safety_margin=0.1,
+            support_level=217.23,
+            resistance_level=239.24,
+            risk_reward_ratio=2.52,
+        ),
+    )
+
+
+def _nvda_shaped_canonical() -> CanonicalThesis:
+    return CanonicalThesis(
+        verdict="HOLD",
+        target=258.06,
+        basis="Confidence=medium; anchored on dcf: DCF $258.06 -> $258.06.",
+        upside=0.188,
+        valuation_withheld=False,
+        confidence="medium",
+    )
+
+
+def _two_method_synthesis() -> ValuationSynthesis:
+    return ValuationSynthesis(
+        methods=[
+            ValuationMethod(
+                name="dcf",
+                low=206.45,
+                mid=258.06,
+                high=309.68,
+                confidence=0.85,
+                source="implied_price +- 20%",
+            ),
+            ValuationMethod(
+                name="ev_ebitda",
+                low=316.09,
+                mid=486.92,
+                high=823.37,
+                confidence=0.72,
+                source="self_5y_p25_p75 x ttm_ebitda",
+            ),
+        ],
+        current_price=217.23,
+        confidence="medium",
+        weighted_price=363.02,
+        upside_downside=0.188,
+        valuation_withheld=False,
+    )
+
+
+def test_monte_carlo_stats_and_sniper_levels_are_citations_not_drift() -> None:
+    """NVDA 2026-10-16 (owner review item 1): the technical overlay's own numbers
+    are citations, not smuggled point targets.
+
+    The thesis legitimately cites the simulated distribution and the sniper ladder,
+    but none of those figures is a per-method mid, so the target scrubber rewrote
+    each one to the canonical target and the shipped narrative read "the Monte Carlo
+    mean of $258.06 with a P5-P95 of $258.06-$258.06" while the same artifact's
+    catalyst bullet (an unscanned field) still printed $271.91/$308.65/$414.29. One
+    artifact, two answers for one distribution. The whitelist now carries what the
+    run itself publishes here.
+    """
+    context = {
+        "technical_analysis": _technical_section(),
+        "ownership_governance": {
+            "insider_net_flow": -967_599_313.46,
+            "insider_buy_value": 0.0,
+            "insider_sell_value": 967_599_313.46,
+        },
+    }
+    narrative = (
+        "Positioning rounds out a neutral stance: the Monte Carlo mean of $271.91 "
+        "with a P5-P95 of $178.45-$414.29 places $217.23 at the 23.4th percentile, "
+        "the sniper stop sits at $201.06 and resistance at $239.24."
+    )
+    thesis = _thesis(price_target=258.06, narrative=narrative)
+
+    out = apply_canonical_override(
+        thesis,
+        _nvda_shaped_canonical(),
+        _two_method_synthesis(),
+        published_amounts=_published_citable_amounts(context),
+    )
+
+    assert out.narrative == narrative
+
+
+def test_published_technical_levels_do_not_blunt_the_guard() -> None:
+    """The whitelist must not rescue a per-share amount the run does NOT publish:
+    a drifting fair-value claim is still neutralized to the canonical target."""
+    context = {"technical_analysis": _technical_section()}
+    thesis = _thesis(
+        price_target=258.06,
+        narrative="Fair value of $280 against a $271.91 simulated mean.",
+    )
+
+    out = apply_canonical_override(
+        thesis,
+        _nvda_shaped_canonical(),
+        _two_method_synthesis(),
+        published_amounts=_published_citable_amounts(context),
+    )
+
+    assert "$280" not in (out.narrative or "")
+    assert "$258.06" in (out.narrative or "")
+    # The published Monte Carlo mean in the same sentence is untouched.
+    assert "$271.91" in (out.narrative or "")

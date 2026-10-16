@@ -1859,20 +1859,64 @@ def _published_citable_amounts(structured_context: dict[str, object]) -> list[fl
     routinely cites and the same figures the insider-flow verifier checks the prose
     against. A missing/unknown section yields nothing (never a guess) — a wrong entry
     here would let a fabricated amount through the guard.
+
+    Per-share price LEVELS the technical overlay publishes are collected the same way
+    (NVDA 2026-10-16, owner review item 1): the thesis legitimately cites the Monte
+    Carlo distribution — "the Monte Carlo mean of $271.91 with a P5–P95 of
+    $178.45–$414.29" — but the numbers are not per-method mids, so the scrubber
+    rewrote each one to the canonical target and the narrative shipped "the Monte
+    Carlo mean of $258.06 with a P5-P95 of $258.06-$258.06" while the SAME artifact's
+    catalyst bullet (an unscanned field) printed the real $271.91/$308.65/$414.29.
+    One artifact, two answers for one distribution. The sniper ladder (stop / support
+    / resistance / take-profit) is collected for the same reason: those levels appear
+    beside the valuation numbers in every technical sentence.
     """
-    ownership = structured_context.get("ownership_governance")
-    if not isinstance(ownership, dict):
-        return []
     amounts: list[float] = []
-    for key in ("insider_net_flow", "insider_buy_value", "insider_sell_value"):
-        value = ownership.get(key)
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            amounts.append(float(value))
-    largest = ownership.get("insider_largest_sale")
-    if isinstance(largest, dict):
-        value = largest.get("value")
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            amounts.append(float(value))
+
+    def _as_map(value: object) -> Mapping[str, Any] | None:
+        """A structured section as a mapping — pydantic models included.
+
+        Sections land in ``structured_context`` as whatever their executor returned
+        (``ownership_governance`` a dict, ``technical_analysis`` a pydantic model),
+        so the collector normalizes instead of guessing a type.
+        """
+        if isinstance(value, Mapping):
+            return value
+        dump = getattr(value, "model_dump", None)
+        if callable(dump):
+            dumped = dump()
+            return dumped if isinstance(dumped, Mapping) else None
+        return None
+
+    def _collect(source: Mapping[str, Any] | None, *keys: str) -> None:
+        if source is None:
+            return
+        for key in keys:
+            value = source.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                amounts.append(float(value))
+
+    ownership = _as_map(structured_context.get("ownership_governance"))
+    _collect(ownership, "insider_net_flow", "insider_buy_value", "insider_sell_value")
+    if ownership is not None:
+        _collect(_as_map(ownership.get("insider_largest_sale")), "value")
+
+    technical = _as_map(structured_context.get("technical_analysis"))
+    if technical is not None:
+        monte_carlo = _as_map(technical.get("monte_carlo"))
+        _collect(monte_carlo, "mean", "std")
+        percentiles = _as_map(monte_carlo.get("percentiles")) if monte_carlo else None
+        if percentiles:
+            _collect(percentiles, *percentiles.keys())
+        _collect(
+            _as_map(technical.get("sniper")),
+            "ideal_buy",
+            "secondary_buy",
+            "stop_loss",
+            "take_profit",
+            "support_level",
+            "resistance_level",
+        )
     return amounts
 
 
