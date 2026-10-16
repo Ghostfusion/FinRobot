@@ -139,6 +139,17 @@ _DIGEST_CHARS = 12
 #   CANONICAL_CONTRACT_VERSION v13 bump. Observed: CF's canonical cached
 #   2026-10-14T06:19Z (pre-fix) still served the pre-fix margin hours after the fix
 #   landed, and the report shipped the contradiction.
+#   schedule_13 v2 — 2026-10-16: the 13D/13G cover-page parser now reads the
+#   "Percent of Class" value off the FULL Row-11 caption ("PERCENT OF CLASS
+#   REPRESENTED BY AMOUNT IN ROW 9" → "8.28%"), not only off a compact label whose
+#   value sits within a short non-digit run. A pre-v2 row stores
+#   ``pct_of_class: null`` for those layouts, and the consumer uses that
+#   percentage to infer whether an as-filed share count predates a split: Vanguard's
+#   NVDA 13G/A (2024-02-13, pre the June-2024 10:1 split) therefore rendered as
+#   204.50M shares with NO basis beside BlackRock's split-adjusted 1.81B row — a
+#   10x understatement of a 5%+ holder, invisible to the reader (review 2026-10-16,
+#   item 3). The 24h row would otherwise keep serving it: SCHEDULE_13 was an
+#   UNVERSIONED raw type, so neither a revision nor a digest guarded its slot.
 RAW_SLOT_VERSION: dict[str, int] = {
     DataType.PRICE.value: 3,
     DataType.PROXY_STATEMENT.value: 2,
@@ -146,6 +157,7 @@ RAW_SLOT_VERSION: dict[str, int] = {
     DataType.SENTIMENT.value: 2,
     DataType.FORWARD_ESTIMATES.value: 2,
     DataType.FINANCIALS.value: 6,
+    DataType.SCHEDULE_13.value: 2,
 }
 
 

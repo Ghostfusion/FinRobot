@@ -4,7 +4,7 @@
     "financials|tiingo": "600867edd1cf",
     "financials|yfinance": "fe1faa6ff452",
     "forward_estimates|fmp": "8ca3b47eb3c8",
-    "fund_holdings|sec_edgar": "9bbd4aacacb5",
+    "fund_holdings|sec_edgar": "04883b075b74",
     "fund_profile|eodhd": "b7f74d24f4d6",
     "fund_profile|moomoo": "f6eb0b5c247f",
     "fund_profile|yfinance": "46dca8e1bfff",
@@ -16,7 +16,7 @@
     "price|tiingo": "7c97e7e3ed23",
     "price|twelvedata": "64621d9cb960",
     "price|yfinance": "7a61549f9550",
-    "proxy_statement|sec_edgar": "7695cc865cd4",
+    "proxy_statement|sec_edgar": "f1abc227d55c",
     "sentiment|adanos": "f33ffb3574ab",
     "sentiment|eodhd": "060d5e6c5ee4"
   },
@@ -27,6 +27,7 @@
     "raw_slot:peer_candidates": 3,
     "raw_slot:price": 3,
     "raw_slot:proxy_statement": 2,
+    "raw_slot:schedule_13": 2,
     "raw_slot:sentiment": 2
   },
   "sources": {
@@ -35,7 +36,7 @@
     "finrobot/engine/data/providers/alpha_vantage_provider.py": "05b85842de44ec71",
     "finrobot/engine/data/providers/benzinga_provider.py": "4100224d0670324b",
     "finrobot/engine/data/providers/cboe_provider.py": "96651b55eca4f821",
-    "finrobot/engine/data/providers/edgar_provider.py": "e31fb93166f924af",
+    "finrobot/engine/data/providers/edgar_provider.py": "5d43e07836922611",
     "finrobot/engine/data/providers/eodhd_provider.py": "dcb67579b8787957",
     "finrobot/engine/data/providers/federal_reserve_provider.py": "df97ecf89fb60d78",
     "finrobot/engine/data/providers/finnhub_provider.py": "9636ad828111847d",
