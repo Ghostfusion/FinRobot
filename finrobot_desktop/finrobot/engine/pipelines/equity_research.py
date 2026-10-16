@@ -543,12 +543,44 @@ async def _execute_catalyst_analysis(
     sec_cat_labels = ", ".join(
         f"{cat}({cnt})" for cat, cnt in summary["sec_8k_category_breakdown"].items()
     )
-    narrative = (
-        f"Catalyst analysis: {summary['total_catalysts']} events identified. "
-        f"Net sentiment: {net:+.2f} ({overall}). "
-        f"News items by category: {news_cat_labels or 'none'}. "
-        f"SEC 8-K events by category: {sec_cat_labels or 'none'}."
-    )
+    if summary["total_catalysts"] == 0:
+        # NO events is missing data, never a measured "neutral". ``net`` is 0.0 by
+        # construction here (the mean of an empty scored list), so the generic
+        # header shipped "0 events identified. Net sentiment: +0.00 (neutral)" —
+        # and this step's TEXT survives its own degrade (runner: a degraded step's
+        # prose stays, only its structured output is popped), so every later LLM
+        # step read that sentence as a real reading. NVDA 2026-10-16 narrated it as
+        # "the catalyst pipeline identified 0 events with net sentiment of +0.00
+        # (neutral)" beside an empty news window, and the C12b empty-window
+        # contract clause could not fire because the degraded step left no
+        # structured catalyst block (review 2026-10-16, checklist F/BLOCK).
+        news_count = news_window.get("count") if isinstance(news_window, dict) else None
+        if news_count == 0:
+            coverage = (
+                "the news feed returned 0 items for this window, so nothing was "
+                "measured (no coverage — NOT a neutral reading)"
+            )
+        elif news_count:
+            coverage = (
+                f"the news feed returned {news_count} items, none of which cleared "
+                "the catalyst thresholds"
+            )
+        else:
+            coverage = "no news feed window was available"
+        narrative = (
+            "Catalyst analysis: NO CATALYST DATA — 0 events could be extracted and "
+            "no sentiment was computed (this is missing data, NOT a neutral "
+            f"sentiment): {coverage}. "
+            f"News items by category: {news_cat_labels or 'none'}. "
+            f"SEC 8-K events by category: {sec_cat_labels or 'none'}."
+        )
+    else:
+        narrative = (
+            f"Catalyst analysis: {summary['total_catalysts']} events identified. "
+            f"Net sentiment: {net:+.2f} ({overall}). "
+            f"News items by category: {news_cat_labels or 'none'}. "
+            f"SEC 8-K events by category: {sec_cat_labels or 'none'}."
+        )
     if isinstance(news_window, dict):
         window_from = f" from {news_window['earliest']}" if news_window.get("earliest") else ""
         window_to = f" to {news_window['latest']}" if news_window.get("latest") else ""

@@ -742,6 +742,47 @@ async def test_catalyst_analysis_publishes_feed_windows(mock_deps):
 
 
 @pytest.mark.asyncio
+async def test_catalyst_analysis_empty_feed_is_no_data_not_neutral(mock_deps):
+    """An EMPTY feed must not render as a measured neutral reading.
+
+    ``net_sentiment`` is 0.0 here only as the mean of an empty scored list, and
+    the generic header shipped it as "0 events identified. Net sentiment: +0.00
+    (neutral)" — a sentence a later LLM step reads as a real reading, because a
+    degraded step's TEXT survives its degrade while its structured output is
+    dropped (NVDA 2026-10-16 narrated exactly that beside an empty news window,
+    and the C12b empty-window clause could not fire for lack of a structured
+    catalyst block). Review 2026-10-16, checklist F/BLOCK.
+    """
+    from finrobot.engine.pipelines.equity_research import _execute_catalyst_analysis
+
+    _now = datetime.now(tz=timezone.utc)
+    news_result = DataResult(
+        data={"news_items": []},
+        provider="fake",
+        ticker="AAPL",
+        data_type="news",
+        timestamp=_now,
+    )
+    mock_deps.data_layer.fetch = AsyncMock(return_value=news_result)
+    mock_agent = MagicMock()
+    with patch(
+        "finrobot.engine.pipelines.equity_research.classify_news",
+        return_value=[],
+    ):
+        output = await _execute_catalyst_analysis(mock_agent, mock_deps, "prompt", {}, "AAPL")
+
+    assert output.structured.events == []
+    assert "NO CATALYST DATA" in output.text
+    assert "no sentiment was computed" in output.text
+    assert "0 items" in output.text  # the feed window still states its coverage
+    # No measured-sentiment CLAIM survives: no scored line, no "+0.00" reading.
+    # (The phrase "not a neutral sentiment" is the disclaimer itself.)
+    assert "Net sentiment:" not in output.text
+    assert "+0.00" not in output.text
+    assert "NOT a neutral sentiment" in output.text
+
+
+@pytest.mark.asyncio
 async def test_catalyst_analysis_counts_fresh_8k_and_discloses_the_dropped_ones(mock_deps):
     """A FRESH 8-K still counts in the catalyst mix; only the stale one is dropped
     and named. Guards the age gate against over-dropping every 8-K."""

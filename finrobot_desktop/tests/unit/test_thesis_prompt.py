@@ -283,6 +283,35 @@ class TestBuildThesisPrompt:
         # duplicated a second time inside the whitelist/rule text.
         assert prompt.count("Company unveils next-gen chip") == 1
 
+    def test_empty_catalyst_block_reads_as_no_data_not_neutral(self):
+        """An empty catalyst block must never be injected as a measured neutral.
+
+        ``net_sentiment`` is 0.0 with no events only as the mean of an empty list;
+        rendering it as "neutral (+0.00)" invites the narrative to report a
+        balanced news flow where the truth is no news flow (NVDA 2026-10-16).
+        """
+        methods = [
+            ValuationMethod(name="DCF", low=210, mid=245, high=290, confidence=0.5, source="DCF"),
+            ValuationMethod(
+                name="EV/EBITDA", low=220, mid=250, high=280, confidence=0.3, source="Comps"
+            ),
+        ]
+        empty = CatalystAnalysis(
+            events=[],
+            overall_sentiment="neutral",
+            key_catalysts=[],
+            net_sentiment=0.0,
+            news_window={"count": 0, "provider": None, "sources": []},
+        )
+        prompt = _build(
+            methods,
+            current_price=230.0,
+            extra_context={"catalyst_analysis": empty},
+        )
+        assert "NO CATALYST DATA" in prompt
+        assert "net sentiment: +0.00" not in prompt
+        assert "Catalyst outlook: neutral" not in prompt
+
     def test_catalyst_section_wraps_headlines_as_untrusted(self):
         """Injected catalyst headlines are wrapped in an untrusted-news block."""
         methods = [
