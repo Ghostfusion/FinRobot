@@ -120,6 +120,9 @@ export interface DcfShape {
     revenue_growth_rates?: number[]
     ebitda_margin?: number
     terminal_growth_rate?: number
+    // Return on new invested capital the perpetuity assumes — the assumption the
+    // terminal reinvestment rate (g ÷ ROIC) is built from. Absent on legacy.
+    terminal_roic?: number
     tax_rate?: number
     beta?: number
     risk_free_rate?: number

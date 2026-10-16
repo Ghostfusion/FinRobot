@@ -667,3 +667,25 @@ describe('ChapterValuation own-history band caveat', () => {
     expect(screen.queryByTestId('football-cross-check-caveat')).not.toBeInTheDocument()
   })
 })
+
+// Checklist G (review 2026-10-16, NVDA): the perpetuity's reinvestment assumption
+// (g ÷ ROIC) is what the terminal-growth sensitivity rides on, so it is published
+// beside the growth rate — NVDA reinvested 20% of terminal NOPAT, i.e. a 15%
+// return on new capital, and the report printed neither.
+describe('ChapterValuation terminal-reinvestment assumption cell', () => {
+  it('publishes the terminal reinvestment rate and the return on capital behind it', () => {
+    renderChapter({
+      ...DCF,
+      terminal_reinvestment_rate: 0.2,
+      inputs: { ...DCF.inputs, terminal_roic: 0.15 },
+    })
+    expect(screen.getByText(/Terminal reinvestment|终值再投资/)).toBeInTheDocument()
+    expect(screen.getByText('20%')).toBeInTheDocument()
+    expect(screen.getByText(/implied return on new capital 15%/)).toBeInTheDocument()
+  })
+
+  it('omits the cell when the run carries no reinvestment rate', () => {
+    renderChapter(DCF)
+    expect(screen.queryByText(/Terminal reinvestment|终值再投资/)).toBeNull()
+  })
+})

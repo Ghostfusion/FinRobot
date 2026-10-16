@@ -222,6 +222,18 @@ export function ValuationBody({
       : null
   const todayEvEbitda =
     typeof currentEvEbitda === 'number' && Number.isFinite(currentEvEbitda) ? currentEvEbitda : null
+  // The perpetuity's growth-funding assumption: terminal FCF = NOPAT × (1 −
+  // reinvestment), where reinvestment = g ÷ ROIC. Published because the terminal
+  // -growth sensitivity is only readable next to it: NVDA 2026-10-16 reinvested
+  // 20% of terminal NOPAT, i.e. a 15% return on new capital, and the report
+  // printed neither — an external reviewer had to invert the ratio to find it
+  // (review 2026-10-16, checklist G).
+  const reinvestmentRate =
+    typeof dcf?.terminal_reinvestment_rate === 'number' &&
+    Number.isFinite(dcf.terminal_reinvestment_rate)
+      ? dcf.terminal_reinvestment_rate
+      : null
+  const terminalRoic = dcf?.inputs?.terminal_roic ?? null
 
   // DCF bridge: PV(FCF) + PV(terminal) → enterprise value → deductions → equity.
   // PREFERRED (backend `financial_modeling.equity_bridge`): render each deduction
@@ -333,6 +345,22 @@ export function ValuationBody({
               ? `vs ${todayEvEbitda.toFixed(1)}× today`
               : `对比当前 ${todayEvEbitda.toFixed(1)}×`
             : undefined,
+      } as Cell),
+    reinvestmentRate !== null &&
+      ({
+        // Same reasoning as the terminal multiple above: it is the assumption the
+        // terminal growth rides on, so it belongs in the grid, not only in the
+        // field's own tooltip.
+        label: locale === 'en' ? 'Terminal reinvestment' : '终值再投资',
+        value: `${(reinvestmentRate * 100).toFixed(0)}%`,
+        sub:
+          terminalRoic !== null
+            ? locale === 'en'
+              ? `of NOPAT · implied return on new capital ${(terminalRoic * 100).toFixed(0)}%`
+              : `占 NOPAT · 隐含新增资本回报 ${(terminalRoic * 100).toFixed(0)}%`
+            : locale === 'en'
+              ? 'of NOPAT'
+              : '占 NOPAT',
       } as Cell),
     taxRate !== null &&
       ({
