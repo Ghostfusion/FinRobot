@@ -372,9 +372,7 @@ describe('ChapterTechnical', () => {
         sell_mode: false,
       },
     })
-    expect(
-      screen.getByText(/the latest close IS the 20-session low/),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/the latest close IS the 20-session low/)).toBeInTheDocument()
   })
 
   it('omits the note when support sits below the price', () => {
@@ -393,9 +391,7 @@ describe('ChapterTechnical', () => {
         sell_mode: false,
       },
     })
-    expect(
-      screen.queryByText(/the latest close IS the 20-session low/),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/the latest close IS the 20-session low/)).not.toBeInTheDocument()
   })
 
   it('omits the HOLD reconciliation when the verdict is directional', () => {

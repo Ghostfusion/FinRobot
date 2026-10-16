@@ -561,14 +561,11 @@ function SniperPanel({
     // cushion below the tape that does not exist (NVDA 2026-10-16: support $217.23
     // == the $217.23 close, which an external reviewer read as a field echo). The
     // number is a real price-history fact — label the fact.
-    const supportIsPrice =
-      current != null && Math.abs(sniper.support_level - current) < 0.005
+    const supportIsPrice = current != null && Math.abs(sniper.support_level - current) < 0.005
     levelCells.push({
       label: t('chapter.technical.sniper.support20d'),
       value: fmtPx(sniper.support_level),
-      ...(supportIsPrice
-        ? { sub: t('chapter.technical.sniper.support20dIsPrice') }
-        : {}),
+      ...(supportIsPrice ? { sub: t('chapter.technical.sniper.support20dIsPrice') } : {}),
     })
   }
   if (sniper.resistance_level != null) {
