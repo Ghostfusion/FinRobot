@@ -361,6 +361,39 @@ class TestBuildThesisPrompt:
         assert "4.9% below" not in prompt
         assert "$206.45" in prompt
 
+    def test_post_balance_sheet_financing_8k_is_injected(self):
+        """A financing 8-K after the balance-sheet date is stated in the prompt.
+
+        NVDA 2026-10-16: an 8-K of 2026-08-17 (Items 1.01, 2.03) post-dated the
+        2026-07-26 balance sheet while debt, EV and the Merton barrier shipped as
+        current — the narrative was never told the figures were dated.
+        """
+        methods = [
+            ValuationMethod(name="DCF", low=210, mid=245, high=290, confidence=0.5, source="DCF")
+        ]
+        base = _dcf_result(
+            cyclical=False,
+            market_implied=MarketImpliedCheck(horizon_years=5, implied_growth=0.05),
+        )
+        dcf = base.model_copy(
+            update={"inputs": base.inputs.model_copy(update={"ttm_period_end": "2026-07-26"})}
+        )
+        prompt = _build(
+            methods,
+            current_price=230.0,
+            extra_context={
+                "financial_modeling": dcf,
+                "sec_filings": {
+                    "8k_events": [
+                        {"filing_date": "2026-08-17", "items": ["Item 1.01", "Item 2.03"]},
+                    ]
+                },
+            },
+        )
+        assert "BALANCE-SHEET STALENESS" in prompt
+        assert "2026-08-17" in prompt
+        assert "default barrier" in prompt
+
     def test_catalyst_section_wraps_headlines_as_untrusted(self):
         """Injected catalyst headlines are wrapped in an untrusted-news block."""
         methods = [

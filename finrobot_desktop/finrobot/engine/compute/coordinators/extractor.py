@@ -138,6 +138,71 @@ _NET_INCOME_DIVERGENCE_TOL = 0.05
 # the same reason: a filing fact is one authority and the provider series another.
 _XBRL_FISCAL_DIVERGENCE_TOL = 0.05
 
+#: 8-K items that can move the BALANCE SHEET after its date — the three that can
+#: add debt, retire it, or pledge assets: Item 1.01 (entry into a material
+#: definitive agreement), 2.03 (creation of a direct financial obligation or an
+#: obligation under an off-balance-sheet arrangement) and 2.04 (triggering events
+#: that accelerate or increase a financial obligation). Everything the report
+#: states off the balance sheet rides on it: total debt, net debt, EV, the WACC's
+#: debt weight and the Merton default barrier.
+_BALANCE_SHEET_8K_ITEMS: Final[dict[str, str]] = {
+    "1.01": "entry into a material definitive agreement",
+    "2.03": "creation of a direct financial obligation",
+    "2.04": "a triggering event accelerating a financial obligation",
+}
+
+
+def post_balance_sheet_financing_warning(
+    *,
+    balance_sheet_date: str | None,
+    filings_8k: Sequence[Mapping[str, Any]] | None,
+) -> str | None:
+    """Disclose a financing 8-K filed AFTER the balance-sheet date.
+
+    Returns None when no qualifying filing post-dates the balance sheet — that is
+    the honest "nothing found" answer, never a manufactured clean bill of health.
+    ``balance_sheet_date`` is the date the report's balance-sheet figures are
+    stated as of (the TTM window's end); comparison uses the ISO date prefix so a
+    full timestamp and a bare ``YYYY-MM-DD`` both work. Item matching is exact
+    after normalizing the ``Item `` prefix, so ``Item 2.02`` (results of
+    operations) can never be read as ``2.03``.
+
+    2026-10-16 NVDA: an 8-K filed 2026-08-17 carrying Items 1.01 and 2.03 (a
+    material agreement and a new financial obligation) post-dated the 2026-07-26
+    balance sheet, and the report neither reconciled nor disclosed it — debt, EV
+    and the default barrier shipped as current with nothing to say they were not
+    (review 2026-10-16, checklist C).
+    """
+    if not balance_sheet_date or not filings_8k:
+        return None
+    horizon = str(balance_sheet_date)[:10]
+    if len(horizon) != 10:
+        return None
+    hits: list[tuple[str, list[str]]] = []
+    for event in filings_8k:
+        if not isinstance(event, Mapping):
+            continue
+        filed = str(event.get("filing_date") or event.get("filed_at") or "")[:10]
+        if len(filed) != 10 or filed <= horizon:
+            continue
+        items = [str(item).replace("Item", "").strip() for item in (event.get("items") or [])]
+        matched = [code for code in _BALANCE_SHEET_8K_ITEMS if code in items]
+        if matched:
+            hits.append((filed, matched))
+    if not hits:
+        return None
+    hits.sort(reverse=True)
+    newest_date, newest_items = hits[0]
+    item_label = "Items" if len(newest_items) > 1 else "Item"
+    reasons = "; ".join(_BALANCE_SHEET_8K_ITEMS[code] for code in newest_items)
+    others = f"; {len(hits) - 1} further such filing(s) since the balance sheet" if len(hits) > 1 else ""
+    return (
+        f"an SEC 8-K filed {newest_date} ({item_label} {', '.join(newest_items)}: {reasons})"
+        f"{others} post-dates the balance sheet ({horizon}): total debt, net debt, enterprise "
+        f"value and the default barrier are stated as of the balance-sheet date and are NOT "
+        f"restated for it — treat them as possibly stale, not current."
+    )
+
 
 def xbrl_fiscal_divergence_warning(
     *,

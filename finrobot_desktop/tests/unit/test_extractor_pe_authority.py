@@ -17,6 +17,7 @@ from finrobot.engine.compute.coordinators.extractor import (
     PE_BASIS_NET_INCOME,
     extract_financial_data,
     net_income_divergence_warning,
+    post_balance_sheet_financing_warning,
     xbrl_fiscal_divergence_warning,
 )
 from finrobot.engine.data.interface import DataResult
@@ -358,3 +359,82 @@ class TestXbrlFiscalDivergenceWarning:
         # Some concepts carry a 'YYYY' period_end rather than a full date.
         warning = self._warning(xbrl_fact={"value": 2_188_800_000.0, "period_end": "2025"})
         assert warning is not None and "FY2025" in warning
+
+
+class TestPostBalanceSheetFinancingWarning:
+    """A financing 8-K filed AFTER the balance sheet must be disclosed.
+
+    Owner review 2026-10-16 (NVDA): an 8-K filed 2026-08-17 carrying Items 1.01
+    (material definitive agreement) and 2.03 (new direct financial obligation)
+    post-dated the 2026-07-26 balance sheet, and the report shipped debt, EV and
+    the Merton default barrier as current with nothing to say they were not.
+    """
+
+    _NVDA_8KS = [
+        {"filing_date": "2026-09-03", "items": ["Item 8.01", "Item 9.01"]},
+        {"filing_date": "2026-08-26", "items": ["Item 2.02", "Item 9.01"]},
+        {"filing_date": "2026-08-17", "items": ["Item 1.01", "Item 2.03", "Item 7.01", "Item 9.01"]},
+        {"filing_date": "2026-07-02", "items": ["Item 5.02"]},
+    ]
+
+    def _warning(self, **overrides):
+        kwargs = dict(
+            balance_sheet_date="2026-07-26",
+            filings_8k=self._NVDA_8KS,
+        )
+        kwargs.update(overrides)
+        return post_balance_sheet_financing_warning(**kwargs)
+
+    def test_names_the_filing_the_items_and_the_stale_figures(self) -> None:
+        warning = self._warning()
+        assert warning is not None
+        assert "2026-08-17" in warning
+        assert "Items 1.01, 2.03" in warning
+        # The item labels are spelled out, not left as bare codes.
+        assert "material definitive agreement" in warning
+        assert "creation of a direct financial obligation" in warning
+        # The figures whose staleness the reader must be told about.
+        assert "default barrier" in warning
+        assert "2026-07-26" in warning
+        # Non-financing items on the same filing are not named as reasons.
+        assert "7.01" not in warning
+        assert "9.01" not in warning
+
+    def test_a_filing_on_or_before_the_balance_sheet_is_silent(self) -> None:
+        assert self._warning(balance_sheet_date="2026-09-30") is None
+        assert self._warning(balance_sheet_date="2026-08-17") is None
+
+    def test_non_financing_items_are_not_a_debt_event(self) -> None:
+        # 2.02 (results of operations) is announcing earnings, not borrowing —
+        # exact item matching, so it can never be read as 2.03.
+        assert (
+            self._warning(
+                filings_8k=[{"filing_date": "2026-09-01", "items": ["Item 2.02", "Item 9.01"]}]
+            )
+            is None
+        )
+        assert (
+            self._warning(
+                filings_8k=[{"filing_date": "2026-09-01", "items": ["Item 5.02", "Item 2.04"]}]
+            )
+            is not None
+        )
+
+    def test_missing_inputs_are_silent(self) -> None:
+        assert self._warning(balance_sheet_date=None) is None
+        assert self._warning(balance_sheet_date="") is None
+        assert self._warning(filings_8k=None) is None
+        assert self._warning(filings_8k=[]) is None
+        # A malformed date is not comparable — never guess a stale balance sheet.
+        assert self._warning(balance_sheet_date="2026-07") is None
+
+    def test_several_filings_report_the_newest_and_count_the_rest(self) -> None:
+        warning = self._warning(
+            filings_8k=[
+                {"filing_date": "2026-08-01", "items": ["Item 2.03"]},
+                {"filing_date": "2026-09-20", "items": ["Item 1.01"]},
+            ]
+        )
+        assert warning is not None
+        assert "2026-09-20" in warning
+        assert "further such filing(s)" in warning

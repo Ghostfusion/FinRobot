@@ -78,6 +78,7 @@ from finrobot.engine.compute.coordinators.credit_payload import (
 from finrobot.engine.compute.coordinators.extractor import (
     net_income_divergence_warning,
     normalize_financials_to_usd,
+    post_balance_sheet_financing_warning,
     xbrl_fiscal_divergence_warning,
 )
 from finrobot.engine.compute.coordinators.historical_extractor import fetch_historical_metrics
@@ -296,6 +297,25 @@ async def _execute_data_collection_with_sec(
                     and _annual_divergence not in financial_output.structured.warnings
                 ):
                     financial_output.structured.warnings.append(_annual_divergence)
+
+        # A financing 8-K AFTER the balance-sheet date can invalidate the figures
+        # every balance-sheet-dependent number rides on (debt, net debt, EV, the
+        # WACC's debt weight, the Merton barrier). We cannot rebuild the balance
+        # sheet from an 8-K, so disclosure is the whole remedy — and it is the one
+        # the 2026-10-16 NVDA report was missing: an 8-K filed 2026-08-17 (Items
+        # 1.01, 2.03) post-dated the 2026-07-26 balance sheet while debt, EV and
+        # the default barrier shipped as current (review 2026-10-16, checklist C).
+        _provenance = financial_output.structured.provenance
+        _post_bs = post_balance_sheet_financing_warning(
+            balance_sheet_date=(
+                str(_provenance.as_of)[:10]
+                if _provenance is not None and _provenance.as_of is not None
+                else None
+            ),
+            filings_8k=eightk.get("events") if isinstance(eightk, dict) else None,
+        )
+        if _post_bs and _post_bs not in financial_output.structured.warnings:
+            financial_output.structured.warnings.append(_post_bs)
 
     return financial_output
 

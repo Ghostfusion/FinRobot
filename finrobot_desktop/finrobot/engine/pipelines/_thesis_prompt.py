@@ -13,7 +13,9 @@ word; prompt-discipline audit tests pin them downstream.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 
+from finrobot.engine.compute.coordinators.extractor import post_balance_sheet_financing_warning
 from finrobot.engine.compute.coordinators.news import sanitize_untrusted_text
 from finrobot.engine.compute.operators.audit import compute_momentum_context, is_momentum_divergent
 from finrobot.engine.compute.operators.valuation_synthesis import CanonicalThesis
@@ -398,6 +400,35 @@ def build_thesis_prompt(
             f"memory. The gap of the target vs the market price IS the implied upside "
             f"above ({upside_str}) — do not compute a different percentage."
             f"{market_implied_line}"
+        )
+
+    # ── Balance-sheet staleness (computed) ─────────────────────────────────────
+    # Total debt, cash, EV, the WACC's debt weight and the Merton barrier all rest
+    # on ONE balance sheet. A financing 8-K filed after it (Items 1.01 / 2.03 /
+    # 2.04) may already have changed them, and the report cannot rebuild a balance
+    # sheet from filing text — so the honest move is to say the figures are dated.
+    # NVDA 2026-10-16 shipped debt/EV/default-barrier as current while an 8-K of
+    # 2026-08-17 (Items 1.01, 2.03) post-dated its 2026-07-26 balance sheet,
+    # undisclosed (review 2026-10-16, checklist C).
+    _sec_ctx = structured_context.get("sec_filings")
+    _bs_date = (
+        str(dcf_ctx.inputs.ttm_period_end)[:10]
+        if isinstance(dcf_ctx, DCFResult) and dcf_ctx.inputs.ttm_period_end
+        else None
+    )
+    _post_bs_note = (
+        post_balance_sheet_financing_warning(
+            balance_sheet_date=_bs_date,
+            filings_8k=_sec_ctx.get("8k_events") if isinstance(_sec_ctx, Mapping) else None,
+        )
+        if _bs_date
+        else None
+    )
+    if _post_bs_note:
+        thesis_prompt = (
+            f"{thesis_prompt}\n\nBALANCE-SHEET STALENESS (computed — state it wherever the "
+            f"narrative quotes debt, cash, enterprise value or the default barrier): "
+            f"{_post_bs_note}"
         )
 
     # ── Momentum context (BACKLOG A2/P1-1) ─────────────────────────────────────
