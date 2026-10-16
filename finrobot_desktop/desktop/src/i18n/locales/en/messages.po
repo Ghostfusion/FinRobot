@@ -977,6 +977,10 @@ msgid "chapter.technical.sniper.support20d"
 msgstr "Support (20d)"
 
 #. js-lingui-explicit-id
+msgid "chapter.technical.sniper.support20dIsPrice"
+msgstr "the latest close IS the 20-session low — this level is the current price, not a cushion below it"
+
+#. js-lingui-explicit-id
 msgid "chapter.technical.sniper.resistance20d"
 msgstr "Resistance (20d)"
 

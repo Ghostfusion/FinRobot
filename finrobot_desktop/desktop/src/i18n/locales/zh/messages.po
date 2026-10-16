@@ -977,6 +977,10 @@ msgid "chapter.technical.sniper.support20d"
 msgstr "支撑（20 日）"
 
 #. js-lingui-explicit-id
+msgid "chapter.technical.sniper.support20dIsPrice"
+msgstr "最新收盘价即 20 个交易日最低——该位就是当前价，并非其下方的缓冲"
+
+#. js-lingui-explicit-id
 msgid "chapter.technical.sniper.resistance20d"
 msgstr "阻力（20 日）"
 

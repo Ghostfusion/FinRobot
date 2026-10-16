@@ -352,6 +352,52 @@ describe('ChapterTechnical', () => {
     expect(note.textContent).toMatch(/HOLD — mechanical reference levels, not a trade signal/)
   })
 
+  // Change 6(d): the 20-session support is the trailing minimum of CLOSES. When the
+  // latest close IS that minimum the level equals the price, and the bare "Support
+  // (20d)" cell reads as a cushion below the tape that does not exist (NVDA
+  // 2026-10-16: $217.23 support beside the $217.23 close).
+  it('says so when the 20-day support IS the current price', () => {
+    renderChapter({
+      sniper: {
+        ideal_buy: null,
+        secondary_buy: null,
+        stop_loss: null,
+        take_profit: null,
+        position_size_pct: null,
+        safety_margin: null,
+        support_level: 162.0, // == the helper's snapshot price
+        resistance_level: 239.24,
+        risk_reward_ratio: null,
+        direction: 'NEUTRAL',
+        sell_mode: false,
+      },
+    })
+    expect(
+      screen.getByText(/the latest close IS the 20-session low/),
+    ).toBeInTheDocument()
+  })
+
+  it('omits the note when support sits below the price', () => {
+    renderChapter({
+      sniper: {
+        ideal_buy: null,
+        secondary_buy: null,
+        stop_loss: null,
+        take_profit: null,
+        position_size_pct: null,
+        safety_margin: null,
+        support_level: 154.0, // below the 162.0 snapshot
+        resistance_level: 239.24,
+        risk_reward_ratio: null,
+        direction: 'NEUTRAL',
+        sell_mode: false,
+      },
+    })
+    expect(
+      screen.queryByText(/the latest close IS the 20-session low/),
+    ).not.toBeInTheDocument()
+  })
+
   it('omits the HOLD reconciliation when the verdict is directional', () => {
     renderChapter(
       {

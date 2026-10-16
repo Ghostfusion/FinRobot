@@ -181,6 +181,7 @@ export function ChapterTechnical({
           sniper={sniper}
           t={t}
           fmtPx={fmtPx}
+          current={current}
           holdNote={holdReconciliation}
           neutralNote={neutralNote}
         />
@@ -431,12 +432,15 @@ function SniperPanel({
   sniper,
   t,
   fmtPx,
+  current = null,
   holdNote = null,
   neutralNote,
 }: {
   sniper: SniperShape
   t: (key: string, params?: Record<string, string | number>) => string
   fmtPx: (v: number) => string
+  // The snapshot price, so a "20-day support" that IS the price can say so.
+  current?: number | null
   // The verdict-vs-tactical-box reconciliation, pre-resolved by the chapter so this
   // panel stays free of verdict/locale logic. Rendered only when the box actually
   // publishes directional cells (in NEUTRAL there are none).
@@ -552,9 +556,19 @@ function SniperPanel({
   }
 
   if (sniper.support_level != null) {
+    // The trailing-20-session minimum of CLOSES. When the latest close IS that
+    // minimum the level equals the market price, and "support" then reads as a
+    // cushion below the tape that does not exist (NVDA 2026-10-16: support $217.23
+    // == the $217.23 close, which an external reviewer read as a field echo). The
+    // number is a real price-history fact — label the fact.
+    const supportIsPrice =
+      current != null && Math.abs(sniper.support_level - current) < 0.005
     levelCells.push({
       label: t('chapter.technical.sniper.support20d'),
       value: fmtPx(sniper.support_level),
+      ...(supportIsPrice
+        ? { sub: t('chapter.technical.sniper.support20dIsPrice') }
+        : {}),
     })
   }
   if (sniper.resistance_level != null) {
