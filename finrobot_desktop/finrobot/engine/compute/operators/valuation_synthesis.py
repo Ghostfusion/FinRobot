@@ -738,7 +738,10 @@ def synthesize_valuations(
 #     uncertainty by widening these bands + the target range, NEVER by withholding
 #     the call (the deleted REVIEW state).
 # They travel into both the LLM prompt (so the narrative is consistent) and the
-# post-run override (so the contract holds even if the LLM drifts).
+# post-run override (so the contract holds even if the LLM drifts) — and, since
+# 2026-10-16, into the published derivation line itself (``verdict_tier_note``),
+# because a tier the narrative can only describe qualitatively is a tier the model
+# will explain with an invented mechanism.
 _VERDICT_BANDS: dict[str, tuple[float, float]] = {
     "high": (0.20, 0.25),
     "medium": (0.30, 0.35),
@@ -837,6 +840,49 @@ def verdict_from_upside(upside: float, confidence: str = "high") -> str:
     if upside <= -sell:
         return "SELL"
     return "HOLD"
+
+
+def verdict_tier_note(upside: float, confidence: str) -> str:
+    """WHY this anchor gap produced its verdict — the tier's own thresholds, stated.
+
+    QCOM 2026-10-12 published HOLD with a $124.44 target against a $174.43 market
+    price and justified it in prose as the widened band being "wide enough to contain
+    today's quote" — a claim its own numbers refute (the price sits above the whole
+    band). The real cause is neither the band's width nor a containment relation: it is
+    the confidence tier's dead band, which the prompt named only qualitatively ("a
+    lower-confidence anchor requires price to sit further from fair value"), leaving the
+    model to invent a mechanism to fill the gap. This returns the cause as a sentence
+    carrying the tier's numbers, for the derivation line the narrative must follow.
+
+    Stated in the SAME measure the tiers are applied on: ``upside`` is
+    ``(anchor - price) / price``, so a SELL fires when the anchor sits at least ``sell``
+    BELOW the market price and a BUY when it sits at least ``buy`` ABOVE it. Pure, and
+    it derives the verdict with ``verdict_from_upside`` so the sentence and the call can
+    never disagree. Adds NO dollar amount (the derivation line's $-amounts are read by
+    the conclusion-cue clause, C3).
+    """
+    buy, sell = _VERDICT_BANDS.get(confidence, _VERDICT_BANDS["high"])
+    verdict = verdict_from_upside(upside, confidence)
+    gap = f"{abs(upside):.1%}"
+    side = "above" if upside >= 0 else "below"
+    thresholds = (
+        f"a BUY needs the anchor at least {buy:.0%} above the market price and a SELL "
+        f"needs it at least {sell:.0%} below it"
+    )
+    if verdict == "HOLD":
+        why = (
+            f"{thresholds}; this anchor sits {gap} {side} the market price, inside the "
+            f"{confidence}-confidence HOLD dead band — no directional threshold is met"
+        )
+    else:
+        why = (
+            f"{thresholds}; this anchor sits {gap} {side} the market price, which clears "
+            f"the {verdict} threshold"
+        )
+    return (
+        f"The {verdict} is this confidence tier's own judgement — not the band's width, "
+        f"and not whether the band brackets the market price: {why}."
+    )
 
 
 @dataclass(frozen=True)
@@ -1209,9 +1255,18 @@ def resolve_canonical_thesis(vs: object, ticker: str) -> CanonicalThesis:
             )
         else:
             anchor_txt = _blend_label(len(vs.methods))
+        # The verdict's own cause rides with the target. QCOM 2026-10-12 published
+        # HOLD beside a target $50 below the market price and justified it in prose as
+        # the widened band being "wide enough to contain today's quote" — the numbers
+        # refute that (the price sits above the whole band), and the true cause (the
+        # medium tier's dead band) was nowhere in the derivation, so the narrative
+        # invented one. State it here: this string is BOTH the reader's basis line and
+        # the prompt's `Derivation:` line (apply_canonical_override publishes it, and
+        # build_thesis_prompt injects it), so one sentence removes the gap at both ends.
         basis = (
             f"Confidence={vs.confidence}; {anchor_txt}: {method_breakdown} → "
-            f"${target:.2f}.{range_txt} {vs.degradation_note or ''}"
+            f"${target:.2f}.{range_txt} {vs.degradation_note or ''} "
+            f"{verdict_tier_note(upside, vs.confidence)}"
         ).strip()
 
     # Substantive method suppressions — a runnable method a guard sent off (cyclical

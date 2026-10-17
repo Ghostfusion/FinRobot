@@ -1291,7 +1291,7 @@ class TestClampProvenanceDisclosure:
         assert "marginal NWC ratio" not in prov
         assert "trailing" in prov
         assert prov.endswith(
-            "average change in working capital as % of revenue; a positive figure means "
+            "median change in working capital as % of revenue; a positive figure means "
             "working capital is absorbing cash)"
         )
 
@@ -1376,7 +1376,7 @@ class TestNwcClampDegradation:
         assert inputs.nwc_pct_revenue == pytest.approx(0.10)
         prov = inputs.assumption_provenance["nwc_pct_revenue"]
         assert prov.startswith("10.0% of revenue (capped from a trailing")
-        assert "average of 15.0% of revenue" in prov
+        assert "median of 15.0% of revenue" in prov
         assert "marginal NWC ratio" not in prov
 
     def test_negative_explicit_growth_flips_drag_to_release(self):
@@ -1400,7 +1400,7 @@ class TestNwcClampDegradation:
         assert "capped" not in prov
         assert "marginal NWC ratio" not in prov
         assert prov.endswith(
-            "average change in working capital as % of revenue; a positive figure means "
+            "median change in working capital as % of revenue; a positive figure means "
             "working capital is absorbing cash)"
         )
 

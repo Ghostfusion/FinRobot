@@ -8,6 +8,7 @@ from pydantic_ai.models.test import TestModel
 
 from finrobot.engine.data.interface import DataResult
 from finrobot.engine.deps import FinRobotDeps
+from finrobot.engine.compute.operators.monte_carlo import MonteCarloResult
 from finrobot.engine.pipelines.equity_research import create_equity_research_pipeline
 
 
@@ -2748,3 +2749,54 @@ class TestSec8kCatalystMateriality:
         cat = _sec_8k_to_catalyst({"items": ["Item 2.01", "Item 9.01"]})
         assert cat.category == "acquisition"
         assert "Acquisition or disposition completed" in cat.headline
+
+
+class TestMonteCarloSummary:
+    """The technical summary's Monte Carlo sentence (owner review of QCOM 2026-10-12).
+
+    The percentiles come from the paths that survived the operator's own filters, not
+    from the requested budget, and the report used to print only the survivor count
+    ("across 9,972 simulations") — which reads as 28 paths having vanished silently. The
+    orchestrator's tool line has printed "n valid of n total" all along.
+    """
+
+    @staticmethod
+    def _mc(n_valid: int, n_simulations: object = 10_000) -> MonteCarloResult:
+        used: dict[str, object] = {"centered_on": "base-case DCF assumptions"}
+        if n_simulations is not None:
+            used["n_simulations"] = n_simulations
+        return MonteCarloResult(
+            implied_prices=[89.89, 124.58, 188.88],
+            percentiles={"5": 89.89, "50": 124.58, "95": 188.88},
+            mean=130.03,
+            std=30.78,
+            current_price_percentile=90.9,
+            histogram_bins=[89.89, 188.88],
+            histogram_counts=[1, 1],
+            assumptions_used=used,
+            n_valid=n_valid,
+        )
+
+    def test_states_the_survivor_count_of_the_requested_budget(self) -> None:
+        from finrobot.engine.pipelines.equity_research import _monte_carlo_summary
+
+        line = _monte_carlo_summary(self._mc(9_972))
+        assert "across 9,972 of 10,000 simulated paths" in line
+        assert "outside the distribution's own 3x-IQR fence" in line
+
+    def test_names_the_exclusion_calibers_not_a_bare_count(self) -> None:
+        """The two filters are stated, so the reader does not have to infer why paths
+        are missing (the review inferred "silent dropouts")."""
+        from finrobot.engine.pipelines.equity_research import _monte_carlo_summary
+
+        assert "non-positive terminal value" in _monte_carlo_summary(self._mc(9_972))
+
+    def test_falls_back_to_the_bare_count_when_the_budget_is_absent(self) -> None:
+        """A legacy result carries no ``n_simulations`` (and a full-budget run has
+        nothing to disclose): the sentence then carries one count, never a bogus
+        denominator."""
+        from finrobot.engine.pipelines.equity_research import _monte_carlo_summary
+
+        assert "across 9,972 simulated paths" in _monte_carlo_summary(self._mc(9_972, None))
+        assert "of 10,000" not in _monte_carlo_summary(self._mc(9_972, None))
+        assert "across 10,000 simulated paths" in _monte_carlo_summary(self._mc(10_000))

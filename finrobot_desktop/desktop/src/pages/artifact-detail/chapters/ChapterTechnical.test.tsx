@@ -93,6 +93,27 @@ describe('ChapterTechnical', () => {
     expect(screen.getByText('38th')).toBeInTheDocument()
   })
 
+  it('shows the requested budget beside the surviving paths (a shortfall is not silent dropouts)', () => {
+    // QCOM 2026-10-12 review read "It ran 9,972 sims, presumably 28 short of a 10,000
+    // target … suggests silent dropouts". Both numbers are in the payload: the
+    // percentiles come from the paths that survived the operator's filters, not from the
+    // budget. The cell now prints valid/total when they differ (the fixture above, with
+    // no n_simulations recorded, keeps the legacy single count).
+    renderChapter({
+      monte_carlo: {
+        histogram_bins: [100, 120, 140, 160, 180, 200],
+        histogram_counts: [50, 120, 230, 180, 90],
+        percentiles: { '5': 89.89, '50': 124.58, '95': 188.88 },
+        mean: 130.03,
+        std: 30.78,
+        current_price_percentile: 90.9,
+        n_valid: 9972,
+        assumptions_used: { n_simulations: 10000, valid_simulations: 9972 },
+      },
+    })
+    expect(screen.getByText('9,972 / 10,000')).toBeInTheDocument()
+  })
+
   it('staggers the Current/P95 marker labels onto different rows when the current price sits near a percentile (they would otherwise render on top of each other)', () => {
     // current (snapshotPrice=193) sits 2 price-units from P95 (195) — a real
     // symptom for a name trading near its Monte Carlo distribution's tail

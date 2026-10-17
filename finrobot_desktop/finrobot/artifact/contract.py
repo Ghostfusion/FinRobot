@@ -717,9 +717,21 @@ def _iter_text(value: Any) -> Iterator[str]:
             yield from _iter_text(item)
 
 
-def _prose_strings(structured: dict[str, Any]) -> Iterator[tuple[str, str]]:
-    """(field path, text) for every analyst-facing string §4.7 names: the thesis
-    prose, its catalyst/risk bullets, the summary, and ``llm_narrative``."""
+def _prose_strings(artifact: "Artifact") -> Iterator[tuple[str, str]]:
+    """(field path, text) for every analyst-facing string §4.7 names: the thesis prose,
+    its catalyst/risk bullets, ``llm_narrative.*`` and ``summary_text``.
+
+    The last two come off ``artifact.outputs``, NOT off ``structured``: they are SIBLINGS of
+    ``structured`` in every persisted payload (and the fixture files carry
+    ``summary_text=""`` with no ``llm_narrative`` at all), so a reader that looked for those
+    two keys INSIDE ``structured`` read neither on any real artifact. The whole prose family
+    (C14a/C14b/C15/C16) was blind to them — which is where the owner review's third QCOM
+    2026-10-12 error actually lived ("...a +/-20% placeholder band of $124.44 to $124.44" is
+    ``llm_narrative.valuation_overview``, and C16 stayed quiet on that artifact until this
+    reader was fixed). ``_iter_narrative_strings`` (C2) always read all three sources; this
+    is the same reading with paths attached."""
+    outputs = artifact.outputs
+    structured = outputs.structured if isinstance(outputs.structured, dict) else {}
     thesis = structured.get("thesis")
     thesis = thesis if isinstance(thesis, dict) else {}
     for key in ("narrative", "tagline", "price_target_basis"):
@@ -733,10 +745,10 @@ def _prose_strings(structured: dict[str, Any]) -> Iterator[tuple[str, str]]:
         for index, item in enumerate(items):
             for text in _iter_text(item):
                 yield f"thesis.{list_key}[{index}]", text
-    summary = structured.get("summary_text")
+    summary = outputs.summary_text
     if isinstance(summary, str) and summary:
         yield "summary_text", summary
-    narrative = structured.get("llm_narrative")
+    narrative = outputs.llm_narrative
     if isinstance(narrative, dict):
         for key, value in narrative.items():
             for text in _iter_text(value):
@@ -1530,7 +1542,7 @@ def _clause_c14a_direction_vs_sign(artifact: "Artifact") -> Finding | None:
     net_flow = _num(governance.get("insider_net_flow"))
     if net_flow is None or net_flow == 0:
         return None
-    for field, text in _prose_strings(structured):
+    for field, text in _prose_strings(artifact):
         lowered = text.lower()
         for word, claims_positive in _FLOW_WORDS:
             if word in lowered and (net_flow > 0) != claims_positive:
@@ -1566,13 +1578,16 @@ def _clause_c14b_unresolved_placeholder(artifact: "Artifact") -> Finding | None:
     read, not a point estimate"), which is the producer's own honest copy, not a
     defect. §7.1's re-calibrate-first rule applied before promotion.
 
-    MEASURED CATCH LIST 10 / 10 tickers — AFRM, ALL, AMZN, DVN, FOXA, GMED, NFLX,
-    PGR, THC, UTHR, span `…10-14T00:*` … `…10-14T19:59` — LIVE. §4.7's locked
-    remediation is H / claim scope with sentence deletion, unavailable in the
-    persist gate today (see `C14a`), so this is staged `S`.
+    MEASURED CATCH LIST 20 — AFRM, ALL, AMZN, DVN, EIX, FOXA, GMED, INVH, LEN, LPLA,
+    NFLX, NU, OMC, PGR, Q x2, SOFI, THC x2, UTHR, spanning `…10-14T00:16` … `…10-15T03:32`
+    — LIVE. Re-measured 2026-10-16 after the ``_prose_strings`` reader fix: the count
+    DOUBLED from the recorded 10, because the other ten sentences sit in
+    ``llm_narrative``/``summary_text`` — fields this clause could not read while the reader
+    looked for them inside ``structured``. §4.7's locked remediation is H / claim scope with
+    sentence deletion, unavailable in the persist gate today (see `C14a`), so this is staged
+    `S`.
     """
-    structured = _structured(artifact)
-    for field, text in _prose_strings(structured):
+    for field, text in _prose_strings(artifact):
         for sentence in _sentences(text):
             if _PLACEHOLDER not in sentence:
                 continue
@@ -1587,6 +1602,307 @@ def _clause_c14b_unresolved_placeholder(artifact: "Artifact") -> Finding | None:
                     f"{field} carries {_PLACEHOLDER!r} where an insider-flow amount "
                     f"belongs — the withheld-target scrubber took a figure this "
                     f"report publishes elsewhere: {sentence.strip()[:200]!r}"
+                ),
+            )
+    return None
+
+
+# ── C15: a prose band-containment claim the numbers refute ───────────────────
+
+# The claim shape: a BAND verb whose OBJECT is the market price — "wide enough to
+# contain today's quote", "covers the current price", "spans the market price". The
+# verb→object ADJACENCY is the whole predicate. A bare verb list (contain/span/
+# bracket/inside/within) was measured first and REJECTED as over-broad by false
+# positive: it fired on 8 of the 9 equity artifacts in the corpus, 7 of them falsely,
+# because those verbs routinely take another object in a TRUE sentence — "the method's
+# own range of $102.17–$153.26 bracketing the target", "the published band … brackets
+# that anchor", "the DCF band spans $76.42 to $114.63", "no scenario inside the model",
+# "within the method". Only one corpus artifact claims a containment of the PRICE.
+_BAND_HOLDS_PRICE_RE = re.compile(
+    r"\b(?:contain\w*|cover\w*|span\w*|bracket\w*|encompass\w*)\s+"
+    r"(?:the\s+|today'?s\s+|current\s+|spot\s+|its\s+|this\s+|all\s+of\s+)*"
+    r"(?:market\s+)?(?:price|quote|spot)\b",
+    re.IGNORECASE,
+)
+# The inverse claim, in the shape prose actually writes it: the price SITS above/below
+# the whole band. Also adjacency-bound — "sits below the $354.73 market price" names the
+# price after the preposition and is not this claim. The subject noun set is wider than
+# the containment form's ("shares" / "stock" / "equity" name the same object in a
+# sentence like "the shares sit above the entire band"), which is safe here because the
+# claim additionally requires the whole-band quantifier.
+_PRICE_OUTSIDE_BAND_RE = re.compile(
+    r"\b(?:price|quote|spot|shares?|stock|equity)\b[^.]{0,40}?"
+    r"\b(?:sits?|is|are|remains?|trades?|stands?|lies?)\s+"
+    r"(?:entirely\s+|well\s+|far\s+|still\s+)*"
+    r"(?:above|below|outside)\s+the\s+(?:entire|whole|full|top|bottom)\b",
+    re.IGNORECASE,
+)
+# Which band the claim is about. The claim must name a band at all ("the band" /
+# "the range" is how a narrative refers back to the published one), and it must not
+# be a DIFFERENTLY QUALIFIED band: "52-week range", "sell-side range" and "peer
+# multiples band" are other bands, and judging a true statement about one of them
+# against the published target band is the false positive that would get this clause
+# switched off. A qualifier immediately before the noun disqualifies that mention.
+_BAND_NOUN_RE = re.compile(r"\b(?:band|range)\b", re.IGNORECASE)
+# The claim must be about a band the narrative refers to AS the run's band ("the band",
+# "our range") — a parenthetical aside about another band is where this clause first went
+# wrong: LPLA 2026-10-14 wrote "…the EV/EBITDA cross-check … brackets spot at a $366.26
+# mid (range $324.94–$407.57)", which is a claim about the CROSS-CHECK's own band, and
+# judging it against the published target band manufactures a violation the artifact does
+# not contain. A bare "(range …)" carries no definite reference and is not this band.
+_DEFINITE_BAND_REFERENTS = ("the", "our", "this", "published", "target", "headline")
+_OTHER_BAND_QUALIFIERS = (
+    "52-week",
+    "52 week",
+    "52w",
+    "trailing",
+    "trading",
+    "20-day",
+    "20 day",
+    "analyst",
+    "street",
+    "consensus",
+    "sell-side",
+    "peer",
+    "historical",
+    "five-year",
+    "5-year",
+    "three-year",
+    "3-year",
+    "10-year",
+    "typical",
+    "multiple",
+    "percentile",
+    "support",
+    "resistance",
+    "thesis",
+    # A METHOD-qualified band is a different band from the published synthesis band, and
+    # the methods' own bands legitimately sit above or below the price (OMC 2026-10-15
+    # "the price therefore sits below the entire DCF band" is TRUE: its DCF band is
+    # 218.79-328.18 against a $78.41 price, while the published 31.09-273.49 band holds
+    # it). Judging that sentence against the published band manufactured a violation.
+    "dcf",
+    "ddm",
+    "rim",
+    "residual",
+    "ev/ebitda",
+    "comps",
+    "sotp",
+    "method",
+)
+
+
+#: A noun phrase boundary: a qualifier before one of these does not modify the band noun
+#: ("…cross-validate the DCF, the band…" — the DCF belongs to the previous phrase).
+_PHRASE_BOUNDARY_CHARS = ",;:()[]{}—–.!?\n"
+
+
+def _band_mention_is_published(text: str, start: int) -> bool:
+    """True when the band noun at ``start`` refers to THIS run's band.
+
+    Two guards, both measured, and both scoped to the noun's OWN phrase (bounded by the
+    nearest punctuation — a window alone is not enough, in either direction):
+
+    * a definite referent ("the band", "our range") rather than a bare aside — LPLA
+      2026-10-14's "(range $324.94-$407.57)" is a parenthetical about the CROSS-CHECK's
+      band, and treating it as this run's band manufactured a violation;
+    * no qualifier naming a DIFFERENT band ("52-week range", "peer band") — and, since
+      2026-10-16, no METHOD-named band either ("the DCF band"). OMC 2026-10-15's "the price
+      therefore sits below the entire DCF band" is TRUE (its DCF band is 218.79-328.18
+      against a $78.41 price, while the published 31.09-273.49 band holds it). The check
+      reads the two tokens directly before the noun, so QCOM's own sentence — which mentions
+      the DCF one phrase earlier, then says "the band was widened to …" — keeps its
+      reference to the run's band.
+    """
+    phrase = text[max(0, start - 40) : start].lower()
+    boundary = max((phrase.rfind(char) for char in _PHRASE_BOUNDARY_CHARS), default=-1)
+    tokens = phrase[boundary + 1 :].split()
+    if not tokens:
+        return False
+    modifiers = tokens[-2:]
+    if any(qualifier in token for token in modifiers for qualifier in _OTHER_BAND_QUALIFIERS):
+        return False
+    return any(
+        re.search(rf"\b{referent}\b", token)
+        for token in modifiers
+        for referent in _DEFINITE_BAND_REFERENTS
+    )
+
+
+def _clause_c15_band_containment(artifact: "Artifact") -> Finding | None:
+    """S — prose may not assert a band-containment relation the artifact's numbers refute.
+
+    QCOM 2026-10-12 shipped HOLD with ``target_low/high`` 93.33/155.54 against a 174.43
+    market price — the price sits ABOVE the whole band — and justified the call in prose
+    as the widened band being *"wide enough to contain today's quote, which is precisely
+    why the verdict is Hold rather than Sell"*. Every amount in that sentence resolves to
+    a real leaf, so ``report_drift`` sees nothing (it judges tokens, never relations), and
+    ``C8`` never runs (it reads ``cross_checks``, and only for BUY/SELL). The claim, not
+    the arithmetic, was the defect.
+
+    The relation is settled by three published numbers (``current_price``,
+    ``target_low``, ``target_high``) and the claim is matched in prose, so this clause is
+    the same shape as C14a's direction-vs-sign check: a prose relation the artifact's own
+    fields settle. It abstains whenever the relation cannot be settled from the payload
+    (no price, no band, a degenerate band) — never a guess.
+
+    Staged `S`, per §4.7's locked remediation ("delete the clause, never rewrite it"):
+    ``_withhold`` scrubs values and stamps the narrative, it cannot delete a sentence, so
+    arming this `H` today would withhold the TARGET for a prose defect.
+
+    MEASURED CATCH LIST 1 over 164 artifacts (0.6% flag rate) — QCOM
+    ``art_2026-10-12T23:00:40_QCOM_equity_research_89dba7``, the artifact the owner review
+    read. Nothing else fires: the two earlier QCOM runs of that same day state the gap
+    itself ("the band is widened and confidence is medium, which is why a -28.x% …") rather
+    than a containment, and every other artifact's prose either states the position
+    correctly ("the top of our own DCF band sits below the market price") or makes its
+    claim about a different band. The three rejected wider forms are recorded above; the
+    scan is ``scripts/scan_artifact_contract.py --clause C15``.
+
+    Two readings had to be fixed to keep that 1 honest. (a) ``_prose_strings`` read
+    ``llm_narrative``/``summary_text`` from INSIDE ``structured``, where they never are on a
+    persisted payload, so this clause could not see the field OMC 2026-10-15's claim lived
+    in; the reader now takes them off ``artifact.outputs``. (b) The METHOD-qualifier guard:
+    "the price therefore sits below the entire DCF band" (OMC, whose DCF band is
+    218.79-328.18 against a $78.41 price while the published 31.09-273.49 band holds it) is
+    TRUE about the DCF's own band, and judging it against the published band manufactured a
+    violation — the qualifier list now disqualifies method-named bands.
+    """
+    structured = _structured(artifact)
+    synthesis = _synthesis(structured)
+    price = _num(synthesis.get("current_price"))
+    low = _num(synthesis.get("target_low"))
+    high = _num(synthesis.get("target_high"))
+    if price is None or price <= 0 or low is None or high is None:
+        return None
+    band_low, band_high = sorted((low, high))
+    if band_low == band_high:
+        # A zero-width band makes "contains" and "spans" undecidable by their own
+        # arithmetic — C9's degenerate-band territory, not a containment question.
+        return None
+    actual = "below" if price < band_low else ("above" if price > band_high else "inside")
+    price_is_inside = actual == "inside"
+
+    for field, text in _prose_strings(artifact):
+        for sentence in _sentences(text):
+            mentions = [
+                match
+                for match in _BAND_NOUN_RE.finditer(sentence)
+                if _band_mention_is_published(sentence, match.start())
+            ]
+            if not mentions:
+                continue
+            if _BAND_HOLDS_PRICE_RE.search(sentence):
+                if price_is_inside:
+                    continue  # the claim is true of this artifact
+                claimed = "the band holds the market price"
+            elif _PRICE_OUTSIDE_BAND_RE.search(sentence):
+                if not price_is_inside:
+                    continue  # the price IS outside the whole band
+                claimed = "the price sits outside the whole band"
+            else:
+                continue
+            return Finding(
+                field_key=field,
+                check="contract_c15_band_containment",
+                severity="review",
+                evidence=(
+                    f"{field} claims {claimed}, while the market price {price:.2f} sits "
+                    f"{actual} the published band {band_low:.2f}-{band_high:.2f}: "
+                    f"{sentence.strip()[:220]!r}"
+                ),
+            )
+    return None
+
+
+# ── C16: a printed band whose two endpoints are the same number ──────────────
+
+# "$124.44 to $124.44", "$51.73 - $51.73", "USD 90.61 through USD 90.61" — a band
+# printed as a degenerate pair. The separators cover what prose actually writes
+# (to / through / and / a hyphen / an en dash / an em dash).
+_PRINTED_BAND_PAIR_RE = re.compile(
+    r"\$\s?(?P<first>\d[\d,]*(?:\.\d+)?)\s*(?:to|through|and|[-–—])\s*\$?\s?(?P<second>\d[\d,]*(?:\.\d+)?)",
+    re.IGNORECASE,
+)
+
+
+# ANY band-ish noun is context enough for THIS clause, and unlike C15 there is no
+# definite-referent requirement: it never compares the printed pair to the published band
+# (it judges the pair itself), so "which band?" does not arise. The requirement is only
+# that the sentence be about a band at all, or a repeated amount reads as a repeated
+# amount. Measured: the referent-guarded form MISSES the review's own sentence, because
+# "with a +/-20% placeholder band of $124.44 to $124.44" has no definite referent.
+_BAND_CONTEXT_RE = re.compile(r"\b(?:band|range|interval|spread|percentile)\b", re.IGNORECASE)
+
+
+def _printed_band_is_degenerate(text: str) -> bool:
+    """True when a band printed in *text* collapses its two endpoints onto one value."""
+    for match in _PRINTED_BAND_PAIR_RE.finditer(text):
+        first = match.group("first").replace(",", "")
+        second = match.group("second").replace(",", "")
+        if first == second:
+            return True
+    return False
+
+
+def _clause_c16_degenerate_printed_band(artifact: "Artifact") -> Finding | None:
+    """S — a band printed in prose must not collapse its endpoints onto one number.
+
+    QCOM 2026-10-12 wrote *"the implied price of $124.44 with a ±20% placeholder band of
+    $124.44 to $124.44"* — the ±20% band is $99.55-$149.32, and the reader is handed the
+    midpoint twice as if it were a range. This is the narrative half of the defect the
+    BASIS already guards: ``valuation_synthesis._prints_as_a_range`` withholds a method's
+    own range from the basis when it renders as "$X-$X" (owner review 2026-10-13), and
+    ``C9`` rejects a degenerate band in the STRUCTURED cross-checks. Neither reads prose,
+    and ``report_drift`` cannot help: both printed endpoints ARE leaves (the target and
+    the DCF mid), so each token matches within tolerance and no orphan is raised — it
+    judges tokens one at a time and never pairs them.
+
+    The predicate is deliberately the narrowest form of the class — the two endpoints
+    must be EQUAL — because that shape has no benign reading once a band noun is in the
+    sentence. A pair whose endpoints merely differ from the published band is left alone:
+    that needs a pairing calibration (which bands a run may legitimately quote) and the
+    drift redaction already handles a token that matches nothing.
+
+    Staged `S` for the same reason as C14a/C14b/C15: the locked remediation is to delete
+    the sentence, and the persist gate cannot delete one.
+
+    MEASURED CATCH LIST 36 of 164 (22%) and LIVE, in two shapes whose dates separate them:
+      * the DCF/synthesis band restated as one number — 2026-10-12..14 only. Samples: EXEL
+        ``…17:25:47`` ("a DCF anchored at $64.05 with a $64.05-$64.05 band" against a real
+        51.24/64.05/76.86 method band), MU ``…16:44:59`` ("the DCF band spans
+        $874.44-$874.44"), EHC ``…20:52:12`` ("The method's own band is wide
+        ($151.38-$151.38)"), QCOM ``…22:23:31``. This half stops after 2026-10-14: the
+        2026-10-16 price-level ladder supplies the method's real low/mid/high.
+      * the Monte Carlo P5-P95 collapsed onto one number — still live on the NEWEST
+        artifacts (NVDA ``…10-16T06:18:25``: "the Monte Carlo mean of $258.06 with a
+        P5-P95 of $258.06-$258.06" where the payload's own percentiles are 178.45/414.29;
+        MU ``…10-16T05:13:05``; SOLS ``…10-15T00:02:12``; GMED ``…10-14T21:57:41``). The
+        prompt DOES supply p5/p50/p95 for this distribution, so the collapse is the
+        model's, not a missing fact — which is why this clause is a live backstop rather
+        than a back-catalogue cleanup.
+
+    Two guard forms were measured. The definite-referent guard C15 uses (reused here first)
+    gives 12, but MISSES the review's own sentence — "a +/-20% placeholder band of $124.44
+    to $124.44" has no definite referent — so this clause requires only that the sentence be
+    about a band at all, which is what the other 24 hits add: the same defect with an
+    indefinite or possessive referent ("DCF's +/-20% range of $511.93-$511.93"). Unlike C15
+    it never compares the pair to the published band, so it does not need to know WHICH band
+    the sentence means.
+    """
+    for field, text in _prose_strings(artifact):
+        for sentence in _sentences(text):
+            if not _printed_band_is_degenerate(sentence):
+                continue
+            if not _BAND_CONTEXT_RE.search(sentence):
+                continue
+            return Finding(
+                field_key=field,
+                check="contract_c16_degenerate_printed_band",
+                severity="review",
+                evidence=(
+                    f"{field} prints a band whose two endpoints are the same number: "
+                    f"{sentence.strip()[:220]!r}"
                 ),
             )
     return None
@@ -1765,6 +2081,20 @@ CONTRACT_CLAUSES: list[ContractClause] = [
         check=_clause_c14b_unresolved_placeholder,
         title="Unresolved target placeholder",
         doc="the withheld-target placeholder may not replace an amount the report publishes.",
+    ),
+    ContractClause(
+        id="C15",
+        severity="S",
+        check=_clause_c15_band_containment,
+        title="Band-containment claim vs the published band",
+        doc="prose may not claim the band holds the market price when the price sits outside it.",
+    ),
+    ContractClause(
+        id="C16",
+        severity="S",
+        check=_clause_c16_degenerate_printed_band,
+        title="Degenerate band printed in prose",
+        doc="a band printed in prose must not collapse its two endpoints onto one number.",
     ),
 ]
 

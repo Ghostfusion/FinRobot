@@ -914,7 +914,7 @@ msgstr "现价分位"
 
 #. js-lingui-explicit-id
 msgid "chapter.technical.mc.sims"
-msgstr "模拟次数"
+msgstr "模拟次数(有效/总计)"
 
 #. js-lingui-explicit-id
 msgid "chapter.technical.mc.assumptionsNote"

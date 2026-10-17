@@ -1,6 +1,6 @@
 {
   "artifact_id": "art_2026-10-13T20:18:24_EHC_equity_research_d6d487",
-  "extracted_at": "2026-10-15",
+  "extracted_at": "2026-10-17",
   "inputs_raw_data": {
     "balance": {
       "noncontrolling_interest": 863400000.0,
@@ -47,7 +47,7 @@
       "ev_revenue": 2.5566031517460726
     }
   },
-  "notes": "EHC — the stale-fact class: us-gaap:OperatingIncomeLoss frozen at 2022-12-31 while every other fact runs to 2026-06-30, annotated by the producer's own staleness guard",
+  "notes": "EHC — the stale-fact class: us-gaap:OperatingIncomeLoss frozen at 2022-12-31 while every other fact runs to 2026-06-30, annotated by the producer's own staleness guard; plus the narrative that restates the DCF's own band as $151.37 to $151.37 (C16)",
   "outputs_structured": {
     "catalyst_analysis": {
       "category_breakdown": {
@@ -920,7 +920,8 @@
     "C10a",
     "C10c",
     "C11",
-    "C12c"
+    "C12c",
+    "C16"
   ],
   "source": "~/.finrobot/artifacts.db",
   "ticker": "EHC",
@@ -940,6 +941,8 @@
     "C13c": false,
     "C14a": false,
     "C14b": false,
+    "C15": false,
+    "C16": true,
     "C1b": false,
     "C2": false,
     "C3": false,

@@ -20,6 +20,7 @@ from finrobot.engine.models.financial import (
     MarketImpliedCheck,
     ValuationMethod,
 )
+from finrobot.engine.compute.coordinators.credit_payload import CreditRisk
 from finrobot.engine.compute.coordinators.technical_payload import TechnicalAnalysis
 from finrobot.engine.compute.operators.monte_carlo import MonteCarloResult
 from finrobot.engine.compute.operators.sniper import SniperPoints
@@ -133,6 +134,46 @@ def test_price_level_ladder_orders_the_stop_below_the_dcf_low() -> None:
     )
     assert "dcf mid" in ladder_line
     assert "published target band low" in ladder_line
+
+
+def _single_dcf(mid: float = 124.44) -> list[ValuationMethod]:
+    """QCOM 2026-10-12's valuation: one DCF, published ±25% by the confidence dial."""
+    return [
+        ValuationMethod(
+            name="dcf",
+            low=mid * 0.8,
+            mid=mid,
+            high=mid * 1.2,
+            confidence=0.85,
+            source="implied_price +/- 20% (placeholder band, not a real distribution)",
+        )
+    ]
+
+
+def test_band_position_states_the_relation_the_numbers_hold() -> None:
+    """QCOM 2026-10-12 (owner review): the narrative justified its HOLD as the widened
+    band being "wide enough to contain today's quote" while the $174.43 price sat ABOVE
+    the whole [$93.33, $155.54] band. The relation is deterministic from three published
+    numbers, so the ladder states it — and forbids the narrative asserting the other
+    one."""
+    prompt = _build(_single_dcf(), current_price=174.43, ticker="QCOM")
+
+    assert "CURRENT PRICE VS PUBLISHED BAND (computed)" in prompt
+    assert "ABOVE the whole published target band $93.33-$155.55" in prompt
+    assert "the band does NOT contain the market price" in prompt
+    assert "INSIDE the published target band" not in prompt
+    # And the verdict's own cause rides in the derivation line the prompt injects.
+    assert "inside the medium-confidence HOLD dead band" in prompt
+
+
+def test_band_position_reads_inside_when_the_price_is_inside() -> None:
+    """The same line has to say the opposite when the band DOES hold the price, or the
+    prohibition would be a one-way trap."""
+    prompt = _build(_single_dcf(), current_price=110.0, ticker="QCOM")
+
+    assert "INSIDE the published target band" in prompt
+    assert "the band does contain the market price" in prompt
+    assert "the band does NOT contain the market price" not in prompt
 
 
 def test_monte_carlo_is_whitelisted_and_declared_non_independent() -> None:
@@ -970,3 +1011,50 @@ class TestMomentumContext:
         )
         assert "AUTHORITATIVE RECOMMENDATION (do not deviate): SELL" in prompt
         assert "MOMENTUM DIVERGENCE" not in prompt
+
+
+def _computed_credit() -> CreditRisk:
+    """QCOM 2026-10-12's published credit read (DD 5.00, PD ~2.9e-7, 7.6% leverage)."""
+    return CreditRisk(
+        state="computed",
+        horizon_years=1.0,
+        distance_to_default=4.998,
+        default_probability=2.89e-7,
+        debt_to_value=0.0757,
+        barrier_basis="total debt (KMV-conservative: the barrier sits at least as high as KMV's)",
+    )
+
+
+def test_credit_risk_facts_are_named_and_cannot_be_called_unmeasurable() -> None:
+    """QCOM 2026-10-12 (owner review): the thesis called default risk "effectively
+    unmeasurable" while the same run published DD 5.00, and its takeaways called
+    balance-sheet risk immaterial — three registers for one measured fact. The run's own
+    figures are now named in the prompt, so a contradiction has to be written against
+    them rather than in the absence of them."""
+    prompt = _build(
+        _single_dcf(),
+        current_price=174.43,
+        ticker="QCOM",
+        extra_context={"credit_risk": _computed_credit()},
+    )
+
+    assert "CREDIT-RISK FACTS (computed, cite these)" in prompt
+    assert "distance to default 5.00" in prompt
+    assert "default probability 2.89e-07" in prompt
+    assert "debt at 7.6% of asset value" in prompt
+    assert "debt barrier: total debt" in prompt
+    assert "never describe default risk as unmeasurable" in prompt
+
+
+def test_credit_risk_block_absent_when_the_solve_published_nothing() -> None:
+    """A state that produces no figures (no debt / not computable) must not turn into a
+    prompt claim: the block exists to name published numbers, never to assert one."""
+    prompt = _build(
+        _single_dcf(),
+        current_price=174.43,
+        ticker="QCOM",
+        extra_context={"credit_risk": CreditRisk(state="not_computable", horizon_years=1.0)},
+    )
+
+    assert "CREDIT-RISK FACTS" not in prompt
+    assert "distance to default" not in prompt

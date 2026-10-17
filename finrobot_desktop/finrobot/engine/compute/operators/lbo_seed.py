@@ -236,7 +236,7 @@ def seed_lbo_inputs(
                 else ""
             )
             prov["nwc_change_pct_revenue"] = (
-                f"{nwc_pct:.1%} of revenue (re-derived: the trailing {nwc_n}-year average "
+                f"{nwc_pct:.1%} of revenue (re-derived: the trailing {nwc_n}-year median "
                 f"change in working capital ran {raw_nwc:.1%} of revenue — too high to be a "
                 f"sustainable, ongoing drag, so the model instead ties the assumption to the "
                 f"marginal NWC ratio, {marginal_note}, applied to the "
@@ -250,14 +250,14 @@ def seed_lbo_inputs(
             # median).
             nwc_pct = clamped_median
             prov["nwc_change_pct_revenue"] = (
-                f"{nwc_pct:.1%} of revenue (capped from a trailing {nwc_n}-year average of "
+                f"{nwc_pct:.1%} of revenue (capped from a trailing {nwc_n}-year median of "
                 f"{raw_nwc:.1%} of revenue — too high to be a sustainable, ongoing drag; a "
                 f"positive figure means working capital is absorbing cash)"
             )
         else:
             nwc_pct = clamped_median
             prov["nwc_change_pct_revenue"] = (
-                f"{nwc_pct:.1%} of revenue (trailing {nwc_n}-year average change in working "
+                f"{nwc_pct:.1%} of revenue (trailing {nwc_n}-year median change in working "
                 f"capital as % of revenue; a positive figure means working capital is "
                 f"absorbing cash)"
             )

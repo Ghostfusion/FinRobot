@@ -1,6 +1,6 @@
 {
   "artifact_id": "art_2026-10-14T16:12:39_GMED_equity_research_c9080e",
-  "extracted_at": "2026-10-15",
+  "extracted_at": "2026-10-17",
   "inputs_raw_data": {
     "balance": {
       "noncontrolling_interest": null,
@@ -1162,6 +1162,8 @@
     "C13c": false,
     "C14a": false,
     "C14b": true,
+    "C15": false,
+    "C16": false,
     "C1b": false,
     "C2": false,
     "C3": false,

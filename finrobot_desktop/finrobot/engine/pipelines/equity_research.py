@@ -66,6 +66,7 @@ from finrobot.engine.compute.operators.forward_estimates import (
     get_forward_revenue_growth,
 )
 from finrobot.engine.compute.operators.multiples import current_ev_ebitda
+from finrobot.engine.compute.operators.monte_carlo import MonteCarloResult
 from finrobot.engine.compute.operators.valuation_synthesis import (
     CanonicalThesis,
     resolve_canonical_thesis,
@@ -1257,6 +1258,39 @@ async def _execute_financial_modeling(
     return StepOutput(text=narrative, structured=dcf_result)
 
 
+def _monte_carlo_summary(mc: MonteCarloResult) -> str:
+    """The technical summary's Monte Carlo sentence, including the path denominator.
+
+    Two things are stated, both from the result's own fields:
+
+    * the percentile is a SENSITIVITY to the model's own assumptions, not
+      corroboration — the distribution is the base-case DCF perturbed, so a "4th
+      percentile" restates the same assumptions (review 2026-10);
+    * the count is ``n_valid`` OF ``n_simulations``, with the excluded paths named. The
+      percentiles come from the paths that survived the operator's two filters (a
+      non-positive terminal value, a price rounding to $0.00, or a value outside the
+      distribution's own 3x-IQR fence) — not from the requested budget — and a line
+      quoting only the survivor count invites the reader to infer that paths vanished
+      silently (owner review of QCOM 2026-10-12: "It ran 9,972 sims, presumably 28 short
+      of a 10,000 target … suggests silent dropouts"). ``orchestrator.py``'s tool line has
+      printed "n valid of n total" all along; this makes the report say it too.
+    """
+    requested = mc.assumptions_used.get("n_simulations")
+    count = (
+        f"{mc.n_valid:,} of {requested:,} simulated paths"
+        if isinstance(requested, int) and not isinstance(requested, bool) and requested > mc.n_valid
+        else f"{mc.n_valid:,} simulated paths"
+    )
+    return (
+        f"Monte Carlo sensitivity (assumptions centred on the base case): "
+        f"current price sits at the {mc.current_price_percentile:.0f}th percentile of the "
+        f"perturbed distribution — mean ${mc.mean:.2f}, P5–P95 "
+        f"${mc.percentiles['5']:.2f}–${mc.percentiles['95']:.2f} across "
+        f"{count} (paths outside the distribution's own 3x-IQR fence, or with a "
+        f"non-positive terminal value, are excluded)."
+    )
+
+
 async def _execute_technical_analysis(
     agent: Agent[Any, Any],  # noqa: ARG001 — kept for executor signature; unused
     deps: FinRobotDeps,
@@ -1378,17 +1412,7 @@ async def _execute_technical_analysis(
 
     summary_parts: list[str] = []
     if payload.monte_carlo is not None:
-        mc = payload.monte_carlo
-        # Frame the percentile as SENSITIVITY to the model's own assumptions, not
-        # corroboration: the distribution is the base-case DCF perturbed, so a
-        # "4th percentile" restates the same assumptions (review 2026-10).
-        summary_parts.append(
-            f"Monte Carlo sensitivity (assumptions centred on the base case): "
-            f"current price sits at the {mc.current_price_percentile:.0f}th percentile of the "
-            f"perturbed distribution — mean ${mc.mean:.2f}, P5–P95 "
-            f"${mc.percentiles['5']:.2f}–${mc.percentiles['95']:.2f} across "
-            f"{mc.n_valid:,} simulations."
-        )
+        summary_parts.append(_monte_carlo_summary(payload.monte_carlo))
     if payload.sniper is not None:
         sn = payload.sniper
         # Label entry / target side per trade direction. SHORT trades cover

@@ -5,6 +5,9 @@ end to end**: the fifteen §4 clauses are promoted into the live persist gate (`
 annotates, see §4.2), §4.4's writer unification ships with them, §5's back-fill tag closes the
 ordering hole that produced instance B, and §9.3's `audit_badge` renders the read-time re-reading
 on the artifact page. §4 is still a rule inventory with pinned instances rather than a change log.
+**2026-10-16:** `C15` (§4.9) and `C16` (§4.10) join them after the owner review of QCOM
+2026-10-12 — the live set is seventeen, and both annotate for the same staged reason `C9` and the
+`C14` pair do.
 What remains open is §6's ledger — the typed measurement and the reason-code registry — which is
 what Phase 2 waits on.
 
@@ -374,6 +377,71 @@ Those are different predicates over the same sentences, so neither replaces the 
 promotion diff keeps both, and additionally lets live `C6`'s evidence report the cross-check facts
 the way `C6b`'s already does. Read "replaces" above as "replaces the *derivation*, not the
 clause".
+
+---
+
+### 4.9 `C15` — prose may not claim a band relation its own numbers refute
+- **severity** `S`, staged for the same reason as `C14` (§4.7): the locked remediation for a prose
+  defect is to DELETE the sentence, and `enforce_artifact_contract` can only scrub values and stamp
+  the narrative. Arming it `H` would withhold the TARGET for a sentence.
+- **reads** `outputs.structured.thesis.{narrative, tagline, price_target_basis, catalysts[], risks[]}`,
+  `outputs.summary_text` and `outputs.llm_narrative.*` (all via `_prose_strings`) against the run's own
+  published `valuation_synthesis.{current_price, target_low, target_high}`.
+- **predicate** a sentence claiming the band HOLDS the market price — a band verb whose OBJECT is the
+  price ("wide enough to contain today's quote") — is judged only when the price is inside the
+  published band; the inverse claim ("the price sits above the whole band") only when it is outside.
+  The band named must be THIS run's band (a definite referent, and no qualifier naming another band:
+  "52-week range", "sell-side range"), and the clause abstains when the relation cannot be settled
+  from the payload (no price, no band, a zero-width band).
+- **pinned instance** QCOM `art_2026-10-12T23:00:40…`: HOLD with a $124.44 target against a $174.43
+  market price, justified in prose as the widened band being *"wide enough to contain today's
+  quote"* — the price sits above the whole [$93.33, $155.54] band. Every amount in that sentence
+  resolves to a real leaf, so `report_drift` sees nothing (it judges tokens, never relations), and
+  `C8` never runs (it reads `cross_checks`, and only for BUY/SELL).
+- **measured catch list 1 of 164** (`scripts/scan_artifact_contract.py --clause C15`). Two wider forms
+  were tried first and rejected by false positive (§7.1): a bare claim-verb list flags 8 of the 9
+  equity artifacts (7 falsely — those verbs take another object in a TRUE sentence: "the method's own
+  range … bracketing the target", "no scenario inside the model"), and a band noun without a definite
+  referent flags 2 (LPLA's claim is about the CROSS-CHECK's own band).
+- **the other half of the same review:** the verdict's cause is stated where the narrative reads it
+  (`valuation_synthesis.verdict_tier_note` → the published `price_target_basis`, which the prompt
+  injects as its `Derivation:` line), and the prompt's price-level ladder now states the price's
+  position against the published band. `C15` annotates a claim that slipped through; those two facts
+  are what keep it from being written.
+
+### 4.10 `C16` — a band printed in prose must not collapse onto one number
+- **severity** `S`, same staging as `C14`/`C15` (locked remediation: delete the sentence).
+- **reads** the same prose fields as `C15` (`_prose_strings`), and nothing else — it does not
+  read the published band at all.
+- **predicate** a sentence that (a) is about a band (`band | range | interval | spread |
+  percentile`) and (b) prints two `$`-amounts joined by `to | through | and | - | – | —` whose
+  parsed values are EQUAL. No attribution to a band is attempted (the sentence may name two);
+  the evidence quotes the sentence so the reader can place it.
+- **pinned instances** EXEL `…17:25:47` ("a DCF anchored at $64.05 with a $64.05-$64.05 band"
+  against a real 51.24/64.05/76.86 method band), MU `…16:44:59`, EHC `…15:57:35`/`…20:52:12`
+  ("The method's own band is wide ($151.38-$151.38)"), QCOM `…22:23:31`. Owner review of QCOM
+  2026-10-12, item 3: "a ±20% placeholder band of $124.44 to $124.44" where the DCF's own band
+  is $99.55-$149.32.
+- **measured catch list 36 of 164 (22%), LIVE**, in two shapes whose dates separate them: the
+  DCF/synthesis band restated as one number (2026-10-12..14 only — the 2026-10-16 price-level
+  ladder supplies the method's real low/mid/high), and the Monte Carlo P5-P95 collapsed onto one
+  number (still live on the newest artifacts: NVDA `…10-16T06:18:25`, MU `…10-16T05:13:05`, SOLS
+  `…10-15T00:02:12`, against payload percentiles of 178.45/414.29, 529.87/1146.98, 58.40/144.42).
+  The prompt DOES supply p5/p50/p95, so the second shape is the model's, not a missing fact.
+  This is the prose-side backstop for `valuation_synthesis._prints_as_a_range` (2026-10-13), which
+  guards the BASIS only, and for `C9`, which reads the STRUCTURED cross-checks. `report_drift`
+  cannot cover it: both endpoints are real leaves, so no token is an orphan.
+- **guard form, measured** the definite-referent guard `C15` uses gives 12 and MISSES the
+  review's own sentence ("a ±20% placeholder band" has no definite referent); requiring only a
+  band noun gives 36, all true. Kept the second.
+- **the reader these two clauses read through** `_prose_strings` looked for `llm_narrative` and
+  `summary_text` INSIDE `structured`, where they never are on a persisted payload — the fixture
+  files carry `summary_text=""` and no `llm_narrative` at all, so the fixture oracle could not
+  show the gap. It now takes both off `artifact.outputs`, which is where §4.7 always said they
+  live, and the recorded catch lists above moved as a result (`C14b` 10 → 20, `C16` 30 → 36,
+  `C15` gained OMC — a FALSE positive, whose METHOD-qualified "below the entire DCF band" is true
+  of the DCF's own band, so the qualifier list now disqualifies method-named bands and `C15` is
+  back to 1).
 
 ---
 

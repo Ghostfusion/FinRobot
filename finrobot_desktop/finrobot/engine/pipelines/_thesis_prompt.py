@@ -15,6 +15,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 
+from finrobot.engine.compute.coordinators.credit_payload import CreditRisk
 from finrobot.engine.compute.coordinators.extractor import post_balance_sheet_financing_warning
 from finrobot.engine.compute.coordinators.news import sanitize_untrusted_text
 from finrobot.engine.compute.operators.audit import compute_momentum_context, is_momentum_divergent
@@ -140,6 +141,12 @@ def _price_level_ladder(structured_context: dict[str, object]) -> str:
     ORDER is deterministic, so the prompt hands the model a merged, sorted ladder
     instead of leaving it to order numbers that arrive in two separate payloads.
     Returns "" when nothing is published — never a fabricated rung.
+
+    It also states, once, where the market price sits relative to the PUBLISHED band
+    (inside / above the whole band / below it) and forbids the narrative from asserting a
+    containment relation this line does not state (QCOM 2026-10-12 justified its HOLD as
+    the widened band being "wide enough to contain today's quote" while the price sat
+    above the whole band).
     """
     rungs: list[tuple[float, str]] = []
 
@@ -191,6 +198,43 @@ def _price_level_ladder(structured_context: dict[str, object]) -> str:
             f" — from the current price of ${vs.current_price:,.2f} the NEAREST level in "
             "the direction of travel is reached FIRST"
         )
+    # Where the market price sits relative to the PUBLISHED band, stated once. The
+    # ladder alone leaves this to be read off the rungs, and QCOM 2026-10-12 read it
+    # wrong: with the target $124.44 and the band [$93.33, $155.54] against a $174.43
+    # market price, the narrative justified its HOLD as the band being "wide enough to
+    # contain today's quote" — the price is above the whole band. The containment
+    # relation is deterministic from the three numbers, so it is stated, not implied;
+    # the verdict's real cause (the confidence tier) rides in the derivation line.
+    band_position = ""
+    if (
+        isinstance(vs, ValuationSynthesis)
+        and vs.current_price > 0
+        and vs.target_low is not None
+        and vs.target_high is not None
+    ):
+        band_low, band_high = sorted((vs.target_low, vs.target_high))
+        if vs.current_price < band_low:
+            where, relation = (
+                f"BELOW the whole published target band ${band_low:,.2f}-${band_high:,.2f}",
+                "the band does NOT contain the market price",
+            )
+        elif vs.current_price > band_high:
+            where, relation = (
+                f"ABOVE the whole published target band ${band_low:,.2f}-${band_high:,.2f}",
+                "the band does NOT contain the market price",
+            )
+        else:
+            where, relation = (
+                f"INSIDE the published target band ${band_low:,.2f}-${band_high:,.2f}",
+                "the band does contain the market price",
+            )
+        band_position = (
+            f"\nCURRENT PRICE VS PUBLISHED BAND (computed): the market price "
+            f"${vs.current_price:,.2f} sits {where} — {relation}. Never write that the "
+            "band contains, spans or brackets the market price (or the converse) unless "
+            "this line says so, and never justify the verdict by the band's width: the "
+            "derivation above already states the cause."
+        )
     return (
         "\nAUTHORITATIVE PRICE-LEVEL LADDER (computed from this run's OWN published "
         f"levels, listed from LOWEST to HIGHEST{price_note}):\n"
@@ -200,7 +244,7 @@ def _price_level_ladder(structured_context: dict[str, object]) -> str:
         "current price tests the NEXT LEVEL BELOW it; a move up tests the next level "
         "above. Never write that a break of one level 'opens a test of' a level on the "
         "other side of the price — a stop loss sits BELOW the levels it puts at risk, "
-        "so a break of the stop arrives AFTER those levels are already tested."
+        "so a break of the stop arrives AFTER those levels are already tested." + band_position
     )
 
 
@@ -551,6 +595,42 @@ def build_thesis_prompt(
             f"{thesis_prompt}\n\nBALANCE-SHEET STALENESS (computed — state it wherever the "
             f"narrative quotes debt, cash, enterprise value or the default barrier): "
             f"{_post_bs_note}"
+        )
+
+    # ── Credit-risk facts (computed) ───────────────────────────────────────────
+    # The runner dumps the whole structured context into every step prompt, so the model
+    # already SEES credit_risk — but this assembler never named it, and QCOM 2026-10-12
+    # wrote that leverage made default risk "effectively unmeasurable" while the same run
+    # published a distance to default of 5.00 (PD ~3e-7) and called balance-sheet risk
+    # "immaterial" in its takeaways. Three different registers for one measured fact. A
+    # number the model can see but is never pointed at is a number it will contradict, so
+    # the facts it owes the reader are named here — with the barrier caveat that makes the
+    # figure conservative.
+    credit = structured_context.get("credit_risk")
+    if (
+        isinstance(credit, CreditRisk)
+        and credit.state == "computed"
+        and credit.distance_to_default is not None
+        and credit.default_probability is not None
+    ):
+        _credit_facts = [
+            f"distance to default {credit.distance_to_default:.2f} over "
+            f"{credit.horizon_years:g} year(s)",
+            f"default probability {credit.default_probability:.2e}",
+        ]
+        if credit.debt_to_value is not None:
+            _credit_facts.append(f"debt at {credit.debt_to_value:.1%} of asset value")
+        if credit.barrier_basis:
+            _credit_facts.append(f"debt barrier: {credit.barrier_basis}")
+        thesis_prompt = (
+            f"{thesis_prompt}\n\nCREDIT-RISK FACTS (computed, cite these): the Merton/KMV "
+            f"solve publishes " + "; ".join(_credit_facts) + ". The credit read is a "
+            "MEASUREMENT, not an unknown — never describe default risk as unmeasurable, "
+            "unassessable or impossible to judge while this run publishes those figures, "
+            "and do not give leverage two different characterizations in two fields: if "
+            "you judge the risk immaterial, say it is immaterial AT the published distance "
+            "to default, and if you mean something narrower (a single covenant, one "
+            "segment, refinancing timing), name it."
         )
 
     # ── Filing-text caveat (computed) ──────────────────────────────────────────
@@ -1026,17 +1106,27 @@ def build_thesis_prompt(
     _whitelist_parts += [
         # Period labeling (2026-10-13 NVDA: the narrative mixed FY margins 71.1% /
         # 60.4% with TTM tiles 74.7% / 65.2% and neither was labelled, so a reader
-        # cannot tell which basis a margin is on). Every margin/growth figure this
-        # prompt supplies carries its own basis in its label; the rule makes the
-        # narrative keep that discipline when it re-states them.
-        "PERIOD LABELING RULE: state the period basis of EVERY margin and growth rate "
-        "you cite. The model's revenue_growth_rates (and their average) are FORECAST "
-        "fiscal-year (FY) rates over the projection window; financial_modeling."
+        # cannot tell which basis a margin is on). Every margin/growth/level figure
+        # this prompt supplies carries its own basis in its label; the rule makes the
+        # narrative keep that discipline when it re-states them. Extended to dollar
+        # LEVELS 2026-10-16 (owner review of QCOM 2026-10-12, which called the FY2025
+        # operating income $12.36B and its 28.0% margin "TTM"): the ratios were
+        # labelled by then and levels were not, so the rule now names both.
+        "PERIOD LABELING RULE: state the period basis of EVERY margin, growth rate and "
+        "income-statement LEVEL you cite. The model's revenue_growth_rates (and their "
+        "average) are FORECAST fiscal-year (FY) rates over the projection window; "
+        "financial_modeling."
         "terminal_growth_rate is a perpetuity rate applied after that window; the "
         "historical margins/ratios named in the model provenance are ANNUAL (FY) "
         "history; the report's current-run-rate tiles and the comps/technical chapters "
         "carry the latest TTM basis. Never present an FY figure and a TTM figure as if "
-        "they were the same number, and never cite a margin without naming its basis."
+        "they were the same number, and never cite a margin without naming its basis. "
+        "This binds DOLLAR LEVELS too, not only ratios: a fact shown in "
+        "xbrl_facts_snapshot with period_basis 'annual' is one FISCAL YEAR (its "
+        "period_label names the period end), so an annual operating income, net income "
+        "or revenue figure may NOT be described as 'TTM' or 'trailing twelve months' "
+        "— call it FY and name the period, or use the TTM figure the tiles actually "
+        "carry, and if the level you want exists on neither basis, leave it out."
         + _current_basis_note,
         # News-impact discipline (x2, 2026-10-13): an unverified single-source report of
         # "advanced talks" was narrated as an impact-4 acquisition, and an

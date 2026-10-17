@@ -218,6 +218,21 @@ function MonteCarloPanel({
   const std = mc.std
   const pctCurrent = mc.current_price_percentile
   const n = mc.n_valid
+  // The distribution's percentiles come from the paths that survived the operator's own
+  // filters (a non-positive terminal value, a price rounding to $0.00, or a value outside
+  // its 3x-IQR fence), NOT from the requested budget — so a bare survivor count invites the
+  // reader to infer that paths vanished silently (review of QCOM 2026-10-12 read 9,972 as
+  // "28 short of a 10,000 target … silent dropouts"). Both numbers are in the payload.
+  const requested =
+    typeof mc.assumptions_used?.n_simulations === 'number'
+      ? mc.assumptions_used.n_simulations
+      : undefined
+  const simsValue =
+    n === undefined
+      ? '—'
+      : requested !== undefined && requested > n
+        ? `${n.toLocaleString()} / ${requested.toLocaleString()}`
+        : n.toLocaleString()
 
   const minPrice = bins.length > 0 ? bins[0] : 0
   const maxPrice = bins.length > 0 ? bins[bins.length - 1] : 0
@@ -296,7 +311,7 @@ function MonteCarloPanel({
         />
         <Stat
           label={t('chapter.technical.mc.sims')}
-          value={n !== undefined ? n.toLocaleString() : '—'}
+          value={simsValue}
         />
       </div>
 

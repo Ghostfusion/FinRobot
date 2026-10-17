@@ -110,11 +110,12 @@ _PINNED: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ),
     (
         "art_2026-10-14T20:27:40_THC_equity_research_99cdca",
-        ("C6b", "C8", "C11", "C10e"),
+        ("C6b", "C8", "C11", "C10e", "C16"),
         "instance B, the ORDERING case: the verdict read no cross-check (the own-history "
         "band resolved to 0 samples) and the cross-check in the payload arrived after the "
         "verdict; the note still claims there was no cross-validation; and the pre-fix "
-        "operating margin C10e catches",
+        "operating margin C10e catches, and the narrative that collapses the Monte Carlo "
+        "P5-P95 into one number (C16)",
     ),
     (
         "art_2026-10-14T20:37:52_THC_equity_research_bab351",
@@ -186,10 +187,11 @@ _PINNED: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ),
     (
         "art_2026-10-13T20:18:24_EHC_equity_research_d6d487",
-        ("C10a", "C10c", "C11", "C12c"),
+        ("C10a", "C10c", "C11", "C12c", "C16"),
         "EHC — the stale-fact class: us-gaap:OperatingIncomeLoss frozen at 2022-12-31 "
         "while every other fact runs to 2026-06-30, annotated by the producer's own "
-        "staleness guard",
+        "staleness guard; plus the narrative that restates the DCF's own band as "
+        "$151.37 to $151.37 (C16)",
     ),
     (
         "art_2026-10-14T00:23:00_NVDA_equity_research_9f0889",
@@ -211,6 +213,15 @@ _PINNED: tuple[tuple[str, tuple[str, ...], str], ...] = (
         "in its own honest disclaimer ('a directional read, not a point estimate'), with "
         "no insider-flow quantity in the sentence. Pinned for C14b staying QUIET: the "
         "coarse token scan flagged this class 27 times",
+    ),
+    (
+        "art_2026-10-12T23:00:40_QCOM_equity_research_89dba7",
+        ("C15",),
+        "QCOM — the owner review's artifact: HOLD with a $124.44 target against a $174.43 "
+        "market price, justified in prose as the widened band being 'wide enough to "
+        "contain today's quote' while the price sits above the whole band. C15's only "
+        "corpus catch (1 of 164); also the payload that makes the widened ±25% "
+        "single-method band visible",
     ),
 )
 

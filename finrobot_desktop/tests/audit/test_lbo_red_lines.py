@@ -388,9 +388,9 @@ def test_lbo_nwc_clamp_no_growth_year_falls_back_to_clamped_median() -> None:
     prov = inputs.assumption_provenance["nwc_change_pct_revenue"]
     assert inputs.nwc_change_pct_revenue == pytest.approx(0.10)
     # BACKLOG A6⑤: wording reads analyst prose, not dev jargon — every number
-    # (10.0% used / 15.0% pre-clamp trailing average) is unchanged.
+    # (10.0% used / 15.0% pre-clamp trailing median) is unchanged.
     assert prov.startswith("10.0% of revenue (capped from a trailing")
-    assert "average of 15.0% of revenue" in prov
+    assert "median of 15.0% of revenue" in prov
     assert "marginal NWC ratio" not in prov
 
 
@@ -408,7 +408,7 @@ def test_lbo_nwc_clamp_degrades_to_marginal_ratio() -> None:
     prov = inputs.assumption_provenance["nwc_change_pct_revenue"]
     assert inputs.nwc_change_pct_revenue == pytest.approx(0.60 * 0.03)
     # BACKLOG A6⑤: wording reads analyst prose, not dev jargon — every number
-    # (13.2% pre-clamp trailing average / 60.0% marginal ratio used / raw
+    # (13.2% pre-clamp trailing median / 60.0% marginal ratio used / raw
     # marginal it was capped down from / 3.0% steady-state growth) unchanged.
     assert "ran 13.2% of revenue" in prov
     assert "too high to be a sustainable, ongoing drag" in prov
@@ -446,7 +446,7 @@ def test_lbo_nwc_in_band_is_byte_identical() -> None:
     assert "capped" not in prov
     assert "marginal NWC ratio" not in prov
     assert prov.endswith(
-        "average change in working capital as % of revenue; a positive figure means "
+        "median change in working capital as % of revenue; a positive figure means "
         "working capital is absorbing cash)"
     )
 

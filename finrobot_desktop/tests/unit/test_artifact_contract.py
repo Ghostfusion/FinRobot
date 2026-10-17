@@ -908,7 +908,7 @@ def test_c3_noop_when_dollar_amounts_have_no_conclusion_cue() -> None:
 # OMITS ``valuation_withheld`` while the synthesis writes ``false`` — are §7.2's
 # job and live in ``tests/artifact/``.
 
-#: The fifteen §4 closure clauses, named so that a registry that lost one shows up
+#: The sixteen §4 closure clauses, named so that a registry that lost one shows up
 #: here as a missing key rather than as silently fewer parametrized cases.
 _CLOSURE_IDS = (
     "C6b",
@@ -926,6 +926,8 @@ _CLOSURE_IDS = (
     "C13c",
     "C14a",
     "C14b",
+    "C15",
+    "C16",
 )
 _CLOSURE = {c.id: c for c in CONTRACT_CLAUSES if c.id in _CLOSURE_IDS}
 assert len(_CLOSURE) == len(_CLOSURE_IDS), "the closure family is not fully registered"
@@ -1111,6 +1113,8 @@ def test_the_closure_family_runs_in_the_live_registry() -> None:
                 "C13c",
                 "C14a",
                 "C14b",
+                "C15",
+                "C16",
             ),
             "S",
         ),
@@ -1765,3 +1769,247 @@ def test_c14b_quiet_on_the_withheld_path_s_own_disclaimer() -> None:
         }
     )
     assert _CLOSURE["C14b"].check(art) is None
+
+
+# ── C15: prose band-containment vs the published band ───────────────────────
+
+
+def _band_artifact(narrative: str, *, price: float = 174.43) -> Artifact:
+    """QCOM 2026-10-12's shape: a $174.43 price above the whole band [$93.33, $155.54]."""
+    return _artifact(
+        structured={
+            "thesis": {"narrative": narrative},
+            "valuation_synthesis": {
+                "current_price": price,
+                "target_low": 93.33,
+                "target_high": 155.54,
+            },
+        }
+    )
+
+
+def test_c15_fires_on_the_qcom_containment_claim() -> None:
+    """The owner review's sentence, verbatim: the widened band is called "wide enough
+    to contain today's quote" while the quote sits above the whole band."""
+    art = _band_artifact(
+        "With no comps or DDM to cross-validate the DCF, the band was widened to "
+        "$93.33–$155.54 and confidence set to medium — wide enough to contain today's "
+        "quote, which is precisely why the verdict is Hold rather than Sell."
+    )
+    assert "sits above the published band" in _closure_finding("C15", art).evidence
+
+
+def test_c15_fires_when_prose_puts_the_price_outside_a_band_it_is_inside() -> None:
+    """The inverse claim, and the reason the clause judges agreement rather than the
+    mere presence of a claim word."""
+    art = _artifact(
+        structured={
+            "thesis": {"risks": ["The shares sit above the entire band, so it offers no support."]},
+            "valuation_synthesis": {
+                "current_price": 120.0,
+                "target_low": 93.33,
+                "target_high": 155.54,
+            },
+        }
+    )
+    assert "sits inside the published band" in _closure_finding("C15", art).evidence
+
+
+def test_c15_quiet_when_the_containment_claim_is_true() -> None:
+    """THE TRUE-CLAIM GUARD. The withheld path's own honest copy — "the published
+    valuation range spans the current market price" — is what this clause must never
+    flag, and it is the same sentence shape as the defect."""
+    art = _artifact(
+        structured={
+            "thesis": {
+                "narrative": (
+                    "The published valuation range spans the current market price, so the "
+                    "methods do not support a one-sided call."
+                )
+            },
+            "valuation_synthesis": {
+                "current_price": 120.0,
+                "target_low": 93.33,
+                "target_high": 155.54,
+            },
+        }
+    )
+    assert _CLOSURE["C15"].check(art) is None
+
+
+def test_c15_quiet_when_the_claim_is_about_another_band() -> None:
+    """LPLA 2026-10-14's shape: "…the EV/EBITDA cross-check … brackets spot at a
+    $366.26 mid (range $324.94–$407.57)" claims something about the CROSS-CHECK's own
+    band. Judging it against the published band manufactures a violation (the first
+    measured form did exactly that)."""
+    art = _artifact(
+        structured={
+            "thesis": {
+                "narrative": (
+                    "The EV/EBITDA cross-check — the equity's own five-year band — "
+                    "brackets spot at a $366.26 mid (range $324.94–$407.57)."
+                )
+            },
+            "valuation_synthesis": {
+                "current_price": 323.46,
+                "target_low": 366.26,
+                "target_high": 1412.89,
+            },
+        }
+    )
+    assert _CLOSURE["C15"].check(art) is None
+
+
+def test_c15_quiet_on_a_true_statement_about_the_methods_own_band() -> None:
+    """OMC 2026-10-15's shape, and the false positive that produced the METHOD-qualifier
+    rule: "The price therefore sits below the entire DCF band" is TRUE — the DCF band is
+    218.79-328.18 against a $78.41 price — while the PUBLISHED band (31.09-273.49, the span
+    of the two method mids) holds the price. Judging that sentence against the published band
+    manufactured a violation."""
+    art = _artifact(
+        structured={
+            "thesis": {
+                "narrative": (
+                    "The price therefore sits below the entire DCF band yet at roughly 2.5x "
+                    "the EV/EBITDA mid, which is why the verdict is directional-neutral and "
+                    "no point is fabricated."
+                )
+            },
+            "valuation_synthesis": {
+                "current_price": 78.41,
+                "target_low": 31.09,
+                "target_high": 273.49,
+            },
+        }
+    )
+    assert _CLOSURE["C15"].check(art) is None
+
+
+def test_c15_quiet_when_the_band_is_a_different_qualified_band() -> None:
+    """The qualifier guard: the 52-week range contains today's price is a TRUE
+    statement about the 52-week range, not about this run's published band."""
+    art = _band_artifact(
+        "The 52-week range contains today's price, so the pullback is within the stock's "
+        "own recent history."
+    )
+    assert _CLOSURE["C15"].check(art) is None
+
+
+def test_c15_abstains_when_the_relation_cannot_be_settled() -> None:
+    """No band, no price, or a zero-width band ⇒ no claim to judge — never a guess."""
+    claim = "the band is wide enough to contain today's quote"
+    no_band = _artifact(
+        structured={
+            "thesis": {"narrative": claim},
+            "valuation_synthesis": {"current_price": 174.43},
+        }
+    )
+    assert _CLOSURE["C15"].check(no_band) is None
+    degenerate = _artifact(
+        structured={
+            "thesis": {"narrative": claim},
+            "valuation_synthesis": {
+                "current_price": 174.43,
+                "target_low": 124.44,
+                "target_high": 124.44,
+            },
+        }
+    )
+    assert _CLOSURE["C15"].check(degenerate) is None
+
+
+# ── C16: a degenerate band printed in prose ─────────────────────────────────
+
+
+def test_c16_fires_on_the_qcom_placeholder_band() -> None:
+    """The review's third error, verbatim: "a +/-20% placeholder band of $124.44 to
+    $124.44" where the DCF's own band is $99.55-$149.32.
+
+    It is passed as ``llm_narrative.valuation_overview`` because that is where the real
+    sentence lives — a SIBLING of ``structured`` under ``outputs``, not a key inside it. The
+    clause family read neither ``llm_narrative`` nor ``summary_text`` until 2026-10-16, so
+    this test pins the reader as much as the predicate."""
+    art = _artifact(
+        llm_narrative={
+            "valuation_overview": (
+                "Only one valuation method corroborates this call: a 10-year DCF producing "
+                "an implied price of $124.44 with a +/-20% placeholder band of $124.44 to "
+                "$124.44."
+            )
+        }
+    )
+    assert "llm_narrative.valuation_overview" in _closure_finding("C16", art).field_key
+    assert "two endpoints are the same number" in _closure_finding("C16", art).evidence
+
+
+def test_c16_reads_summary_text_too() -> None:
+    """The other sibling: a collapsed band in ``summary_text`` must be as visible as one in
+    the thesis prose."""
+    art = _artifact(
+        summary_text="CRWV is a HOLD: the DCF band of $93.33 to $93.33 sits below the tape.",
+    )
+    finding = _closure_finding("C16", art)
+    assert finding.field_key == "summary_text"
+
+
+def test_c16_fires_on_a_collapsed_monte_carlo_pair() -> None:
+    """THC 99cdca: "P5-P95 $541.80-$541.80" while the payload's own P5/P95 are
+    331.98/894.27 — the same collapse, in a distribution pair rather than the target band."""
+    art = _artifact(
+        structured={
+            "thesis": {
+                "narrative": (
+                    "The Monte Carlo distribution centred on the base case puts the current "
+                    "price at the 1.3rd percentile (mean $541.80, P5-P95 $541.80-$541.80), so "
+                    "even the 5th-percentile outcome is ~22% above spot; but the single-method "
+                    "construction, the +/-25% published band ($406.35-$677.25) and the absence "
+                    "of any comp cross-check argue for staged entry."
+                )
+            }
+        }
+    )
+    assert _CLOSURE["C16"].check(art) is not None
+
+
+def test_c16_quiet_on_a_real_range() -> None:
+    """EXEL's payload carries a real 51.24 / 64.05 / 76.86 method band; restating it is
+    not a defect, and neither is any other honest pair."""
+    art = _artifact(
+        structured={
+            "thesis": {
+                "narrative": (
+                    "The DCF's own band spans $51.24 to $76.86, and the published target "
+                    "band is $93.33-$155.54."
+                )
+            }
+        }
+    )
+    assert _CLOSURE["C16"].check(art) is None
+
+
+def test_c16_quiet_without_a_band_in_the_sentence() -> None:
+    """The predicate is a BAND claim: a repeated amount elsewhere ("the shares traded
+    from $120 to $120") is not this clause's reading."""
+    art = _artifact(
+        structured={"thesis": {"narrative": "The shares traded from $120 to $120 on no news."}}
+    )
+    assert _CLOSURE["C16"].check(art) is None
+
+
+def test_c16_reads_the_pair_not_the_band_it_might_be_attributed_to() -> None:
+    """A sentence can name two bands, and the predicate does not try to attribute the
+    pair to one of them: a degenerate pair printed beside a band is a nonsense range
+    wherever it belongs, and the evidence quotes the whole sentence so the reader can
+    place it. Attribution is C15's reading, which compares a CLAIM against the published
+    band; this one only asks whether the printed pair collapses."""
+    art = _artifact(
+        structured={
+            "thesis": {
+                "narrative": (
+                    "The 52-week range of $121.99 to $121.99 is a glitch in the tape, and "
+                    "our DCF band is $99.55-$149.32."
+                )
+            }
+        }
+    )
+    assert _CLOSURE["C16"].check(art) is not None

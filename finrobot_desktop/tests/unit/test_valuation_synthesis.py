@@ -8,6 +8,7 @@ from finrobot.engine.compute.operators.valuation_synthesis import (
     resolve_canonical_thesis,
     synthesize_valuations,
     verdict_from_upside,
+    verdict_tier_note,
 )
 
 
@@ -1450,3 +1451,71 @@ class TestCrossCheckContradiction:
         thesis = resolve_canonical_thesis(vs, "THC")
         assert thesis.verdict == "HOLD"  # +20% sits inside the very_low→medium bands
         assert thesis.target == pytest.approx(320.0, abs=0.01)
+
+
+class TestVerdictTierNote:
+    """The verdict's CAUSE as a sentence, carried into the published derivation line.
+
+    QCOM 2026-10-12 published HOLD beside a target 28.7% below the market price and
+    explained it in prose as the widened band being "wide enough to contain today's
+    quote" — the price sat above the whole band. The tier thresholds reached the model
+    only as prose ("a lower-confidence anchor requires price to sit further from fair
+    value"), so it invented a mechanism to fill the gap; the note states the thresholds
+    with the run's own numbers instead.
+    """
+
+    def test_states_the_tier_thresholds_and_the_measured_gap(self):
+        note = verdict_tier_note(-0.2866, "medium")
+        assert "HOLD is this confidence tier's own judgement" in note
+        assert "30% above the market price" in note
+        assert "35% below it" in note
+        assert "28.7% below the market price" in note
+        assert "inside the medium-confidence HOLD dead band" in note
+
+    def test_names_the_threshold_a_directional_call_cleared(self):
+        assert "clears the SELL threshold" in verdict_tier_note(-0.50, "medium")
+        assert "clears the BUY threshold" in verdict_tier_note(0.45, "medium")
+
+    def test_never_disagrees_with_verdict_from_upside(self):
+        """One classifier: the sentence's subject is whatever verdict_from_upside says,
+        for every tier and every side."""
+        for tier in _VERDICT_BANDS:
+            for upside in (-2.0, -0.9, -0.5, -0.2, 0.0, 0.2, 0.5, 0.9, 2.0):
+                note = verdict_tier_note(upside, tier)
+                assert note.startswith(f"The {verdict_from_upside(upside, tier)} is")
+
+    def test_adds_no_dollar_amount_to_the_derivation_line(self):
+        """C3 reads a $-amount following a conclusion cue in ``price_target_basis``; the
+        cause sentence must not become a second amount it has to judge."""
+        for tier in _VERDICT_BANDS:
+            assert "$" not in verdict_tier_note(-0.2866, tier)
+
+    def test_the_published_basis_carries_the_cause_qcom_shape(self):
+        """The single-method QCOM run: the basis the reader sees (and the prompt's
+        ``Derivation:`` line) now names the tier as the reason."""
+        methods = [
+            ValuationMethod(
+                name="dcf", low=99.55, mid=124.44, high=149.32, confidence=0.85, source="DCF"
+            )
+        ]
+        vs = synthesize_valuations(methods, current_price=174.43)
+        assert vs.confidence == "medium"
+        assert vs.valuation_withheld is False
+        canonical = resolve_canonical_thesis(vs, "QCOM")
+        assert canonical.verdict == "HOLD"
+        assert canonical.target == pytest.approx(124.44, abs=0.01)
+        assert canonical.upside == pytest.approx(-0.2866, abs=1e-4)
+        basis = canonical.basis or ""
+        assert "inside the medium-confidence HOLD dead band" in basis
+        assert "35% below it" in basis
+
+    def test_a_withheld_point_keeps_its_own_basis(self):
+        """The withheld paths have their own cause (the point could not be given), so
+        the tier note is not appended there — §9.6's rule is one cause per record."""
+        methods = [
+            ValuationMethod(name="DCF", low=10.0, mid=11.80, high=14.0, confidence=0.85, source="D")
+        ]
+        vs = synthesize_valuations(methods, current_price=418.45)
+        canonical = resolve_canonical_thesis(vs, "TSLA")
+        assert vs.valuation_withheld is True
+        assert "confidence tier's own judgement" not in (canonical.basis or "")
